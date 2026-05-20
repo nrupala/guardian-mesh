@@ -23,15 +23,16 @@ export function LoginPage() {
         await login(username, password, totpCode)
       }
       navigate("/")
-    } catch (err: any) {
-      if (err.message === "2FA_SETUP_REQUIRED") {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg === "2FA_SETUP_REQUIRED") {
         navigate("/setup-2fa")
         return
       }
-      if (err.message?.toLowerCase().includes("totp") || err.message?.toLowerCase().includes("2fa")) {
+      if (msg.toLowerCase().includes("totp") || msg.toLowerCase().includes("2fa")) {
         setStep("totp")
       }
-      setError(err.message || "Login failed")
+      setError(msg)
     } finally {
       setLoading(false)
     }

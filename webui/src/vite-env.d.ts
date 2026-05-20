@@ -1,7 +1,6 @@
 /// <reference types="vite/client" />
 
 declare module "virtual:pwa-register/react" {
-  import type { ComponentType } from "react"
   interface RegisterSWOptions {
     onNeedRefresh?: () => void
     onOfflineReady?: () => void
