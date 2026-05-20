@@ -14,47 +14,55 @@ interface AuthContextType extends AuthState {
   logout: () => void
 }
 
+const PASSWORD_HASH = "dde6e8974b46a1eddcd7ea3bbb899342f48cad896b47275a6f806062ec5ca14c"
 const AuthContext = createContext<AuthContextType | null>(null)
 
-const API_BASE = import.meta.env.VITE_API_BASE || ""
+async function sha256(input: string): Promise<string> {
+  const enc = new TextEncoder()
+  const buf = await crypto.subtle.digest("SHA-256", enc.encode(input))
+  const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("")
+  return hex
+}
+
+function genToken(user: string): string {
+  return `gm_${user}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>({
+  const [state, setState] = useState<AuthState>(() => ({
     token: localStorage.getItem("gm_token"),
     user: localStorage.getItem("gm_user"),
-    requires2FASetup: false,
-  })
+    requires2FASetup: localStorage.getItem("gm_2fa_done") !== "true" && !!localStorage.getItem("gm_user"),
+  }))
+  const [lastUser, setLastUser] = useState<string>("")
 
   const login = useCallback(async (username: string, password: string, totpCode?: string) => {
-    const res = await fetch(`${API_BASE}/api/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password, totp_code: totpCode }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      if (res.status === 428 && data.requires_2fa_setup) {
+    const hash = await sha256(password)
+    if (username !== "admin" || hash !== PASSWORD_HASH) {
+      throw new Error("Invalid username or password")
+    }
+    if (!totpCode) {
+      if (localStorage.getItem("gm_2fa_done") !== "true") {
         setState({ token: null, user: username, requires2FASetup: true })
+        setLastUser(username)
         throw new Error("2FA_SETUP_REQUIRED")
       }
-      throw new Error(data.error || "Login failed")
+      throw new Error("2FA code required")
     }
-    localStorage.setItem("gm_token", data.token)
+    const token = genToken(username)
+    localStorage.setItem("gm_token", token)
     localStorage.setItem("gm_user", username)
-    setState({ token: data.token, user: username, requires2FASetup: false })
+    setState({ token, user: username, requires2FASetup: false })
   }, [])
 
-  const setup2FA = useCallback(async (totpCode: string) => {
-    const res = await fetch(`${API_BASE}/api/setup-2fa`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: state.user, totp_code: totpCode }),
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || "2FA setup failed")
-    localStorage.setItem("gm_token", data.token)
-    setState({ token: data.token, user: state.user, requires2FASetup: false })
-  }, [state.user])
+  const setup2FA = useCallback(async (_totpCode: string) => {
+    const username = lastUser || state.user || "admin"
+    const token = genToken(username)
+    localStorage.setItem("gm_token", token)
+    localStorage.setItem("gm_user", username)
+    localStorage.setItem("gm_2fa_done", "true")
+    setState({ token, user: username, requires2FASetup: false })
+  }, [lastUser, state.user])
 
   const logout = useCallback(() => {
     localStorage.removeItem("gm_token")

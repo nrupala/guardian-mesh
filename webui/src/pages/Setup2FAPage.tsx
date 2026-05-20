@@ -1,7 +1,14 @@
-import { useState, useEffect } from "react"
+import { useState, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import { QRCodeSVG } from "qrcode.react"
 import { useAuth } from "../lib/auth"
+
+function randomBase32(len = 16): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+  let s = ""
+  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * 32)]
+  return s
+}
 
 export function Setup2FAPage() {
   const { user, setup2FA } = useAuth()
@@ -9,28 +16,14 @@ export function Setup2FAPage() {
   const [totpCode, setTotpCode] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const [qrUrl, setQrUrl] = useState("")
-  const [secret, setSecret] = useState("")
 
-  useEffect(() => {
-    const fetchSetup = async () => {
-      try {
-        const res = await fetch("/api/2fa-setup-info", {
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: user }),
-          method: "POST",
-        })
-        const data = await res.json()
-        if (res.ok) {
-          setQrUrl(data.otpauth_url)
-          setSecret(data.secret)
-        }
-      } catch {
-        // backend not available — show placeholder
-      }
-    }
-    fetchSetup()
-  }, [user])
+  const secret = useMemo(() => localStorage.getItem("gm_2fa_secret") || (() => {
+    const s = randomBase32()
+    localStorage.setItem("gm_2fa_secret", s)
+    return s
+  })(), [])
+
+  const qrUrl = `otpauth://totp/Guardian%20Mesh:${encodeURIComponent(user || "admin")}?secret=${secret}&issuer=Guardian%20Mesh`
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -7,7 +7,7 @@ import { DashboardPage } from "./pages/DashboardPage"
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/guardian-mesh">
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
