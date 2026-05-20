@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package guardian_mesh;
+
+// ──────────────────────────────────────────
+//  Guardian Mesh — gRPC Service Definitions
+//  Spec: GUARDIAN_MESH_FORMAL_SPEC.md
+// ──────────────────────────────────────────
+
+// ── Core Service ──────────────────────────
+
+service GuardianMesh {
+  // Evaluate an action through the Guardian Mesh
+  // Pipeline: Sentinel → Gatekeeper → Witness → Arbiter → Vault
+  rpc Evaluate (EvaluateRequest) returns (EvaluateResponse);
+
+  // Verify a cryptographically sealed audit proof
+  rpc VerifyProof (VerifyProofRequest) returns (VerifyProofResponse);
+
+  // Health check (must be available before Evaluate)
+  rpc Health (HealthRequest) returns (HealthResponse);
+}
+
+// ── Message Types ─────────────────────────
+
+// Sealed envelope with CRC32C integrity + ML-DSA-65 signature
+message SealedEnvelope {
+  bytes payload = 1;          // CBOR-encoded inner message
+  bytes payload_type = 2;     // Type hint for deserialization
+  uint32 crc32c = 3;          // CRC32C digest of payload
+  bytes ml_dsa_65_signature = 4; // ML-DSA-65 signature over crc32c || payload
+  uint64 timestamp = 5;       // Unix nanos — sender's wall clock
+  bytes nonce = 16;            // 32-byte random nonce
+}
+
+// Protocol Firewall request wrapper (PF-1 validation step)
+message FirewalledRequest {
+  SealedEnvelope envelope = 1;
+  string source_enclave = 2;    // Originating enclave identifier
+  string handshake_session = 3; // Handshake Bus session ID
+  bytes hmac_tag = 4;          // HMAC-SHA256 over envelope bytes
+}
+
+// ── Evaluate RPC ──────────────────────────
+
+message EvaluateRequest {
+  FirewalledRequest firewalled = 1;
+  ActionDescriptor action = 2;
+}
+
+message ActionDescriptor {
+  string action_type = 1;  // TOOL_CALL, CODE_EXECUTE, NETWORK_REQUEST, etc.
+  string context = 2;
+  string target = 3;
+  map<string, string> metadata = 16;
+}
+
+message EvaluateResponse {
+  string verdict = 1;       // ALLOW, BLOCK, THROTTLE, ESCALATE
+  string reason = 2;
+  string containment_stage = 3; // NORMAL..TERMINATE
+  AuditProof proof = 4;
+  bytes handshake_token = 5; // Next session token
+}
+
+// ── VerifyProof RPC ───────────────────────
+
+message VerifyProofRequest {
+  SealedEnvelope proof_envelope = 1;
+}
+
+message VerifyProofResponse {
+  bool valid = 1;
+  string reason = 2;
+  AuditProof proof = 3;
+}
+
+// ── Health RPC ────────────────────────────
+
+message HealthRequest {}
+
+message HealthResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+    DEGRADED = 3;
+  }
+  ServingStatus status = 1;
+  map<string, string> enclave_health = 2;
+  uint32 protocol_firewall_rules_passed = 3;
+  uint32 protocol_firewall_rules_total = 4;
+}
+
+// ── Shared Types ──────────────────────────
+
+message AuditProof {
+  string action_id = 1;
+  string verdict = 2;
+  string enclave_chain = 3;    // Sentinel→Gatekeeper→Witness→Arbiter
+  bytes signature = 4;         // Witness-signed digest
+  uint64 timestamp = 5;
+  bytes merkle_root = 16;      // Optional — for batch audit verification
+}

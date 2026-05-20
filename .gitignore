@@ -1,0 +1,23 @@
+# Rust
+guardian-meshd/target/
+**/*.rs.bk
+Cargo.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Runtime
+workspace/
+output/
+*.log
+*.err
