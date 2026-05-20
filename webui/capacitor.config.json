@@ -1,0 +1,9 @@
+{
+  "appId": "com.guardianmesh.app",
+  "appName": "Guardian Mesh",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}

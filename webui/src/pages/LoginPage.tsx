@@ -1,0 +1,87 @@
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import { useAuth } from "../lib/auth"
+
+export function LoginPage() {
+  const { login } = useAuth()
+  const navigate = useNavigate()
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [totpCode, setTotpCode] = useState("")
+  const [step, setStep] = useState<"credentials" | "totp">("credentials")
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError("")
+    setLoading(true)
+    try {
+      if (step === "credentials") {
+        await login(username, password)
+      } else {
+        await login(username, password, totpCode)
+      }
+      navigate("/")
+    } catch (err: any) {
+      if (err.message === "2FA_SETUP_REQUIRED") {
+        navigate("/setup-2fa")
+        return
+      }
+      if (err.message?.toLowerCase().includes("totp") || err.message?.toLowerCase().includes("2fa")) {
+        setStep("totp")
+      }
+      setError(err.message || "Login failed")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-header">
+          <svg className="logo" viewBox="0 0 40 40" width="48" height="48">
+            <rect x="2" y="2" width="36" height="36" rx="8" fill="none" stroke="currentColor" strokeWidth="3" />
+            <path d="M12 20 L18 26 L28 14" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <h1>Guardian Mesh</h1>
+          <p className="subtitle">Secure Control Panel</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="login-form">
+          {step === "credentials" ? (
+            <>
+              <div className="field">
+                <label htmlFor="username">Username</label>
+                <input id="username" type="text" value={username} onChange={e => setUsername(e.target.value)} autoFocus required />
+              </div>
+              <div className="field">
+                <label htmlFor="password">Password</label>
+                <input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+              </div>
+              <button type="submit" disabled={loading} className="btn-primary">
+                {loading ? "Signing in..." : "Sign In"}
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="field">
+                <label htmlFor="totp">Authenticator Code</label>
+                <input id="totp" type="text" inputMode="numeric" autoComplete="one-time-code" value={totpCode} onChange={e => setTotpCode(e.target.value)} placeholder="000000" autoFocus required />
+              </div>
+              <button type="submit" disabled={loading} className="btn-primary">
+                {loading ? "Verifying..." : "Verify"}
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => { setStep("credentials"); setTotpCode("") }}>
+                Back
+              </button>
+            </>
+          )}
+
+          {error && <p className="error-msg">{error}</p>}
+        </form>
+      </div>
+    </div>
+  )
+}
