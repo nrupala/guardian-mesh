@@ -1,0 +1,10 @@
+# Workspace root for guardian-mesh.
+#
+# The Rust daemon lives in ./guardian-meshd (edition 2024). CI runs
+# `cargo build`/`cargo test` from the repo ROOT (.github/workflows/rust-ci.yml),
+# where cargo previously found no manifest ("could not find `Cargo.toml`") because
+# it searches parent dirs, not children. This virtual workspace registers the
+# member crate so root-level cargo commands resolve and build it.
+[workspace]
+resolver = "3"
+members = ["guardian-meshd"]
