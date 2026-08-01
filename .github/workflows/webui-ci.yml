@@ -7,6 +7,8 @@ on:
       - "webui/**"
   pull_request:
     branches: [main]
+    paths:
+      - "webui/**"
 
 defaults:
   run:
