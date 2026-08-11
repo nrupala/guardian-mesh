@@ -1,0 +1,83 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*"
+      - "apk-v*"
+    paths:
+      - "webui/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to publish the GitHub Release on tag
+
+defaults:
+  run:
+    working-directory: webui
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tag matches webui/package.json version (standard)
+        if: github.ref_type == 'tag'
+        run: |
+          TAG_VER="${GITHUB_REF_NAME#apk-v}"; TAG_VER="${TAG_VER#v}"
+          PKG_VER="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VER" != "$PKG_VER" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} (=${TAG_VER}) does not match webui/package.json version ${PKG_VER}."
+            exit 1
+          fi
+          echo "version guard OK: ${PKG_VER}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: webui/package-lock.json
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Capacitor
+        run: npx cap sync
+
+      - name: Stamp native version from tag (standard)
+        run: bash ../scripts/stamp-app-version.sh
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardian-mesh-apk
+          path: webui/android/app/build/outputs/apk/debug/*.apk
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: webui/android/app/build/outputs/apk/debug/*.apk
+          name: Guardian Mesh ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true

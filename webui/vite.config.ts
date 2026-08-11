@@ -14,6 +14,8 @@ export default defineConfig({
         short_name: "GuardianMesh",
         description: "Secure gRPC mesh daemon control panel",
         theme_color: "#0f172a",
+        version: "0.0.0",
+
         background_color: "#0f172a",
         display: "standalone",
         orientation: "portrait",
