@@ -1,0 +1,106 @@
+# Governance: on every push to `main` this workflow records a durable
+# snapshot of the change so the project always retains the version BEFORE
+# each update. This is the free-tier complement to GitHub Pro branch
+# protection (hard PR-only rulesets need Pro on private repos).
+#
+# On each push to `main`:
+#   1. Computes a monotonically increasing release number (release/v<N>).
+#   2. Tags the merge commit `release/v<N>`.
+#   3. Appends an entry to releases/manifest.json on the `release-snapshots`
+#      branch with the current and PREVIOUS release tag.
+#   4. Archives the previous release tarball for restorability.
+
+name: Version Snapshot & Release Record
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine current and previous release
+        id: rel
+        run: |
+          set -euo pipefail
+          PREV=$(git tag --list 'release/v*' | sort -V | tail -n1 || true)
+          if [ -z "$PREV" ]; then
+            PREV_NUM=0
+          else
+            PREV_NUM=$(echo "$PREV" | sed 's/^release\/v//')
+          fi
+          NEXT_NUM=$((PREV_NUM + 1))
+          NEXT="release/v${NEXT_NUM}"
+          echo "prev_tag=$PREV" >> "$GITHUB_OUTPUT"
+          echo "next_tag=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "next_num=$NEXT_NUM" >> "$GITHUB_OUTPUT"
+          echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "author=$(git log -1 --format='%an <%ae>' "${{ github.sha }}")" >> "$GITHUB_OUTPUT"
+          echo "date=$(git log -1 --format='%cI' "${{ github.sha }}")" >> "$GITHUB_OUTPUT"
+          echo "message=$(git log -1 --format='%s' "${{ github.sha }}")" >> "$GITHUB_OUTPUT"
+
+      - name: Create release tag
+        run: |
+          git config user.name "guardian-mesh-bot"
+          git config user.email "actions@github.com"
+          git tag "${{ steps.rel.outputs.next_tag }}" "${{ github.sha }}"
+          git push origin "${{ steps.rel.outputs.next_tag }}"
+
+      - name: Record snapshot manifest
+        env:
+          NEXT: ${{ steps.rel.outputs.next_tag }}
+          PREV: ${{ steps.rel.outputs.prev_tag }}
+          NEXT_NUM: ${{ steps.rel.outputs.next_num }}
+          SHA: ${{ steps.rel.outputs.sha }}
+          AUTHOR: ${{ steps.rel.outputs.author }}
+          DATE: ${{ steps.rel.outputs.date }}
+          MSG: ${{ steps.rel.outputs.message }}
+        run: |
+          set -euo pipefail
+          git fetch origin release-snapshots >/dev/null 2>&1 || true
+          if git rev-parse --verify origin/release-snapshots >/dev/null 2>&1; then
+            git checkout -B release-snapshots origin/release-snapshots
+          else
+            git checkout -b release-snapshots
+          fi
+
+          mkdir -p releases
+          if [ ! -f releases/manifest.json ]; then
+            echo '[]' > releases/manifest.json
+          fi
+
+          NEW_ENTRY=$(printf '{"release":%s,"tag":"%s","previous_tag":%s,"sha":"%s","author":"%s","date":"%s","message":"%s"}' \
+            "$NEXT_NUM" "$NEXT" "$( [ -z "$PREV" ] && echo null || echo "\"$PREV\"" )" \
+            "$SHA" "$AUTHOR" "$DATE" "$MSG")
+
+          python3 -c "import json, os; data=json.load(open('releases/manifest.json')); data.append(json.loads(os.environ['NEW_ENTRY'])); open('releases/manifest.json','w').write(json.dumps(data, indent=2))"
+          git config user.name "guardian-mesh-bot"
+          git config user.email "actions@github.com"
+          git add releases/manifest.json
+          git commit -m "Release snapshot ${NEXT}" || echo "no manifest change"
+          git push origin release-snapshots
+
+      - name: Persist prior version archive
+        env:
+          PREV: ${{ steps.rel.outputs.prev_tag }}
+        run: |
+          if [ -n "$PREV" ]; then
+            git fetch origin release-snapshots
+            git checkout -B release-snapshots origin/release-snapshots
+            mkdir -p releases/archive
+            git archive --format=tar "$PREV" -o "releases/archive/${PREV}.tar"
+            git config user.name "guardian-mesh-bot"
+            git config user.email "actions@github.com"
+            git add "releases/archive/${PREV}.tar"
+            git commit -m "Archive ${PREV}" || true
+            git push origin release-snapshots
+          fi

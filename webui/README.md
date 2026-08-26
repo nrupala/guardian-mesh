@@ -1,73 +1,64 @@
-# React + TypeScript + Vite
+# WebUI — Guardian Mesh Control Plane
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A **React + TypeScript + Vite** progressive web app (PWA) that provides the
+management console for Guardian Mesh: 2FA login, status dashboards, and APK
+packaging via Capacitor.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **React 19** + **react-router-dom** for the UI
+- **Vite 8** for build/dev (fast, ESM-native)
+- **vite-plugin-pwa** for offline/progressive-web-app support
+- **@capacitor/* 8** for building the native **Android APK**
+- **@protobuf-ts/grpcweb-transport** for talking to the daemon over gRPC-web
+- **qrcode.react** for 2FA / QR flows
 
-## React Compiler
+## Commands
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Command | What it does |
+|---------|--------------|
+| `npm ci` | Install locked dependencies |
+| `npm run dev` | Local dev server with HMR |
+| `npm run build` | Type-check + production bundle → `dist/` |
+| `npm run lint` | ESLint gate (CI enforces this) |
+| `npm run preview` | Preview the production build |
+| `npx cap add android` | Generate the Android platform (once) |
+| `npx cap sync` | Copy `dist/` + plugins into the Android project |
+| `npx cap open android` | Open the Android project in Android Studio |
 
-## Expanding the ESLint configuration
+## Android APK build
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm ci
+npm run build          # produces dist/ (the web asset bundle)
+npx cap add android    # only needed the first time
+npx cap sync           # copies dist/ into the native project
+cd android && ./gradlew assembleDebug
+# APK → android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+> **Troubleshooting:** `android/` is gitignored because it is generated. If
+> `npx cap add android` fails with "android platform already exists" but the
+> folder is empty, delete `android/` and run it again.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Configuration
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- `vite.config.ts` sets the GitHub Pages base path to `/guardian-mesh/` and
+  configures the PWA manifest + Workbox precaching.
+- `capacitor.config.json` defines `appId` (`com.guardianmesh.app`), `appName`,
+  and `webDir: dist`.
+
+## CI
+
+The `webui-ci.yml` GitHub Action runs `npm ci`, `npm run build`, and
+`npm run lint`, then uploads the PWA artifact and deploys to GitHub Pages.
+The `android-apk.yml` Action builds and uploads the debug APK.
+
+> The 2FA flow lives in `src/lib/auth.tsx`. The lint rule in
+> `eslint.config.js` allows underscore-prefixed unused arguments (e.g.
+> `_totpCode`) so the auth API contract stays stable while lint stays clean.
+
+## See also
+
+- `../README.md` — whole-project overview.
+- `../guardian-meshd/README.md` — the daemon this UI talks to.
