@@ -92,3 +92,18 @@ cargo build --release
 3. **No authentication/authorization** beyond HMAC sessions.
 4. **Policy overrides** are in-memory only (lost on restart).
 5. **Nonce replay detection** (PF-05) and rate limiting (PF-14) are not implemented.
+
+## Session 2 — CI, WebUI, Governance & Docs
+
+Fixes beyond the Rust daemon itself (see repo root `README.md`):
+
+| Area | Change |
+|------|--------|
+| **WebUI CI failure** | `webui/src/lib/auth.tsx:58` unused `_totpCode` → added `@typescript-eslint/no-unused-vars` `argsIgnorePattern: '^_'` to `webui/eslint.config.js`. Lint + build now pass. |
+| **APK build** | Verified `npx cap add android`; a stale empty `webui/android/` dir blocks re-add. Documented in `webui/README.md`. `android/` is gitignored (generated). |
+| **Branch protection** | GitHub rulesets need Pro on private repos (403). Added `PR Gate` (fails direct push to `main`) + `Version Snapshot` (tags `release/v<N>`, records `releases/manifest.json`, archives prior release). |
+| **Docs** | Rewrote root `README.md`, added `guardian-meshd/README.md`, `webui/README.md`, `specs/README.md`, `templates/README.md`, `.github/workflows/README.md`; rewrote `CONTRIBUTING.md` (was wrongly labeled "agentic-OS"), `SECURITY.md`. |
+| **witness.rs import** | Restored `use sha2::{Sha256, Digest}` (dropped during 2022 refactor of the signature wiring). |
+
+**Build state:** `cargo clippy -- -D warnings` clean; `cargo test` 31/31 pass;
+`npm run lint` + `npm run build` in `webui/` pass.

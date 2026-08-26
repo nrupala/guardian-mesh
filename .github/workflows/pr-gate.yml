@@ -1,0 +1,52 @@
+# Governance: every change to `main` must land via a Pull Request. On the
+# free tier (private repo) we cannot hard-block direct pushes with a ruleset
+# (that needs GitHub Pro), so we enforce policy with a status check that must
+# be wired as a REQUIRED check on `main`, and by failing any direct (non-PR)
+# push so the violation is visible.
+#
+# To fully enforce in GitHub UI:
+#   Repo → Settings → Branches → Add rule for `main`
+#   → "Require status checks" → select "PR Gate"
+#   → "Do not allow bypassing the above settings".
+
+name: PR Gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  require-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert change originates from a pull request
+        id: check
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "✅ Change arrived via Pull Request (${{ github.head_ref }} → ${{ github.base_ref }})."
+            echo "source=pr" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "❌ Direct push to 'main' detected. All changes must go through a Pull Request."
+            echo "   This is a governance violation. Open a PR from a feature branch instead."
+            echo "source=direct-push" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "✅ Push on non-main branch (no gate)."
+          echo "source=other" >> "$GITHUB_OUTPUT"
+
+      - name: Annotate outcome
+        if: always()
+        run: |
+          echo "PR Gate source: ${{ steps.check.outputs.source }}"
