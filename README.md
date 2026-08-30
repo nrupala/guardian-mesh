@@ -1,5 +1,9 @@
 # Guardian Mesh
 
+**Status:** Current/active development · **Version:** 0.1.0 · **Updated:** 2026-08-30
+
+See [CHANGELOG.md](CHANGELOG.md).
+
 **Post-quantum, enclave-based security enforcement for agentic AI workloads.**
 
 Guardian Mesh is a complete, working security kit that evaluates and governs every
