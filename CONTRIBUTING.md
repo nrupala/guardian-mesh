@@ -40,3 +40,18 @@ certifying compliance with the [Developer Certificate of Origin 1.1](https://dev
 ## License
 
 MIT — see [LICENSE](LICENSE).
+## Portfolio certification (2026-10-05)
+
+Standing process additions, alongside the governance above:
+
+- **Draft PRs.** Open every PR as a draft; mark ready only when CI is green.
+- **Changelog.** Each PR adds its entry under `## [Unreleased]` in
+  `CHANGELOG.md` (already Keep-a-Changelog).
+- **Semver.** Bump the version per PR — patch = fix/chore, minor = feature,
+  major = breaking — in both `VERSION` and `guardian-meshd/Cargo.toml`
+  together (per `docs/VERSIONING.md`).
+- **No direct pushes to `main`.** Every change ships through a PR.
+- **Releases.** After merge, releases are tagged `vX.Y.Z`.
+- **Signed deploys.** This repo has no Cloudflare deploy target, so the
+  signed-deploy wrapper is not wired in. Any future deploy script must
+  delegate to it (unsigned paths are deleted, not kept alongside).

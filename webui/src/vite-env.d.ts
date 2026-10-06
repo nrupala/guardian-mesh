@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: MIT
+
 /// <reference types="vite/client" />
 
 declare module "virtual:pwa-register/react" {

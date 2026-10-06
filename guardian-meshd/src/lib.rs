@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: MIT
+
 pub mod protocol_firewall;
 pub mod sealed_envelope;
 pub mod handshake_bus;
