@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: MIT
+
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

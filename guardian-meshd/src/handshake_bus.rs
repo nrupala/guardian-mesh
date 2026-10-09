@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: MIT
+
 use hmac::{Hmac, Mac, KeyInit};
 use sha2::Sha256;
 use rand::rngs::SysRng;

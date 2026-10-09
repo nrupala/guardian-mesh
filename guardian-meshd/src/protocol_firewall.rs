@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: MIT
+
 use std::sync::atomic::{AtomicU32, Ordering};
 
 static RULES_PASSED: AtomicU32 = AtomicU32::new(0);

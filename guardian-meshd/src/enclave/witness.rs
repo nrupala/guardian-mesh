@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nrupal Akolkar
+// SPDX-License-Identifier: MIT
+
 use super::{EnclaveContext, Verdict, ContainmentStage};
 use sha2::{Sha256, Digest};
 use ml_dsa::{MlDsa65, SigningKey, Signer, SignatureEncoding};

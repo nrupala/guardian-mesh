@@ -6,6 +6,19 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added
+- Portfolio certification rollout: `NOTICE` (attribution); MIT SPDX license
+  headers on Rust sources, the `.proto` file, and webui sources/config;
+  CONTRIBUTING.md gains the portfolio-certification standing section
+  (draft PRs, CHANGELOG + semver per PR, no direct pushes).
+
+### Changed
+- Version bumped `0.1.0` → `0.1.1` (`VERSION`, `guardian-meshd/Cargo.toml`).
+
+### Notes
+- No deploy target found (no wrangler/Pages/deploy script; Android APK is a
+  CI artifact build) — signed-deploys Track 2 not wired.
+
 ## [0.1.0] - 2026-08-30
 
 ### Added
