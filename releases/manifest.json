@@ -1,0 +1,11 @@
+[
+  {
+    "release": 5,
+    "tag": "release/v5",
+    "previous_tag": "release/v4",
+    "sha": "e39573d448199a0db364403482b2036d6e07037a",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-10T21:18:36Z",
+    "message": "fix(ci): record release snapshots and gate the Pages deployment (#12)"
+  }
+]
