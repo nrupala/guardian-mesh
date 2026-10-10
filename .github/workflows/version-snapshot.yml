@@ -98,10 +98,14 @@ jobs:
             git fetch origin release-snapshots
             git checkout -B release-snapshots origin/release-snapshots
             mkdir -p releases/archive
-            git archive --format=tar "$PREV" -o "releases/archive/${PREV}.tar"
+            # Tag names contain a slash (release/v<N>); flatten it so the
+            # archive file lands directly in releases/archive/ instead of
+            # a subdirectory that does not exist.
+            ARCHIVE_FILE="releases/archive/${PREV//\//-}.tar"
+            git archive --format=tar "$PREV" -o "$ARCHIVE_FILE"
             git config user.name "guardian-mesh-bot"
             git config user.email "actions@github.com"
-            git add "releases/archive/${PREV}.tar"
+            git add "$ARCHIVE_FILE"
             git commit -m "Archive ${PREV}" || true
             git push origin release-snapshots
           fi
