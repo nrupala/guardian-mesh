@@ -51,7 +51,9 @@ cd android && ./gradlew assembleDebug
 ## CI
 
 The `webui-ci.yml` GitHub Action runs `npm ci`, `npm run build`, and
-`npm run lint`, then uploads the PWA artifact and deploys to GitHub Pages.
+`npm run lint`, then uploads the PWA artifact. It deploys to GitHub Pages
+only when the repository variable `ENABLE_GITHUB_PAGES` is `true` (set it
+after enabling Pages with GitHub Actions as the source).
 The `android-apk.yml` Action builds and uploads the debug APK.
 
 > The 2FA flow lives in `src/lib/auth.tsx`. The lint rule in
