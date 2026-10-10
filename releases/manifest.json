@@ -7,5 +7,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-10T21:18:36Z",
     "message": "fix(ci): record release snapshots and gate the Pages deployment (#12)"
+  },
+  {
+    "release": 6,
+    "tag": "release/v6",
+    "previous_tag": "release/v5",
+    "sha": "1f1a2acb89cadc234cfef9cb29fe1e4ee9aaef89",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-10T21:56:00Z",
+    "message": "fix(ci): flatten release tag name for the snapshot archive file (#13)"
   }
 ]
