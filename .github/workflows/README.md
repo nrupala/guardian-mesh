@@ -6,7 +6,7 @@ paths they own.
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `rust-ci.yml` | push/PR touching `guardian-meshd/**` | Build + test the daemon (needs `protoc`) |
-| `webui-ci.yml` | push/PR touching `webui/**` | `npm ci` → build → lint → publish PWA to GitHub Pages |
+| `webui-ci.yml` | push/PR touching `webui/**` | `npm ci` → build → lint → publish PWA to GitHub Pages when `ENABLE_GITHUB_PAGES=true` |
 | `android-apk.yml` | push touching `webui/**` or manual | Build + upload the debug **Android APK** |
 | `pr-gate.yml` | any PR/push to `main` | Enforce **PR-based** updates to `main` |
 | `version-snapshot.yml` | push to `main` | Tag `release/v<N>` + record manifest on `release-snapshots` |

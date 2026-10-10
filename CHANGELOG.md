@@ -14,6 +14,15 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Changed
 - Version bumped `0.1.0` → `0.1.1` (`VERSION`, `guardian-meshd/Cargo.toml`).
+- Version bumped `0.1.1` → `0.1.2` (`VERSION`, `guardian-meshd/Cargo.toml`).
+
+### Fixed
+- Version Snapshot workflow now exports `NEW_ENTRY` before the manifest
+  step reads it from the Python environment, so release snapshots can be
+  recorded instead of failing with `KeyError`.
+- WebUI Pages deployment is skipped until GitHub Pages is enabled and the
+  `ENABLE_GITHUB_PAGES` repository variable is set to `true`; the build,
+  lint, and artifact upload still run on every change.
 
 ### Notes
 - No deploy target found (no wrangler/Pages/deploy script; Android APK is a

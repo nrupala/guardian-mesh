@@ -36,7 +36,10 @@ jobs:
           path: webui/dist
 
   deploy-pages:
-    if: github.ref == 'refs/heads/main'
+    # Pages is not enabled on this repository yet. Keep the build green and
+    # skip deployment until the repository variable is set after enabling
+    # Settings → Pages → Source: GitHub Actions.
+    if: github.ref == 'refs/heads/main' && vars.ENABLE_GITHUB_PAGES == 'true'
     needs: build
     permissions:
       pages: write

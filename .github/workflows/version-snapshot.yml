@@ -81,6 +81,7 @@ jobs:
           NEW_ENTRY=$(printf '{"release":%s,"tag":"%s","previous_tag":%s,"sha":"%s","author":"%s","date":"%s","message":"%s"}' \
             "$NEXT_NUM" "$NEXT" "$( [ -z "$PREV" ] && echo null || echo "\"$PREV\"" )" \
             "$SHA" "$AUTHOR" "$DATE" "$MSG")
+          export NEW_ENTRY
 
           python3 -c "import json, os; data=json.load(open('releases/manifest.json')); data.append(json.loads(os.environ['NEW_ENTRY'])); open('releases/manifest.json','w').write(json.dumps(data, indent=2))"
           git config user.name "guardian-mesh-bot"
