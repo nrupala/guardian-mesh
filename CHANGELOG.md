@@ -17,6 +17,14 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Version bumped `0.1.1` → `0.1.2` (`VERSION`, `guardian-meshd/Cargo.toml`).
 - Version bumped `0.1.2` → `0.1.3` (`VERSION`, `guardian-meshd/Cargo.toml`).
 - Version bumped `0.1.3` → `0.1.4` (`VERSION`, `guardian-meshd/Cargo.toml`).
+- Licensing corrected from the interim MIT boilerplate to the owner's
+  split model: interface (`webui/`, `specs/`, and the generated client
+  bindings) under the Apache License, Version 2.0, and core
+  (`guardian-meshd/`) under the GNU Affero General Public License,
+  version 3 or later (AGPL-3.0-or-later). `LICENSE` is now a licensing
+  map with the full texts in `webui/LICENSE` and
+  `guardian-meshd/LICENSE`; SPDX headers and package manifests updated
+  to match.
 
 ### Fixed
 - Version Snapshot workflow now exports `NEW_ENTRY` before the manifest

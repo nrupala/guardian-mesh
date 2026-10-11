@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Nrupal Akolkar
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { AuthProvider } from "./lib/auth"

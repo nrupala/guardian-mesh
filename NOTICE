@@ -2,4 +2,6 @@ Guardian Mesh
 
 Owned by Nrupal Akolkar · Built with Muse by Meta
 
-MIT License — see LICENSE.
+Split licensing: the interface (webui/, specs/, and the generated
+client bindings) is licensed under Apache-2.0, and the core
+(guardian-meshd/) is licensed under AGPL-3.0-or-later — see LICENSE.

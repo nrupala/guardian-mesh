@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Nrupal Akolkar
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 use crc32c::crc32c;
 use ml_dsa::{MlDsa65, Keypair, SigningKey, VerifyingKey, Signer, Verifier, SignatureEncoding, Signature};

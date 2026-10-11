@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Nrupal Akolkar
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: AGPL-3.0-or-later
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_prost_build::configure()
