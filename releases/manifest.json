@@ -34,5 +34,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-11T19:24:36Z",
     "message": "license: split Apache-2.0 (interface) / AGPL-3.0-or-later (core) (#16)"
+  },
+  {
+    "release": 9,
+    "tag": "release/v9",
+    "previous_tag": "release/v8",
+    "sha": "cd9f95243030c1767caf65f1d485d8b00ae5d429",
+    "author": "dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+    "date": "2026-10-11T13:32:59-06:00",
+    "message": "chore(deps): bump the npm_and_yarn group across 1 directory with 11 updates (#15)"
   }
 ]
