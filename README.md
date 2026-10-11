@@ -158,4 +158,8 @@ rules, and the enclave contract.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Split licensing: the interface (`webui/`, `specs/`, and the generated
+client bindings at the repository root) is licensed under the Apache
+License, Version 2.0, and the core (`guardian-meshd/`) is licensed
+under the GNU Affero General Public License, version 3 or later
+(AGPL-3.0-or-later) — see [LICENSE](LICENSE) for the full map.
