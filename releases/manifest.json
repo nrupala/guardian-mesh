@@ -25,5 +25,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-11T07:19:31Z",
     "message": "fix(ci): install existing Android SDK packages for the APK build (#14)"
+  },
+  {
+    "release": 8,
+    "tag": "release/v8",
+    "previous_tag": "release/v7",
+    "sha": "6319deab0587cb28ebec34955d038a9862e5bfbe",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-11T19:24:36Z",
+    "message": "license: split Apache-2.0 (interface) / AGPL-3.0-or-later (core) (#16)"
   }
 ]
