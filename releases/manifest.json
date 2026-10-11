@@ -16,5 +16,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-10T21:56:00Z",
     "message": "fix(ci): flatten release tag name for the snapshot archive file (#13)"
+  },
+  {
+    "release": 7,
+    "tag": "release/v7",
+    "previous_tag": "release/v6",
+    "sha": "d0f6faa4e5633b9e45290356bae0e40ef59c0156",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-11T07:19:31Z",
+    "message": "fix(ci): install existing Android SDK packages for the APK build (#14)"
   }
 ]
