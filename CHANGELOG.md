@@ -16,6 +16,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Version bumped `0.1.0` → `0.1.1` (`VERSION`, `guardian-meshd/Cargo.toml`).
 - Version bumped `0.1.1` → `0.1.2` (`VERSION`, `guardian-meshd/Cargo.toml`).
 - Version bumped `0.1.2` → `0.1.3` (`VERSION`, `guardian-meshd/Cargo.toml`).
+- Version bumped `0.1.3` → `0.1.4` (`VERSION`, `guardian-meshd/Cargo.toml`).
 
 ### Fixed
 - Version Snapshot workflow now exports `NEW_ENTRY` before the manifest
@@ -29,6 +30,12 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   archive; the slash in the tag name pointed `git archive` at a
   subdirectory that does not exist, so the step failed once the manifest
   step was fixed.
+- Android APK workflow now passes an explicit package list to
+  setup-android (`platform-tools`, `platforms;android-36`,
+  `build-tools;36.0.0` — matching the pinned Capacitor 8.3.4 template's
+  compileSdk 36). The action's default list includes the legacy `tools`
+  package, which Google removed from the SDK repository, so the SDK
+  setup step failed before any project code ran.
 
 ### Notes
 - No deploy target found (no wrangler/Pages/deploy script; Android APK is a

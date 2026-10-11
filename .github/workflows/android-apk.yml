@@ -31,6 +31,12 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The action's default package list includes the legacy "tools"
+          # package, which Google removed from the SDK repository — the
+          # install fails with "Failed to find package 'tools'". Install
+          # only what the Capacitor 8 project needs (compileSdk 36).
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
 
       - run: npm ci
       - run: npm run build
