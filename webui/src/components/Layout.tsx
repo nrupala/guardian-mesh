@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Link, NavLink, Outlet } from "react-router-dom"
+import { LIVE_MODE } from "../lib/gmClient"
 
 export function Layout() {
   return (
@@ -20,7 +21,13 @@ export function Layout() {
           <NavLink to="/guide">Guide & Help</NavLink>
           <NavLink to="/agents">For Agents</NavLink>
         </nav>
-        <Link to="/panel" className="btn-primary nav-cta">Control Panel</Link>
+        {LIVE_MODE ? (
+          <Link to="/panel" className="btn-primary nav-cta">Control Panel</Link>
+        ) : (
+          // The public site is the information surface; the working
+          // panel lives on the product's own subdomain.
+          <a href="https://guardian.aimlds.org/panel" className="btn-primary nav-cta">Control Panel</a>
+        )}
       </header>
 
       <main className="site-main">

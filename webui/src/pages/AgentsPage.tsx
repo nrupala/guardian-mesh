@@ -35,7 +35,7 @@ export function AgentsPage() {
             <span className="flow-n">3</span>
             <div>
               <h3>Call Evaluate before you act</h3>
-              <p>The daemon's gRPC service <code>GuardianMesh</code> exposes three calls: <code>Evaluate</code>, <code>VerifyProof</code>, and <code>Health</code>. Send the sealed action to Evaluate and wait for the verdict. Evaluation happens before execution — never after, never in parallel.</p>
+              <p>The daemon's gRPC service <code>GuardianMesh</code> exposes four calls: <code>Handshake</code>, <code>Evaluate</code>, <code>VerifyProof</code>, and <code>Health</code>. Open a session with Handshake, send the sealed action to Evaluate, and wait for the verdict. Evaluation happens before execution — never after, never in parallel. The same calls are available over gRPC-web at guardian.aimlds.org, behind a Cloudflare Access sign-in (owner-only while the deployment matures).</p>
             </div>
           </li>
           <li>
