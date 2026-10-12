@@ -52,5 +52,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-12T19:31:41Z",
     "message": "feat(webui): real public site + Pages 404 fix (v0.1.5) (#17)"
+  },
+  {
+    "release": 11,
+    "tag": "release/v11",
+    "previous_tag": "release/v10",
+    "sha": "74fce40014ecf898623022620ad21245cb096817",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-12T19:57:03Z",
+    "message": "fix(webui): Control Panel goes to the panel; signed-in users skip login (v0.1.6) (#18)"
   }
 ]
