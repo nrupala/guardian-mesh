@@ -88,5 +88,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-12T20:57:14Z",
     "message": "feat(webui): live control panel against a real daemon (v0.2.1) (#21)"
+  },
+  {
+    "release": 15,
+    "tag": "release/v15",
+    "previous_tag": "release/v14",
+    "sha": "a42ae09219b512704d088a7deb9cdc7772a56102",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-12T21:18:44Z",
+    "message": "feat(webui): point the public site at the live guardian.aimlds.org deployment (v0.2.2) (#23)"
   }
 ]
