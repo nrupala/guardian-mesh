@@ -29,11 +29,16 @@ Architecture (codetopo snapshot): https://nrupala.github.io/guardian-mesh/guardi
 
 ## Interface
 
-The daemon (Rust) serves gRPC service `GuardianMesh` with three calls:
-Evaluate (judge a sealed action before it runs), VerifyProof (re-check a
-signed audit proof), Health. Callers open a handshake session, seal the
-action in an HMAC-signed envelope, call Evaluate, obey the verdict, and
-keep the proof.
+The daemon (Rust) serves gRPC service `GuardianMesh` with four calls:
+Handshake (open a session and receive its HMAC key), Evaluate (judge a
+sealed action before it runs), VerifyProof (re-check a signed audit
+proof), Health. Callers open a handshake session, seal the action in an
+HMAC-signed envelope, call Evaluate, obey the verdict, and keep the
+proof. The same calls are available over gRPC-web.
+
+A live deployment runs at https://guardian.aimlds.org — the working
+control panel, connected to the daemon. Access is owner-only (Cloudflare
+Access sign-in) while the deployment matures.
 
 ## Rules agents must respect
 
@@ -49,11 +54,12 @@ keep the proof.
 ## Status — honest scope
 
 Working today: the daemon, the five enclaves, the 18 firewall checks,
-sealed envelopes, signed audit proofs, this website, and the
-demonstration control panel (sample values; not connected to a daemon).
+sealed envelopes, signed audit proofs, this website, the demonstration
+control panel on this site (sample values; not connected to a daemon),
+and the live control panel at guardian.aimlds.org connected to the
+running daemon (owner-only sign-in).
 Designed, not yet built: hardware (TEE) attestation, multi-node
-consensus, public anchoring of proofs, Lean 4 formal verification, and a
-live browser-to-daemon connection.
+consensus, public anchoring of proofs, and Lean 4 formal verification.
 
 Guardian Mesh is built by AIMLDS. Its certificates vouch for the exact
 item tested, against the policy named, on the date stamped — never for
