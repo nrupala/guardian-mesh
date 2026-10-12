@@ -10,6 +10,7 @@ import { ArchitecturePage } from "./pages/ArchitecturePage"
 import { GuidePage } from "./pages/GuidePage"
 import { AgentsPage } from "./pages/AgentsPage"
 import { LoginPage } from "./pages/LoginPage"
+import { LIVE_MODE } from "./lib/gmClient"
 import { Setup2FAPage } from "./pages/Setup2FAPage"
 import { DashboardPage } from "./pages/DashboardPage"
 
@@ -17,8 +18,14 @@ import { DashboardPage } from "./pages/DashboardPage"
 // so deep links and refreshes on any route resolve to the app instead of
 // the host's error page.
 export default function App() {
+  // The public build lives under /guardian-mesh/ (GitHub Pages); the
+  // guardian.aimlds.org build is served from its domain root and sets
+  // VITE_BASE_PATH=/ at build time.
+  const basename = (
+    import.meta.env.VITE_BASE_PATH ?? "/guardian-mesh/"
+  ).replace(/\/$/, "")
   return (
-    <BrowserRouter basename="/guardian-mesh">
+    <BrowserRouter basename={basename || undefined}>
       <AuthProvider>
         <Routes>
           <Route element={<Layout />}>
@@ -30,13 +37,22 @@ export default function App() {
             <Route
               path="panel"
               element={
-                <ProtectedRoute>
+                LIVE_MODE ? (
                   <DashboardPage />
-                </ProtectedRoute>
+                ) : (
+                  <ProtectedRoute>
+                    <DashboardPage />
+                  </ProtectedRoute>
+                )
               }
             />
           </Route>
-          <Route path="login" element={<LoginPage />} />
+          <Route
+            path="login"
+            element={
+              LIVE_MODE ? <Navigate to="/panel" replace /> : <LoginPage />
+            }
+          />
           <Route path="setup-2fa" element={<Setup2FAPage />} />
           <Route path="dashboard" element={<Navigate to="/panel" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />

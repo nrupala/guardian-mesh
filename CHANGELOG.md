@@ -90,7 +90,17 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   (`proof_envelope`), so a caller can present it to `VerifyProof`
   and have it re-checked independently. The server speaks gRPC-web
   alongside native gRPC, so browsers can call the same API.
+- The control panel can now run live against a daemon. Builds that
+  set `VITE_GUARDIAN_MESH_ENDPOINT` (the guardian.aimlds.org build)
+  get a working panel: real health values, a real evaluation flow —
+  handshake, sealed envelope (CRC32C + ML-DSA-65 signature),
+  session HMAC, verdict with its sealed proof — and proof
+  verification against the daemon. Builds without the endpoint
+  (the public GitHub Pages site) keep the labeled demonstration
+  panel. The router base path is build-time configurable
+  (`VITE_BASE_PATH`) so the same source serves both.
 - Version bumped `0.1.7` → `0.2.0` (`VERSION`, `guardian-meshd/Cargo.toml`).
+- Version bumped `0.2.0` → `0.2.1` (`VERSION`, `guardian-meshd/Cargo.toml`).
 
 ### Notes
 - No deploy target found (no wrangler/Pages/deploy script; Android APK is a
