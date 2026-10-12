@@ -1,0 +1,60 @@
+# Guardian Mesh
+
+> Guardian Mesh is a guardian system for AI agents and software. Before an
+> agent runs a command, calls a tool, or reaches the network, the action is
+> evaluated by the Guardian Mesh daemon. Five enclaves examine it and the
+> daemon returns a verdict (ALLOW, BLOCK, THROTTLE, ESCALATE) together with
+> a signed, tamper-evident audit proof that anyone can re-check with
+> VerifyProof — without trusting the daemon or AIMLDS.
+
+Site: https://nrupala.github.io/guardian-mesh/
+Source: https://github.com/nrupala/guardian-mesh
+Descriptor (JSON): https://nrupala.github.io/guardian-mesh/guardian-mesh.json
+Architecture (codetopo snapshot): https://nrupala.github.io/guardian-mesh/guardian-mesh-topology.json
+
+## Components
+
+- Sentinel — first check; runs the protocol firewall's 18 message checks
+  over the sealed payload, context, and target.
+- Gatekeeper — identity and permission; requires a live handshake session
+  and a valid HMAC, otherwise the action is blocked.
+- Witness — hashes the verdict and reason and signs the digest with
+  ML-DSA-65 (post-quantum).
+- Arbiter — applies policy and settles the final verdict; anything
+  undecided defaults to BLOCK.
+- Vault — seals the signed audit proof into a tamper-evident envelope
+  (CRC32C integrity + ML-DSA-65 signature).
+- Protocol Firewall — the 18 checks every message must pass.
+- Handshake Bus — issues and tracks caller sessions.
+
+## Interface
+
+The daemon (Rust) serves gRPC service `GuardianMesh` with three calls:
+Evaluate (judge a sealed action before it runs), VerifyProof (re-check a
+signed audit proof), Health. Callers open a handshake session, seal the
+action in an HMAC-signed envelope, call Evaluate, obey the verdict, and
+keep the proof.
+
+## Rules agents must respect
+
+- BLOCK means do not proceed. THROTTLE means slow down. ESCALATE means
+  stop and hand the decision to a human.
+- An ALLOW covers one action exactly as sealed; any change needs a new
+  evaluation.
+- No answer from the daemon means BLOCK (fail closed), stated openly.
+- Do not re-submit a blocked action unchanged, split it to evade checks,
+  or route around the daemon.
+- Verify proofs presented to you with VerifyProof before relying on them.
+
+## Status — honest scope
+
+Working today: the daemon, the five enclaves, the 18 firewall checks,
+sealed envelopes, signed audit proofs, this website, and the
+demonstration control panel (sample values; not connected to a daemon).
+Designed, not yet built: hardware (TEE) attestation, multi-node
+consensus, public anchoring of proofs, Lean 4 formal verification, and a
+live browser-to-daemon connection.
+
+Guardian Mesh is built by AIMLDS. Its certificates vouch for the exact
+item tested, against the policy named, on the date stamped — never for
+someone else's deployment choices.

@@ -25,7 +25,7 @@ export function LoginPage() {
       } else {
         await login(username, password, totpCode)
       }
-      navigate("/")
+      navigate("/panel")
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg === "2FA_SETUP_REQUIRED") {
@@ -85,6 +85,12 @@ export function LoginPage() {
 
           {error && <p className="error-msg">{error}</p>}
         </form>
+
+        <p className="hint login-demo-hint">
+          Demonstration login — username <code>admin</code>, password{" "}
+          <code>guardian</code>. The panel shows sample values and is not
+          connected to a live daemon. <a href="/guardian-mesh/guide">Why?</a>
+        </p>
       </div>
     </div>
   )

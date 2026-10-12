@@ -20,15 +20,18 @@ export default defineConfig({
         background_color: "#0f172a",
         display: "standalone",
         orientation: "portrait",
-        start_url: "/",
+        start_url: "/guardian-mesh/",
         icons: [
-          { src: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
-          { src: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
-          { src: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "/guardian-mesh/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+          { src: "/guardian-mesh/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
+          { src: "/guardian-mesh/icons/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico,json}"],
+        // The codetopo topology snapshot is a download for agents, not an
+        // app asset — keep it out of the offline precache.
+        globIgnores: ["**/guardian-mesh-topology.json"],
       },
     }),
   ],

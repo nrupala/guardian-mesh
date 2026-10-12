@@ -17,6 +17,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Version bumped `0.1.1` → `0.1.2` (`VERSION`, `guardian-meshd/Cargo.toml`).
 - Version bumped `0.1.2` → `0.1.3` (`VERSION`, `guardian-meshd/Cargo.toml`).
 - Version bumped `0.1.3` → `0.1.4` (`VERSION`, `guardian-meshd/Cargo.toml`).
+- Version bumped `0.1.4` → `0.1.5` (`VERSION`, `guardian-meshd/Cargo.toml`).
 - Licensing corrected from the interim MIT boilerplate to the owner's
   split model: interface (`webui/`, `specs/`, and the generated client
   bindings) under the Apache License, Version 2.0, and core
@@ -44,6 +45,30 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   compileSdk 36). The action's default list includes the legacy `tools`
   package, which Google removed from the SDK repository, so the SDK
   setup step failed before any project code ran.
+- WebUI on GitHub Pages no longer 404s on app routes: the build now
+  also emits `dist/404.html` (a copy of the built `index.html`), which
+  Pages serves for unknown paths so direct loads and refreshes of
+  routes like `/guardian-mesh/login` render the app instead of the
+  GitHub Pages 404 page.
+- PWA manifest paths corrected: `start_url` is now `/guardian-mesh/`
+  (was `/`, outside the app scope) and the icon URLs carry the
+  `/guardian-mesh` prefix (they previously 404'd).
+- The WebUI is now a real public site, not only a login shell: a public
+  overview explains what Guardian Mesh is, what the five guardians do,
+  and what the system does for the people who deploy it; an Architecture
+  page publishes the system's topology as measured by a codetopo scan of
+  this repository (24 files, 581 symbols, 1,176 edges) with the full
+  graph snapshot downloadable; a User guide & help page describes the
+  verdicts, the vocabulary, operator instructions, and the demonstration
+  panel honestly; and a For Agents page states the contract — how an
+  agent calls Evaluate/VerifyProof and the verdict rules it must
+  respect. Machine-readable companions ship alongside: `llms.txt`,
+  `guardian-mesh.json` (also under `.well-known/`), and the codetopo
+  snapshot JSON.
+- The control panel moved to `/panel` and is labeled as a demonstration:
+  its status values are marked as samples rather than presented as live
+  measurements, and the disabled actions say plainly that no daemon is
+  connected.
 
 ### Notes
 - No deploy target found (no wrangler/Pages/deploy script; Android APK is a

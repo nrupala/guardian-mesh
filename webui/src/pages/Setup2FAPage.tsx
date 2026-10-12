@@ -34,7 +34,7 @@ export function Setup2FAPage() {
     setLoading(true)
     try {
       await setup2FA(totpCode)
-      navigate("/")
+      navigate("/panel")
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Verification failed")
     } finally {
