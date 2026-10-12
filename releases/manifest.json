@@ -70,5 +70,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-12T20:07:01Z",
     "message": "fix(webui): open tabs self-update on deploy (v0.1.7) (#19)"
+  },
+  {
+    "release": 13,
+    "tag": "release/v13",
+    "previous_tag": "release/v12",
+    "sha": "f49a416822ff0c5d24c736c886b5b43f130140df",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-12T20:54:17Z",
+    "message": "feat(daemon): complete the client protocol \u2014 Handshake RPC, sealed proofs, gRPC-web (v0.2.0) (#20)"
   }
 ]
