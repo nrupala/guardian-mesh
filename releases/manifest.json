@@ -61,5 +61,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-12T19:57:03Z",
     "message": "fix(webui): Control Panel goes to the panel; signed-in users skip login (v0.1.6) (#18)"
+  },
+  {
+    "release": 12,
+    "tag": "release/v12",
+    "previous_tag": "release/v11",
+    "sha": "84fe86dd5a4625faf980e15d92ddc7bacd7ad39d",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-12T20:07:01Z",
+    "message": "fix(webui): open tabs self-update on deploy (v0.1.7) (#19)"
   }
 ]
