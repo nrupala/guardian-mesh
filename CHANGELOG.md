@@ -18,6 +18,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Version bumped `0.1.2` → `0.1.3` (`VERSION`, `guardian-meshd/Cargo.toml`).
 - Version bumped `0.1.3` → `0.1.4` (`VERSION`, `guardian-meshd/Cargo.toml`).
 - Version bumped `0.1.4` → `0.1.5` (`VERSION`, `guardian-meshd/Cargo.toml`).
+- Version bumped `0.1.5` → `0.1.6` (`VERSION`, `guardian-meshd/Cargo.toml`).
 - Licensing corrected from the interim MIT boilerplate to the owner's
   split model: interface (`webui/`, `specs/`, and the generated client
   bindings) under the Apache License, Version 2.0, and core
@@ -69,6 +70,12 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   its status values are marked as samples rather than presented as live
   measurements, and the disabled actions say plainly that no daemon is
   connected.
+- The Control Panel navigation button now goes to `/panel` (which
+  itself redirects signed-out visitors to the login page) instead of
+  linking to `/login` directly, and the login page redirects to the
+  panel when a demo session already exists — signing in once now
+  sticks until Sign Out, instead of the form reappearing on every
+  visit to the login route.
 
 ### Notes
 - No deploy target found (no wrangler/Pages/deploy script; Android APK is a

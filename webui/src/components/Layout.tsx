@@ -20,7 +20,7 @@ export function Layout() {
           <NavLink to="/guide">Guide & Help</NavLink>
           <NavLink to="/agents">For Agents</NavLink>
         </nav>
-        <Link to="/login" className="btn-primary nav-cta">Control Panel</Link>
+        <Link to="/panel" className="btn-primary nav-cta">Control Panel</Link>
       </header>
 
       <main className="site-main">
