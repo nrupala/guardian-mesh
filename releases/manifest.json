@@ -97,5 +97,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-12T21:18:44Z",
     "message": "feat(webui): point the public site at the live guardian.aimlds.org deployment (v0.2.2) (#23)"
+  },
+  {
+    "release": 16,
+    "tag": "release/v16",
+    "previous_tag": "release/v15",
+    "sha": "d3fa2fd27b2d841e201ab6943bb0afe801d6f438",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-12T15:32:57-06:00",
+    "message": "Merge pull request #22: link the attribution line"
   }
 ]
