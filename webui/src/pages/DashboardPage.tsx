@@ -17,22 +17,31 @@ export function DashboardPage() {
       </header>
 
       <main className="dash-content">
+        <div className="demo-banner" role="note">
+          <strong>Demonstration panel.</strong> The values below are samples
+          showing the panel's shape — this page is not connected to a running
+          daemon, so nothing here is a live measurement. Actions stay disabled
+          until a real daemon connection exists; a button that pretended to
+          run an evaluation would be a lie in exactly the place this product
+          exists to prevent.
+        </div>
+
         <div className="status-cards">
           <div className="card">
             <h3>Daemon</h3>
-            <p className="status-ok">● Running</p>
+            <p className="status-info">Sample: Running</p>
           </div>
           <div className="card">
             <h3>Protocol Firewall</h3>
-            <p className="status-info">18 rules</p>
+            <p className="status-info">18 checks (as coded)</p>
           </div>
           <div className="card">
             <h3>Auth</h3>
-            <p className="status-ok">● 2FA Enabled</p>
+            <p className="status-info">Sample: 2FA Enabled</p>
           </div>
           <div className="card">
             <h3>Enclaves</h3>
-            <p className="status-ok">5 / 5 active</p>
+            <p className="status-info">5 guardians (by design)</p>
           </div>
         </div>
 
