@@ -1,9 +1,36 @@
 // Copyright (c) 2026 Nrupal Akolkar
 // SPDX-License-Identifier: Apache-2.0
 
+import { useCallback, useEffect, useRef, useState } from "react"
+import { RpcError } from "@protobuf-ts/runtime-rpc"
 import { useAuth } from "../lib/auth"
+import {
+  LIVE_MODE,
+  daemonClient,
+  fetchHealth,
+  runEvaluation,
+  sessionState,
+  verifyProofEnvelope,
+  base64ToBytes,
+  bytesToBase64,
+} from "../lib/gmClient"
+import {
+  HealthResponse_ServingStatus,
+  SealedEnvelope,
+} from "../gen/guardian_mesh_pb"
+import type {
+  EvaluateResponse,
+  HealthResponse,
+  VerifyProofResponse,
+} from "../gen/guardian_mesh_pb"
 
 export function DashboardPage() {
+  return LIVE_MODE ? <LivePanel /> : <DemoPanel />
+}
+
+// ── Demonstration panel (public site build — no daemon endpoint) ────
+
+function DemoPanel() {
   const { user, logout } = useAuth()
 
   return (
@@ -53,7 +80,414 @@ export function DashboardPage() {
             <button className="action-btn" disabled>Verify Proof</button>
             <button className="action-btn" disabled>Health Check</button>
           </div>
-          <p className="hint">Actions become available when connected to the daemon.</p>
+          <p className="hint">Actions become available when connected to the daemon. The working panel lives at guardian.aimlds.org.</p>
+        </section>
+      </main>
+    </div>
+  )
+}
+
+// ── Live panel (guardian.aimlds.org build — real daemon) ────────────
+
+const ACTION_TYPES: { value: string; label: string }[] = [
+  { value: "TOOL_CALL", label: "Use a tool" },
+  { value: "NETWORK_REQUEST", label: "Make a network request" },
+  { value: "FILE_READ", label: "Read a file" },
+  { value: "FILE_WRITE", label: "Write a file" },
+  { value: "GENERATE", label: "Generate content" },
+  { value: "CODE_EXECUTE", label: "Run code" },
+  { value: "AGENT_SPAWN", label: "Start another agent" },
+  { value: "AGENT_MESSAGE", label: "Message another agent" },
+  { value: "MEMORY_READ", label: "Read memory" },
+  { value: "MEMORY_WRITE", label: "Write memory" },
+  { value: "MODEL_LOAD", label: "Load a model" },
+]
+
+type EvalOutcome =
+  | { kind: "verdict"; response: EvaluateResponse }
+  | { kind: "blocked"; reason: string }
+  | { kind: "error"; message: string }
+
+function servingLabel(status: HealthResponse_ServingStatus | undefined): string {
+  switch (status) {
+    case HealthResponse_ServingStatus.SERVING:
+      return "Serving"
+    case HealthResponse_ServingStatus.DEGRADED:
+      return "Degraded"
+    case HealthResponse_ServingStatus.NOT_SERVING:
+      return "Not serving"
+    default:
+      return "Unknown"
+  }
+}
+
+function LivePanel() {
+  const client = daemonClient()
+  const [health, setHealth] = useState<HealthResponse | null>(null)
+  const [healthError, setHealthError] = useState<string | null>(null)
+  const [checkingHealth, setCheckingHealth] = useState(false)
+  const [sessionTick, setSessionTick] = useState(0)
+
+  const [actionType, setActionType] = useState("TOOL_CALL")
+  const [context, setContext] = useState("")
+  const [target, setTarget] = useState("")
+  const [evaluating, setEvaluating] = useState(false)
+  const [outcome, setOutcome] = useState<EvalOutcome | null>(null)
+
+  const [pasteEnvelope, setPasteEnvelope] = useState("")
+  const [verifying, setVerifying] = useState(false)
+  const [verifyResult, setVerifyResult] = useState<VerifyProofResponse | null>(null)
+  const [verifyError, setVerifyError] = useState<string | null>(null)
+
+  const evalRef = useRef<HTMLElement | null>(null)
+  const verifyRef = useRef<HTMLElement | null>(null)
+
+  const doHealth = useCallback(async () => {
+    setCheckingHealth(true)
+    try {
+      const h = await fetchHealth(client)
+      setHealth(h)
+      setHealthError(null)
+    } catch (e) {
+      setHealthError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCheckingHealth(false)
+    }
+  }, [client])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchHealth(client)
+      .then((h) => {
+        if (!cancelled) {
+          setHealth(h)
+          setHealthError(null)
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setHealthError(e instanceof Error ? e.message : String(e))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [client])
+
+  const doEvaluate = async () => {
+    setEvaluating(true)
+    setOutcome(null)
+    setVerifyResult(null)
+    try {
+      const response = await runEvaluation(client, {
+        actionType,
+        context: context || "Requested from the guardian.aimlds.org control panel",
+        target: target || "panel",
+      })
+      setOutcome({ kind: "verdict", response })
+    } catch (e) {
+      if (e instanceof RpcError && /permission/i.test(e.code)) {
+        // The Sentinel or Gatekeeper blocked the action before a
+        // verdict: the daemon delivers that BLOCK as an error
+        // carrying the enclave's reason.
+        setOutcome({ kind: "blocked", reason: e.message })
+      } else {
+        setOutcome({
+          kind: "error",
+          message: e instanceof Error ? e.message : String(e),
+        })
+      }
+    } finally {
+      setEvaluating(false)
+      setSessionTick((t) => t + 1)
+      void doHealth()
+    }
+  }
+
+  const doVerify = async (envelope: SealedEnvelope) => {
+    setVerifying(true)
+    setVerifyResult(null)
+    setVerifyError(null)
+    try {
+      const res = await verifyProofEnvelope(client, envelope)
+      setVerifyResult(res)
+    } catch (e) {
+      setVerifyError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  const doVerifyPasted = async () => {
+    let envelope: SealedEnvelope
+    try {
+      envelope = SealedEnvelope.fromBinary(base64ToBytes(pasteEnvelope.trim()))
+    } catch {
+      setVerifyResult(null)
+      setVerifyError("That text is not a sealed proof envelope (base64 expected).")
+      return
+    }
+    await doVerify(envelope)
+  }
+
+  const sess = sessionState()
+  void sessionTick // session card re-renders when evaluations run
+
+  const enclaveEntries = health ? Object.entries(health.enclaveHealth) : []
+  const enclavesOk = enclaveEntries.filter(([, v]) => v === "ok").length
+
+  const lastEnvelope =
+    outcome?.kind === "verdict" ? outcome.response.proofEnvelope : undefined
+
+  return (
+    <div className="dashboard">
+      <header className="dash-header">
+        <h1>Guardian Mesh</h1>
+        <div className="dash-user">
+          <span>guardian.aimlds.org</span>
+          <a href="/cdn-cgi/access/logout" className="btn-ghost">Sign Out</a>
+        </div>
+      </header>
+
+      <main className="dash-content">
+        {health ? (
+          <div className="demo-banner live-banner" role="note">
+            <strong>Live panel.</strong> Connected to the Guardian Mesh daemon
+            running on this machine — every value and verdict below is a real
+            answer from it, produced when you asked.
+          </div>
+        ) : (
+          <div className="demo-banner" role="alert">
+            <strong>Daemon not reached.</strong>{" "}
+            {healthError
+              ? `The health check failed: ${healthError}`
+              : "Checking the daemon…"}
+            {" "}Nothing below is a live value until the daemon answers.
+          </div>
+        )}
+
+        <div className="status-cards">
+          <div className="card">
+            <h3>Daemon</h3>
+            <p className="status-info">
+              {health ? servingLabel(health.status) : "—"}
+            </p>
+          </div>
+          <div className="card">
+            <h3>Protocol Firewall</h3>
+            <p className="status-info">
+              {health
+                ? `${health.protocolFirewallRulesPassed} checks passed`
+                : "—"}
+            </p>
+            <p className="status-sub">
+              {health
+                ? `of ${health.protocolFirewallRulesTotal} named rules, since the daemon started`
+                : ""}
+            </p>
+          </div>
+          <div className="card">
+            <h3>Session</h3>
+            <p className="status-info">
+              {sess.established ? "Handshake open" : "Not opened yet"}
+            </p>
+            <p className="status-sub">
+              {sess.established
+                ? `session ${sess.id?.slice(0, 8)}… — opens with your first evaluation`
+                : "opens with your first evaluation"}
+            </p>
+          </div>
+          <div className="card">
+            <h3>Guardians</h3>
+            <p className="status-info">
+              {health ? `${enclavesOk} / ${enclaveEntries.length} healthy` : "—"}
+            </p>
+            <p className="status-sub">
+              {health ? enclaveEntries.map(([k]) => k).join(" · ") : ""}
+            </p>
+          </div>
+        </div>
+
+        <section className="dash-section">
+          <h2>Quick Actions</h2>
+          <div className="action-grid">
+            <button
+              className="action-btn"
+              onClick={() => void doHealth()}
+              disabled={checkingHealth}
+            >
+              {checkingHealth ? "Checking…" : "Health Check"}
+            </button>
+            <button
+              className="action-btn"
+              onClick={() =>
+                evalRef.current?.scrollIntoView({ behavior: "smooth" })
+              }
+            >
+              Run Evaluation
+            </button>
+            <button
+              className="action-btn"
+              onClick={() =>
+                verifyRef.current?.scrollIntoView({ behavior: "smooth" })
+              }
+            >
+              Verify Proof
+            </button>
+          </div>
+          <p className="hint">
+            Every action below talks to the daemon when you press it — nothing
+            is pre-computed.
+          </p>
+        </section>
+
+        <section className="dash-section" ref={evalRef}>
+          <h2>Run an evaluation</h2>
+          <p className="hint">
+            Describe an action an agent wants to take. The guardians check it
+            and answer with a verdict and a sealed proof.
+          </p>
+          <div className="gm-form">
+            <label className="gm-field">
+              <span>Action</span>
+              <select
+                value={actionType}
+                onChange={(e) => setActionType(e.target.value)}
+              >
+                {ACTION_TYPES.map((a) => (
+                  <option key={a.value} value={a.value}>
+                    {a.label} ({a.value})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="gm-field">
+              <span>Why (context)</span>
+              <input
+                type="text"
+                value={context}
+                onChange={(e) => setContext(e.target.value)}
+                placeholder="Requested from the control panel"
+              />
+            </label>
+            <label className="gm-field">
+              <span>Target</span>
+              <input
+                type="text"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                placeholder="panel"
+              />
+            </label>
+            <button
+              className="action-btn"
+              onClick={() => void doEvaluate()}
+              disabled={evaluating}
+            >
+              {evaluating ? "Asking the guardians…" : "Ask Guardian Mesh"}
+            </button>
+          </div>
+
+          {outcome?.kind === "verdict" && (
+            <div className={`verdict-panel verdict-${outcome.response.verdict.toLowerCase()}`}>
+              <p className="verdict-word">{outcome.response.verdict}</p>
+              <p>{outcome.response.reason}</p>
+              <p className="status-sub">
+                Containment stage: {outcome.response.containmentStage}
+                {outcome.response.proof &&
+                  ` · Proof: ${outcome.response.proof.enclaveChain} · signed by the Witness (${outcome.response.proof.signature.length} bytes) · ${new Date(
+                    Number(outcome.response.proof.timestamp) * 1000,
+                  ).toLocaleString()}`}
+              </p>
+              {lastEnvelope && (
+                <>
+                  <div className="action-grid">
+                    <button
+                      className="action-btn"
+                      onClick={() => void doVerify(lastEnvelope)}
+                      disabled={verifying}
+                    >
+                      {verifying ? "Verifying…" : "Verify this proof"}
+                    </button>
+                    <button
+                      className="action-btn"
+                      onClick={() =>
+                        void navigator.clipboard.writeText(
+                          bytesToBase64(SealedEnvelope.toBinary(lastEnvelope)),
+                        )
+                      }
+                    >
+                      Copy the sealed proof
+                    </button>
+                  </div>
+                  <p className="hint">
+                    The sealed proof is the daemon-signed envelope for this
+                    verdict. Anyone can paste it into the verify section below
+                    and have the daemon re-check it.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+          {outcome?.kind === "blocked" && (
+            <div className="verdict-panel verdict-block">
+              <p className="verdict-word">BLOCK</p>
+              <p>{outcome.reason}</p>
+              <p className="status-sub">
+                Stopped by the Sentinel or the Gatekeeper before a verdict —
+                the daemon reports these blocks as errors carrying the reason.
+              </p>
+            </div>
+          )}
+          {outcome?.kind === "error" && (
+            <div className="verdict-panel verdict-block">
+              <p className="verdict-word">No answer</p>
+              <p>The evaluation could not be completed: {outcome.message}</p>
+            </div>
+          )}
+        </section>
+
+        <section className="dash-section" ref={verifyRef}>
+          <h2>Verify a proof</h2>
+          <p className="hint">
+            Paste a sealed proof envelope (base64) from any evaluation. The
+            daemon re-checks its integrity digest and its ML-DSA-65
+            signature — a tampered proof fails.
+          </p>
+          <div className="gm-form">
+            <label className="gm-field">
+              <span>Sealed proof envelope</span>
+              <textarea
+                value={pasteEnvelope}
+                onChange={(e) => setPasteEnvelope(e.target.value)}
+                rows={4}
+                placeholder="Paste base64 here"
+              />
+            </label>
+            <button
+              className="action-btn"
+              onClick={() => void doVerifyPasted()}
+              disabled={verifying || !pasteEnvelope.trim()}
+            >
+              {verifying ? "Verifying…" : "Verify"}
+            </button>
+          </div>
+          {verifyResult && (
+            <div
+              className={`verdict-panel ${verifyResult.valid ? "verdict-allow" : "verdict-block"}`}
+            >
+              <p className="verdict-word">
+                {verifyResult.valid ? "VALID" : "NOT VALID"}
+              </p>
+              <p>{verifyResult.reason}</p>
+            </div>
+          )}
+          {verifyError && (
+            <div className="verdict-panel verdict-block">
+              <p className="verdict-word">Could not verify</p>
+              <p>{verifyError}</p>
+            </div>
+          )}
         </section>
       </main>
     </div>

@@ -5,8 +5,12 @@ import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
 import { VitePWA } from "vite-plugin-pwa"
 
+// Base path: "/guardian-mesh/" for the GitHub Pages build;
+// the guardian.aimlds.org build sets VITE_BASE_PATH=/ (domain root).
+const basePath = process.env.VITE_BASE_PATH ?? "/guardian-mesh/"
+
 export default defineConfig({
-  base: "/guardian-mesh/",
+  base: basePath,
   plugins: [
     react(),
     VitePWA({
@@ -20,11 +24,11 @@ export default defineConfig({
         background_color: "#0f172a",
         display: "standalone",
         orientation: "portrait",
-        start_url: "/guardian-mesh/",
+        start_url: basePath,
         icons: [
-          { src: "/guardian-mesh/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
-          { src: "/guardian-mesh/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
-          { src: "/guardian-mesh/icons/icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: `${basePath}icons/icon-192x192.png`, sizes: "192x192", type: "image/png" },
+          { src: `${basePath}icons/icon-512x512.png`, sizes: "512x512", type: "image/png" },
+          { src: `${basePath}icons/icon-512x512.png`, sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       workbox: {
