@@ -13,18 +13,21 @@ use guardian_meshd::enclave::gatekeeper::GatekeeperEnclave;
 use guardian_meshd::enclave::witness::WitnessEnclave;
 use guardian_meshd::enclave::arbiter::ArbiterEnclave;
 use guardian_meshd::enclave::vault::VaultEnclave;
-use guardian_meshd::handshake_bus::HandshakeBus;
+use guardian_meshd::handshake_bus::{HandshakeBus, SESSION_TTL_SECS};
 use guardian_meshd::policy::PolicyEngine;
 use guardian_meshd::protocol_firewall::ProtocolFirewall;
-use guardian_meshd::sealed_envelope::generate_keypair;
+use guardian_meshd::sealed_envelope::{generate_keypair, SealedEnvelope};
 use guardian_meshd::sealed_envelope::verify_proto_envelope;
 use guardian_meshd::proto::{
     guardian_mesh_server::{GuardianMesh, GuardianMeshServer},
     EvaluateRequest, EvaluateResponse, AuditProof,
     VerifyProofRequest, VerifyProofResponse,
     HealthRequest, HealthResponse,
+    HandshakeRequest, HandshakeResponse,
+    SealedEnvelope as ProtoSealedEnvelope,
     health_response::ServingStatus,
 };
+use prost::Message as _;
 use ml_dsa::{MlDsa65, SigningKey, VerifyingKey};
 
 pub struct GuardianMeshService {
@@ -107,12 +110,32 @@ impl GuardianMesh for GuardianMeshService {
             merkle_root: Vec::new(),
         };
 
+        // Seal the proof with the daemon's signing key so the caller
+        // can present it to VerifyProof and have it re-checked
+        // independently of this response.
+        let proof_envelope = {
+            let sealed = SealedEnvelope::new(
+                proof.encode_to_vec(),
+                b"guardian_mesh.AuditProof".to_vec(),
+                &self.signing_key,
+            );
+            ProtoSealedEnvelope {
+                payload: sealed.payload,
+                payload_type: sealed.payload_type,
+                crc32c: sealed.crc32c_digest,
+                ml_dsa_65_signature: sealed.ml_dsa_65_signature,
+                timestamp: sealed.timestamp,
+                nonce: sealed.nonce.to_vec(),
+            }
+        };
+
         let response = EvaluateResponse {
             verdict: final_verdict.as_str().into(),
             reason: final_reason,
             containment_stage: ctx.stage.as_str().into(),
             proof: Some(proof),
             handshake_token: Vec::new(),
+            proof_envelope: Some(proof_envelope),
         };
 
         Ok(Response::new(response))
@@ -172,6 +195,28 @@ impl GuardianMesh for GuardianMeshService {
 
         Ok(Response::new(response))
     }
+
+    async fn handshake(
+        &self,
+        request: Request<HandshakeRequest>,
+    ) -> Result<Response<HandshakeResponse>, Status> {
+        let req = request.into_inner();
+        let source = if req.source_enclave.is_empty() {
+            "unknown".to_string()
+        } else {
+            req.source_enclave
+        };
+
+        let bus = self.bus.read().await;
+        bus.evict_expired();
+        let session = bus.create_session_full(&source);
+
+        Ok(Response::new(HandshakeResponse {
+            session_id: session.session_id,
+            session_key: session.session_key.to_vec(),
+            ttl_seconds: SESSION_TTL_SECS,
+        }))
+    }
 }
 
 fn real_main() {
@@ -199,7 +244,15 @@ fn real_main() {
 
         println!("Guardian Mesh daemon listening on {}", addr);
 
+        // One service, two transports: native gRPC (HTTP/2) for
+        // programmatic clients, gRPC-web (HTTP/1.1) so browsers can
+        // call the same API. CORS is permissive for API consumers;
+        // deployments are expected to gate access in front of the
+        // daemon (e.g. an authenticated reverse proxy / tunnel).
         Server::builder()
+            .accept_http1(true)
+            .layer(tower_http::cors::CorsLayer::permissive())
+            .layer(tonic_web::GrpcWebLayer::new())
             .add_service(GuardianMeshServer::new(service))
             .serve(addr)
             .await

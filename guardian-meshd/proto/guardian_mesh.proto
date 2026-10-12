@@ -22,6 +22,12 @@ service GuardianMesh {
 
   // Health check (must be available before Evaluate)
   rpc Health (HealthRequest) returns (HealthResponse);
+
+  // Open a handshake session for subsequent Evaluate calls.
+  // Returns the session ID and its HMAC key. The session key is a
+  // bearer credential: hold it over an authenticated, encrypted
+  // channel only (the daemon is designed to sit behind one).
+  rpc Handshake (HandshakeRequest) returns (HandshakeResponse);
 }
 
 // ── Message Types ─────────────────────────
@@ -64,6 +70,10 @@ message EvaluateResponse {
   string containment_stage = 3; // NORMAL..TERMINATE
   AuditProof proof = 4;
   bytes handshake_token = 5; // Next session token
+  // The AuditProof above, sealed with the daemon's signing key
+  // (payload is the encoded AuditProof). Present it to VerifyProof
+  // to re-check the proof independently of this response.
+  SealedEnvelope proof_envelope = 6;
 }
 
 // ── VerifyProof RPC ───────────────────────
@@ -81,6 +91,18 @@ message VerifyProofResponse {
 // ── Health RPC ────────────────────────────
 
 message HealthRequest {}
+
+// ── Handshake RPC ─────────────────────────
+
+message HandshakeRequest {
+  string source_enclave = 1; // Caller identifier, e.g. "webui"
+}
+
+message HandshakeResponse {
+  string session_id = 1;
+  bytes session_key = 2;   // HMAC-SHA256 key for this session
+  uint64 ttl_seconds = 3;  // Session lifetime from creation
+}
 
 message HealthResponse {
   enum ServingStatus {

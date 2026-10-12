@@ -1,6 +1,6 @@
 [package]
 name = "guardian-meshd"
-version = "0.1.7"
+version = "0.2.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 
@@ -23,6 +23,8 @@ thiserror = "2.0.18"
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "net", "time", "io-util"] }
 tonic = { version = "0.14.5", features = ["channel", "codegen", "router", "server", "transport"] }
 tonic-prost = "0.14.5"
+tonic-web = "0.14"
+tower-http = { version = "0.6", features = ["cors"] }
 
 [dev-dependencies]
 tempfile = "3.27.0"
