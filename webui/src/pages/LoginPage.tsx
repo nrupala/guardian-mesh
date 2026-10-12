@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, Navigate } from "react-router-dom"
 import { useAuth } from "../lib/auth"
 
 export function LoginPage() {
-  const { login } = useAuth()
+  const { login, token } = useAuth()
   const navigate = useNavigate()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
@@ -14,6 +14,12 @@ export function LoginPage() {
   const [step, setStep] = useState<"credentials" | "totp">("credentials")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+
+  // Already signed in (the demo session persists in this browser):
+  // never show the form again — go straight to the panel.
+  if (token) {
+    return <Navigate to="/panel" replace />
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
