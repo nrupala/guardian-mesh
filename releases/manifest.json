@@ -43,5 +43,14 @@
     "author": "dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
     "date": "2026-10-11T13:32:59-06:00",
     "message": "chore(deps): bump the npm_and_yarn group across 1 directory with 11 updates (#15)"
+  },
+  {
+    "release": 10,
+    "tag": "release/v10",
+    "previous_tag": "release/v9",
+    "sha": "fc319b47b4525674bb1bc0c130d33ec393c753a2",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-12T19:31:41Z",
+    "message": "feat(webui): real public site + Pages 404 fix (v0.1.5) (#17)"
   }
 ]
