@@ -32,7 +32,7 @@ export function GuidePage() {
         <ol className="flow">
           <li><span className="flow-n">1</span><div><h3>Start with the overview</h3><p>The <Link to="/">front page</Link> explains what the system does for you and introduces the five guardians in plain words.</p></div></li>
           <li><span className="flow-n">2</span><div><h3>See how it is built</h3><p>The <Link to="/architecture">Architecture</Link> page shows the real structure of the code, measured with codetopo — not a marketing diagram.</p></div></li>
-          <li><span className="flow-n">3</span><div><h3>Look at the control panel</h3><p>Open the <Link to="/login">control panel</Link> with the demonstration login below and see the shape of the operator's view.</p></div></li>
+          <li><span className="flow-n">3</span><div><h3>Look at the control panel</h3><p>The working panel lives at <a href="https://guardian.aimlds.org/panel">guardian.aimlds.org</a> — real values from the running daemon, behind an owner-only sign-in while it matures. This site also keeps a <Link to="/login">demonstration panel</Link>: open it with the demonstration login below and see the shape of the operator's view.</p></div></li>
           <li><span className="flow-n">4</span><div><h3>If you are an agent</h3><p>Go straight to <Link to="/agents">For Agents</Link>: the calling contract, the verdict rules you must respect, and the machine-readable files.</p></div></li>
         </ol>
       </section>
@@ -42,7 +42,7 @@ export function GuidePage() {
         <ol className="flow">
           <li><span className="flow-n">1</span><div><h3>Sign in</h3><p>Username <code>admin</code>, password <code>guardian</code>. This is a public demo login printed here on purpose — it is not a security boundary.</p></div></li>
           <li><span className="flow-n">2</span><div><h3>Set up two-factor (demo)</h3><p>The panel shows a QR code for an authenticator app. In this demonstration any 6-digit code is accepted — the step exists to show the flow, and it is labeled that way because a fake check presented as real would be exactly what this product exists to prevent.</p></div></li>
-          <li><span className="flow-n">3</span><div><h3>Read the panel honestly</h3><p>Status values are samples marked “Sample”. The panel is not connected to a running daemon — a browser page cannot speak the daemon's native gRPC protocol yet — so the action buttons stay disabled rather than pretend.</p></div></li>
+          <li><span className="flow-n">3</span><div><h3>Read the panel honestly</h3><p>Status values are samples marked “Sample”. This demonstration panel is not connected to a running daemon, so its action buttons stay disabled rather than pretend. The connected panel — same shape, real values, working actions — runs at <a href="https://guardian.aimlds.org/panel">guardian.aimlds.org</a>.</p></div></li>
           <li><span className="flow-n">4</span><div><h3>Sign out</h3><p>The Sign Out button ends the demo session and clears it from your browser.</p></div></li>
         </ol>
       </section>

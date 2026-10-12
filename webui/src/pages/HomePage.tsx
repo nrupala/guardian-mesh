@@ -118,11 +118,11 @@ export function HomePage() {
           <div className="card">
             <h3 className="status-ok">Working today</h3>
             <ul className="plain-list">
-              <li>The Rust daemon with its three services: Evaluate, VerifyProof, Health</li>
+              <li>The Rust daemon with its four services: Handshake, Evaluate, VerifyProof, Health</li>
               <li>The five enclaves and the protocol firewall's 18 checks</li>
               <li>Sealed envelopes with ML-DSA-65 signatures and CRC32C integrity</li>
               <li>Signed audit proofs that VerifyProof can re-check</li>
-              <li>This website and the demonstration control panel</li>
+              <li>The live control panel at guardian.aimlds.org, connected to the daemon (owner-only sign-in while it matures), and this website with its demonstration panel</li>
             </ul>
           </div>
           <div className="card">
@@ -132,7 +132,6 @@ export function HomePage() {
               <li>Multi-node consensus between guardians</li>
               <li>Public anchoring of proof batches</li>
               <li>Formal verification of the core in Lean 4</li>
-              <li>A live connection from this website to a running daemon</li>
             </ul>
           </div>
         </div>

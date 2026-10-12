@@ -101,6 +101,13 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   (`VITE_BASE_PATH`) so the same source serves both.
 - Version bumped `0.1.7` → `0.2.0` (`VERSION`, `guardian-meshd/Cargo.toml`).
 - Version bumped `0.2.0` → `0.2.1` (`VERSION`, `guardian-meshd/Cargo.toml`).
+- Guardian Mesh is live at guardian.aimlds.org: the daemon and the
+  live control panel run on the Aetheris box behind a Cloudflare
+  Access sign-in (owner-only while the deployment matures). The
+  public site's Control Panel button now points there, and the
+  site copy and machine-readable files (llms.txt, descriptor JSON)
+  describe the four-call interface and the live deployment.
+- Version bumped `0.2.1` → `0.2.2` (`VERSION`, `guardian-meshd/Cargo.toml`).
 
 ### Notes
 - No deploy target found (no wrangler/Pages/deploy script; Android APK is a
