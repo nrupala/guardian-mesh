@@ -106,5 +106,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-12T15:32:57-06:00",
     "message": "Merge pull request #22: link the attribution line"
+  },
+  {
+    "release": 17,
+    "tag": "release/v17",
+    "previous_tag": "release/v16",
+    "sha": "1de06572f68bfe38e0477038e7814398e465ee39",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-12T15:39:28-06:00",
+    "message": "repair: restore main-side files clobbered by attribution merge (tree verification)"
   }
 ]
