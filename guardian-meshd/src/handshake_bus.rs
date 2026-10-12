@@ -24,7 +24,7 @@ pub struct HandshakeBus {
     master_secret: Vec<u8>,
 }
 
-const SESSION_TTL_SECS: u64 = 300;
+pub const SESSION_TTL_SECS: u64 = 300;
 
 impl HandshakeBus {
     pub fn new(master_secret: &[u8]) -> Self {
@@ -44,6 +44,14 @@ impl HandshakeBus {
     }
 
     pub fn create_session(&self, source_enclave: &str) -> String {
+        self.create_session_full(source_enclave).session_id
+    }
+
+    /// Create a session and return it in full, including the session
+    /// key. This is what the Handshake RPC hands to a caller: without
+    /// the key the caller cannot produce the HMAC tags the Gatekeeper
+    /// verifies, so session creation and key delivery are one step.
+    pub fn create_session_full(&self, source_enclave: &str) -> HandshakeSession {
         let mut session_id_bytes = [0u8; 16];
         let _ = SysRng.try_fill_bytes(&mut session_id_bytes);
         let session_id = hex::encode(session_id_bytes);
@@ -64,8 +72,8 @@ impl HandshakeBus {
         };
 
         let mut sessions = self.sessions.lock().unwrap();
-        sessions.insert(session_id.clone(), session);
-        session_id
+        sessions.insert(session_id.clone(), session.clone());
+        session
     }
 
     pub fn compute_hmac(&self, session_id: &str, data: &[u8]) -> Result<Vec<u8>, String> {
@@ -121,6 +129,21 @@ mod tests {
         assert!(bus.session_exists(&sid));
         let hmac = bus.compute_hmac(&sid, b"hello").unwrap();
         assert!(bus.verify_hmac(&sid, b"hello", &hmac).unwrap());
+    }
+
+    #[test]
+    fn full_session_carries_a_usable_key() {
+        // The Handshake RPC contract: the returned key must be the
+        // key the bus verifies HMAC tags against.
+        use hmac::{Hmac, Mac, KeyInit};
+        use sha2::Sha256;
+        let bus = HandshakeBus::new(b"test-secret");
+        let session = bus.create_session_full("webui");
+        assert!(bus.session_exists(&session.session_id));
+        let mut mac = Hmac::<Sha256>::new_from_slice(&session.session_key).unwrap();
+        mac.update(b"payload");
+        let tag = mac.finalize().into_bytes().to_vec();
+        assert!(bus.verify_hmac(&session.session_id, b"payload", &tag).unwrap());
     }
 
     #[test]

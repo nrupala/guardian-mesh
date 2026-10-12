@@ -82,6 +82,15 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   the session (a tab opened before a deploy otherwise keeps the old
   build's behavior until manually refreshed). First visits are
   unaffected.
+- The daemon's client protocol is completed. A new `Handshake` RPC
+  opens a handshake session and returns its ID and HMAC key —
+  previously sessions could never be created through the API, so no
+  client could pass the Gatekeeper. `Evaluate` now also returns the
+  audit proof sealed with the daemon's signing key
+  (`proof_envelope`), so a caller can present it to `VerifyProof`
+  and have it re-checked independently. The server speaks gRPC-web
+  alongside native gRPC, so browsers can call the same API.
+- Version bumped `0.1.7` → `0.2.0` (`VERSION`, `guardian-meshd/Cargo.toml`).
 
 ### Notes
 - No deploy target found (no wrangler/Pages/deploy script; Android APK is a
