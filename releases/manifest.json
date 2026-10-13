@@ -115,5 +115,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-12T15:39:28-06:00",
     "message": "repair: restore main-side files clobbered by attribution merge (tree verification)"
+  },
+  {
+    "release": 18,
+    "tag": "release/v18",
+    "previous_tag": "release/v17",
+    "sha": "cde8a443b669f42cd2df2f974efff4b35286715c",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-12T22:26:11-06:00",
+    "message": "Merge pull request #24 from nrupala/wright/licence-terms-sweep-20261012"
   }
 ]
