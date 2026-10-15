@@ -124,5 +124,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-12T22:26:11-06:00",
     "message": "Merge pull request #24 from nrupala/wright/licence-terms-sweep-20261012"
+  },
+  {
+    "release": 19,
+    "tag": "release/v19",
+    "previous_tag": "release/v18",
+    "sha": "99d3956962365653de10e2e6b0fcb62a78a82d47",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-14T22:20:15-06:00",
+    "message": "docs: nightly build instruction pack \u2014 OpenCode work orders + release-gate spec inputs"
   }
 ]
