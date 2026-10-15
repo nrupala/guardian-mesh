@@ -188,6 +188,15 @@ export interface HandshakeRequest {
      * @generated from protobuf field: string source_enclave = 1
      */
     sourceEnclave: string; // Caller identifier, e.g. "webui"
+    /**
+     * The caller's ML-DSA-65 verifying key (1952 bytes), bound to the
+     * session this handshake opens. Every Evaluate envelope on the
+     * session must carry a signature that verifies against this key;
+     * anything else is denied. (Field 2 is unused.)
+     *
+     * @generated from protobuf field: bytes source_public_key = 3
+     */
+    sourcePublicKey: Uint8Array;
 }
 /**
  * @generated from protobuf message guardian_mesh.HandshakeResponse
@@ -813,12 +822,14 @@ export const HealthRequest = new HealthRequest$Type();
 class HandshakeRequest$Type extends MessageType<HandshakeRequest> {
     constructor() {
         super("guardian_mesh.HandshakeRequest", [
-            { no: 1, name: "source_enclave", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+            { no: 1, name: "source_enclave", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "source_public_key", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
         ]);
     }
     create(value?: PartialMessage<HandshakeRequest>): HandshakeRequest {
         const message = globalThis.Object.create((this.messagePrototype!));
         message.sourceEnclave = "";
+        message.sourcePublicKey = new Uint8Array(0);
         if (value !== undefined)
             reflectionMergePartial<HandshakeRequest>(this, message, value);
         return message;
@@ -830,6 +841,9 @@ class HandshakeRequest$Type extends MessageType<HandshakeRequest> {
             switch (fieldNo) {
                 case /* string source_enclave */ 1:
                     message.sourceEnclave = reader.string();
+                    break;
+                case /* bytes source_public_key */ 3:
+                    message.sourcePublicKey = reader.bytes();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -846,6 +860,9 @@ class HandshakeRequest$Type extends MessageType<HandshakeRequest> {
         /* string source_enclave = 1; */
         if (message.sourceEnclave !== "")
             writer.tag(1, WireType.LengthDelimited).string(message.sourceEnclave);
+        /* bytes source_public_key = 3; */
+        if (message.sourcePublicKey.length)
+            writer.tag(3, WireType.LengthDelimited).bytes(message.sourcePublicKey);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);

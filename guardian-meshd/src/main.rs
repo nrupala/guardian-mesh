@@ -16,7 +16,7 @@ use guardian_meshd::enclave::vault::VaultEnclave;
 use guardian_meshd::handshake_bus::{HandshakeBus, SESSION_TTL_SECS};
 use guardian_meshd::policy::PolicyEngine;
 use guardian_meshd::protocol_firewall::ProtocolFirewall;
-use guardian_meshd::sealed_envelope::{generate_keypair, SealedEnvelope};
+use guardian_meshd::sealed_envelope::{generate_keypair, SealedEnvelope, ML_DSA_65_VERIFYING_KEY_LEN};
 use guardian_meshd::sealed_envelope::verify_proto_envelope;
 use guardian_meshd::proto::{
     guardian_mesh_server::{GuardianMesh, GuardianMeshServer},
@@ -201,6 +201,19 @@ impl GuardianMesh for GuardianMeshService {
         request: Request<HandshakeRequest>,
     ) -> Result<Response<HandshakeResponse>, Status> {
         let req = request.into_inner();
+
+        // WO-1: the caller's ML-DSA-65 verifying key is bound to the
+        // session and every Evaluate signature is verified against
+        // it, so a handshake without a well-formed key is refused
+        // here (fail closed) instead of opening an unusable session.
+        if req.source_public_key.len() != ML_DSA_65_VERIFYING_KEY_LEN {
+            return Err(Status::invalid_argument(format!(
+                "Handshake requires source_public_key: the caller's ML-DSA-65 verifying key ({} bytes), got {} bytes",
+                ML_DSA_65_VERIFYING_KEY_LEN,
+                req.source_public_key.len()
+            )));
+        }
+
         let source = if req.source_enclave.is_empty() {
             "unknown".to_string()
         } else {
@@ -209,7 +222,7 @@ impl GuardianMesh for GuardianMeshService {
 
         let bus = self.bus.read().await;
         bus.evict_expired();
-        let session = bus.create_session_full(&source);
+        let session = bus.create_session_full(&source, &req.source_public_key);
 
         Ok(Response::new(HandshakeResponse {
             session_id: session.session_id,
@@ -267,4 +280,141 @@ fn main() {
         .expect("failed to spawn server thread")
         .join()
         .expect("server thread panicked");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use guardian_meshd::proto::{ActionDescriptor, FirewalledRequest};
+
+    const PAYLOAD: &[u8] = b"{\"action_type\":\"TOOL_CALL\",\"target\":\"panel\"}";
+
+    fn test_service() -> (GuardianMeshService, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = Config::default();
+        config.workspace_dir = dir.path().join("ws").to_string_lossy().into_owned();
+        config.output_dir = dir.path().join("out").to_string_lossy().into_owned();
+        (GuardianMeshService::new(config), dir)
+    }
+
+    async fn open_session(
+        service: &GuardianMeshService,
+        vk: &VerifyingKey<MlDsa65>,
+    ) -> HandshakeResponse {
+        service
+            .handshake(Request::new(HandshakeRequest {
+                source_enclave: "webui".into(),
+                source_public_key: vk.encode().to_vec(),
+            }))
+            .await
+            .unwrap()
+            .into_inner()
+    }
+
+    async fn evaluate_request(
+        service: &GuardianMeshService,
+        session_id: &str,
+        sealed: &SealedEnvelope,
+    ) -> EvaluateRequest {
+        let envelope = ProtoSealedEnvelope {
+            payload: sealed.payload.clone(),
+            payload_type: sealed.payload_type.clone(),
+            crc32c: sealed.crc32c_digest,
+            ml_dsa_65_signature: sealed.ml_dsa_65_signature.clone(),
+            timestamp: sealed.timestamp,
+            nonce: sealed.nonce.to_vec(),
+        };
+        // HMAC over the payload exactly as sent, via the session key
+        // the handshake issued — signature failures below are never
+        // HMAC failures.
+        let hmac_tag = {
+            let bus = service.bus.read().await;
+            bus.compute_hmac(session_id, &envelope.payload).unwrap()
+        };
+        EvaluateRequest {
+            firewalled: Some(FirewalledRequest {
+                envelope: Some(envelope),
+                source_enclave: "webui".into(),
+                handshake_session: session_id.to_string(),
+                hmac_tag,
+            }),
+            action: Some(ActionDescriptor {
+                action_type: "TOOL_CALL".into(),
+                context: "test".into(),
+                target: "panel".into(),
+                metadata: Default::default(),
+            }),
+        }
+    }
+
+    #[tokio::test]
+    async fn handshake_without_a_full_public_key_is_invalid_argument() {
+        let (service, _dir) = test_service();
+        let err = service
+            .handshake(Request::new(HandshakeRequest {
+                source_enclave: "webui".into(),
+                source_public_key: vec![1, 2, 3],
+            }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn evaluate_with_valid_signature_returns_a_verdict() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        let resp = service
+            .evaluate(Request::new(req))
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(resp.verdict, "ALLOW");
+        assert!(resp.proof_envelope.is_some());
+    }
+
+    #[tokio::test]
+    async fn evaluate_with_tampered_payload_is_permission_denied() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let mut sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        sealed.payload = b"{\"action_type\":\"CODE_EXECUTE\"}".to_vec();
+        sealed.crc32c_digest = crc32c::crc32c(&sealed.payload);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        let err = service.evaluate(Request::new(req)).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+        assert!(
+            err.message().contains("signature"),
+            "denial must name the signature failure, got: {}",
+            err.message()
+        );
+    }
+
+    #[tokio::test]
+    async fn evaluate_signed_by_a_different_key_is_permission_denied() {
+        let (service, _dir) = test_service();
+        let (_sk_bound, vk_bound) = generate_keypair();
+        let (sk_other, _vk_other) = generate_keypair();
+        let session = open_session(&service, &vk_bound).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_other);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        let err = service.evaluate(Request::new(req)).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+    }
+
+    #[tokio::test]
+    async fn evaluate_with_missing_signature_is_permission_denied() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let mut sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        sealed.ml_dsa_65_signature = Vec::new();
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        let err = service.evaluate(Request::new(req)).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+    }
 }

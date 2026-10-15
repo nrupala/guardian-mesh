@@ -100,6 +100,22 @@ interface Session {
 let session: Session | null = null
 let clientKeyPair: { publicKey: Uint8Array; secretKey: Uint8Array } | null = null
 
+// The client's ML-DSA-65 identity for this page session. The public
+// key is registered with the daemon at Handshake time and the daemon
+// verifies every envelope signature against it (WO-1), so the
+// keypair is created before the session opens and never leaves
+// memory.
+async function getClientKeyPair(): Promise<{
+  publicKey: Uint8Array
+  secretKey: Uint8Array
+}> {
+  if (!clientKeyPair) {
+    const { ml_dsa65 } = await import("@noble/post-quantum/ml-dsa.js")
+    clientKeyPair = ml_dsa65.keygen()
+  }
+  return clientKeyPair
+}
+
 export function sessionState(): { established: boolean; id?: string } {
   if (session && Date.now() < session.expiresAtMs) {
     return { established: true, id: session.id }
@@ -109,7 +125,11 @@ export function sessionState(): { established: boolean; id?: string } {
 
 async function ensureSession(client: GuardianMeshClient): Promise<Session> {
   if (session && Date.now() < session.expiresAtMs - 30_000) return session
-  const res = await client.handshake({ sourceEnclave: "webui" }).response
+  const keyPair = await getClientKeyPair()
+  const res = await client.handshake({
+    sourceEnclave: "webui",
+    sourcePublicKey: keyPair.publicKey,
+  }).response
   const ttlMs = Number(res.ttlSeconds || "300") * 1000
   session = {
     id: res.sessionId,
@@ -121,10 +141,12 @@ async function ensureSession(client: GuardianMeshClient): Promise<Session> {
 
 // ── The evaluation flow ──────────────────────────────────────────────
 // Mirrors the daemon's client protocol exactly:
-//   1. Handshake -> session id + HMAC key
+//   1. Handshake -> session id + HMAC key; the handshake registers
+//      this client's ML-DSA-65 public key with the session
 //   2. Seal the action payload: CRC32C digest + ML-DSA-65 signature
 //      over (crc32c as little-endian u32 || payload), the daemon's
-//      own signing layout
+//      own signing layout — the daemon verifies it against the
+//      registered key before the action is judged
 //   3. HMAC-SHA256 the payload with the session key
 //   4. Evaluate
 //
@@ -145,10 +167,7 @@ export async function runEvaluation(
   const s = await ensureSession(client)
 
   const { ml_dsa65 } = await import("@noble/post-quantum/ml-dsa.js")
-  if (!clientKeyPair) {
-    clientKeyPair = ml_dsa65.keygen()
-  }
-  const keyPair = clientKeyPair
+  const keyPair = await getClientKeyPair()
 
   const descriptor: ActionDescriptor = {
     actionType: action.actionType,
