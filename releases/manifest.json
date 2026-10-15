@@ -178,5 +178,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-14T23:03:59-06:00",
     "message": "docs(nightly): guardrail \u2014 system-level languages only"
+  },
+  {
+    "release": 25,
+    "tag": "release/v25",
+    "previous_tag": "release/v24",
+    "sha": "2a98e7becbc777de8f7ca1888ecbf3b5ddd0d02a",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-15T00:04:17-06:00",
+    "message": "feat(daemon): enforce the Protocol Firewall rule table on Evaluate (WO-2) (#31)"
   }
 ]
