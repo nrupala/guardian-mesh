@@ -5,7 +5,7 @@ Read these in order to understand *why* the system is shaped the way it is.
 
 | Document | Status | What it covers |
 |----------|--------|----------------|
-| `GUARDIAN_MESH_REVISED_SPEC.md` | **Governing target (v3.0)** | The consolidated specification: universal deployment, trust boundaries + the two-confirmation rule, pluggable authorization (PGP/GPG incl.), hyperscaler-aligned checkpoints (CP-01…CP-24), data-center readiness (DC), the release gate as criteria of record (RG), evidence & certificates (EV). Read this first for direction; honesty labels mark what is shipped vs target |
+| `GUARDIAN_MESH_REVISED_SPEC.md` | **Governing target (v3.1)** | The consolidated specification: product boundary charter (§0.5), closed-path Doctrine 0, universal deployment, trust boundaries + the two-confirmation rule, pluggable authorization (PGP/GPG incl.), hyperscaler-aligned checkpoints (CP-01…CP-24), data-center readiness (DC), complete mediation (CM), securing the guardian (SG), product completeness (PC), the release gate as criteria of record (RG), evidence & certificates (EV). Read this first for direction; honesty labels mark what is shipped vs target |
 | `GUARDIAN_MESH_FORMAL_SPEC.md` | Implemented | Formal spec of the **daemon** that actually exists today — the 5-enclave pipeline, handshake bus, protocol firewall, sealed envelopes |
 | `GUARDIAN_MESH_ARCHITECTURE_v2.md` | Design | Aspirational v2 — TEE abstraction (SEV-SNP/TDX/Nitro), ATTP compat, BFT consensus levels, Lean-4 formal verification, EU AI Act / CAC mapping |
 | `GUARDIAN_MESH_GAP_ANALYSIS.md` | Design | Honest gap analysis between the vision and the shipped code |

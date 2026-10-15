@@ -190,6 +190,62 @@ chaos cases (spec RG-7, RG-8).
 Sidecar form (DP-3), edge profile (DP-6), CLI (CC-4), MCP server
 surface (CC-5) — one profile per run, in that order.
 
+## Part D — Work orders from the v3.1 amendment (2026-10-15)
+
+Owner-directed the same day as v3.0: the product boundary charter
+(spec §0.5), Doctrine 0 (only desired paths exist), complete
+mediation (unguarded path = vulnerability), securing the guardian,
+and the product-completeness set. Spec §§11–13 + map §9A.
+
+### WO-30 (P1) Threat model of record
+Author `specs/THREAT_MODEL.md` (SG-1): named adversaries, assets,
+countermeasure mapping to spec requirement IDs. Maintained per
+release thereafter; docs-only, Wright lane acceptable.
+
+### WO-22 (P1) Secure by default
+Production posture MUST refuse the built-in default handshake
+secret (SG-4); add the posture doctor (config scan naming insecure
+settings). Behaviour-prove: default secret + production posture =
+refusal to start.
+
+### WO-20 (P1) Complete-mediation core
+Execution tokens bound to the sealed action hash + tool-side
+checker (CM-2); credential escrow mode (CM-1); resource-side
+identity lockdown hooks (CM-3).
+
+### WO-27 (P2) Mediation conformance
+Direct-access (skip-the-guardian) probe + non-catalogued
+invocation suite as gate MUSTs (CM-8); extends WO-17.
+
+### WO-21 (P2) Coverage + reconciliation
+Coverage inventory + drift alarms (CM-6), receipt reconciliation
+with bypass alarms (CM-5), coverage statement in certificates
+(CM-7). After WO-6 (certificate schema).
+
+### WO-23 (P2) External witnessing
+Periodic anchoring of the audit chain head to an operator-external
+witness, with verification (SG-5).
+
+### WO-24 (P2) Payload data protection
+Secret/PII detection in payloads, audit redaction by default,
+exfiltration block rules (PC-1).
+
+### WO-25 (P2) Tool/model supply chain
+Tool manifest pinning + change detection; MODEL_LOAD signed
+provenance verification (PC-2).
+
+### WO-26 (P2) Admin RBAC + agent registry
+Role model on the guardian's own surfaces (PC-6); agent
+enrollment/owner/risk-tier lifecycle (PC-5).
+
+### WO-28 (P3) Delegation attenuation
+Subset-only delegated capability tokens, chain recorded in the
+proof (PC-3).
+
+### WO-29 (P3) Compliance exports + alerting
+CP-catalogue auditor evidence packs, SIEM formats, OTel export
+(PC-7); anomaly alerting hooks (PC-10).
+
 ## Part B — Spec inputs from the release gate (GMSI)
 
 Guardian Mesh evolves with the gate. Each item below states what Guardian
@@ -363,3 +419,22 @@ the laptop checkouts are working copies, never the source of truth.
   added as Part C of this pack. Honesty labels in the spec mark
   SHIPPED / PARTIAL / TARGET; nothing [TARGET] may be described as
   existing capability.
+- 2026-10-15 — **Spec amended to v3.1** (owner-directed, same day):
+  §0.5 product boundary charter (what it is / does / stands /
+  cannot do — liability and honesty edges in normative text);
+  Doctrine 0, the closed-path rule ("package it such that things
+  can only flow in certain way… nothing that is not a desired path
+  can at all invoke anything"); §11 complete mediation — the owner
+  ruled an unguarded path is a vulnerability, so credential escrow,
+  execution tokens, receipt reconciliation, drift watch, and a
+  coverage statement inside every certificate; §12 securing the
+  guardian (threat model of record, anti-downgrade, secure-by-
+  default incl. refusing the default handshake secret, external
+  witnessing of the audit chain, compromise playbook, insider
+  separation, independent review, authenticated time, end of life);
+  §13 product completeness (payload DLP, tool/model supply chain,
+  delegation attenuation, policy authoring, agent registry, admin
+  RBAC, compliance exports, certificate transparency, incident kit,
+  alerting, air-gapped mode, integration wrappers, self-test kit,
+  appeal path, operational completeness). Work orders WO-20…WO-30
+  added as Part D of this pack.

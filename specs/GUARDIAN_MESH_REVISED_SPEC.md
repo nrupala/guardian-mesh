@@ -1,7 +1,9 @@
 # Guardian Mesh Revised Specification
 ## Deployable Security Tooling for Every Endpoint — Protocol, Boundaries, Evidence
 
-**Version:** 3.0
+**Version:** 3.1 (amended 2026-10-15 — §0.5 boundary charter, Doctrine 0
+closed-path, §11 complete mediation, §12 securing the guardian,
+§13 product completeness; owner-directed the same day)
 **Date:** 2026-10-15
 **Classification:** Public — Engineering Specification
 **Status:** Governing target specification. Supersedes the scope and
@@ -39,6 +41,54 @@ best-practice frameworks of the hyperscalers (§3).
   languages: Rust, C, C++). No interpreted language ships as a product
   component (owner's doctrine, 2026-10-14).
 
+## 0.5 Product boundary charter — what it is, what it does, where it stands, what it cannot do
+
+**What it is.** A pre-execution judgment layer. Guardian Mesh sits between
+a caller — agent, human, software, system — and the action that caller
+wants to take, decides against policy *before* the action runs, and seals
+that decision into proof anyone can verify.
+
+**What it does.** Evaluates the exact action presented, against the exact
+policy in force, returning ALLOW / BLOCK / THROTTLE / ESCALATE with
+machine-readable reasons; enforces the boundary rules (handshake, two
+independent confirmations, protocol firewall, rate budgets); issues
+sealed, offline-verifiable proofs and certificates bound to the exact
+item and test; keeps a tamper-evident audit trail of every judgment.
+
+**Where it stands.** At the action boundary only — protocol-level,
+model-neutral, cloud-neutral, local-first. It enforces the deploying
+owner's policy; it does not ship an opinion about what that policy
+should be.
+
+**What it cannot do — the hard edges (normative).**
+- It cannot guard what never calls it — **and an unguarded path is a
+  vulnerability, not a caveat**: §11 (complete mediation) exists to make
+  such paths impossible, bound, or caught, and §11.6 puts the coverage
+  statement inside the certificate.
+- It is not a sandbox: it judges actions, it does not contain their
+  execution. What an allowed action does after ALLOW is outside the verdict.
+- ALLOW is not "correct" or "true": it means the action conformed to
+  policy. Guardian Mesh cannot judge whether an agent's output is
+  accurate or wise — only whether the action was permitted.
+- Bad policy in, faithful verdicts out: a wrong or loose policy is
+  enforced exactly as written. Policy quality is the owner's
+  responsibility; the tool's duty is fidelity.
+- A proof proves a judgment, not the world: it proves this verdict was
+  issued for this exact sealed input under this policy version. Binding
+  execution to the envelope is enforced by §11.2 execution tokens.
+- It cannot see what it is not shown: opaque payloads are judged on
+  envelope and metadata, not contents (payload inspection, where
+  configured, is §13 PC-1).
+- It is not an antivirus or EDR, not a secrets vault, not an identity
+  provider (it consumes authorization; it does not issue identities),
+  and not a compliance certification: certificates are evidence, not
+  regulatory approval, and liability is bounded to the exact item tested.
+- Fail-closed means work stops: when it cannot verify, it denies. That
+  trade is deliberate and declared, never hidden.
+- Below the daemon is out of scope in the standard profile: a fully
+  compromised host OS is not claimed as survivable until the attestation
+  work (§6.8) ships. The claim is not made before the machinery exists.
+
 ## 1. Product definition — deployable security tooling
 
 Guardian Mesh is a **deployable security tool**: a guardian that stands in
@@ -74,6 +124,14 @@ by every kind of caller.
 
 ## 2. Doctrine
 
+0. **Only desired paths exist.** The system is packaged so that flows
+   can happen only in the prescribed ways. The complete set of legal
+   flows is enumerated (the flow catalogue, §11.7); the handshake is a
+   strict state machine admitting exactly one shape per step; internal
+   capabilities are invocable only by tokens the prescribed flow mints.
+   An undesired flow is not blocked — it is not routable, not
+   expressible, and cannot invoke anything. Denied-by-check is the
+   fallback; impossible-by-construction is the standard.
 1. **Judge before execution.** No guarded action executes on an ALLOW that
    has not been issued for that exact action.
 2. **Verifiability is the product.** Every verdict carries sealed proof a
@@ -396,4 +454,80 @@ stand. This revision adds:
   two ever conflict on wire behaviour, the conflict is filed as a gap and
   resolved explicitly, never by silent preference.
 
-*— End of Revised Specification v3.0 —*
+## 11. Complete mediation — no unguarded paths (CM)
+
+An unguarded path is a vulnerability (owner's ruling, 2026-10-15).
+The reference-monitor standard applies: complete mediation — every
+access, every time, no exceptions (Saltzer & Schroeder).
+
+| ID | Requirement | Status |
+|----|-------------|--------|
+| CM-1 | **Credential escrow.** In escrow mode the agent MUST NOT hold real credentials for guarded resources; the guardian holds them and injects them only at execution, after ALLOW. An agent with no keys has no unguarded path. | [TARGET] |
+| CM-2 | **Execution tokens.** Every ALLOW MUST issue a one-time, short-lived execution token bound to the sealed hash of the exact action. The tool-side checker MUST refuse execution without a token matching the action presented — describing one action and executing another MUST fail. | [TARGET] |
+| CM-3 | **Resource-side lockdown.** Guarded resources SHOULD accept work only from the guardian's identity (mTLS / network policy); direct caller→resource traffic is refused by the resource itself. | [TARGET] |
+| CM-4 | **Forced routing.** Server and endpoint profiles SHOULD capture the caller's traffic at the network layer (sidecar/proxy enforcement) so that omitting the guardian is not an available move. | [TARGET] |
+| CM-5 | **Receipt reconciliation.** Resources MUST emit signed execution receipts; the guardian MUST continuously reconcile receipts against verdicts. An execution with no matching verdict is a bypass alarm and an incident, never a silent log line. | [TARGET] |
+| CM-6 | **Coverage inventory + drift watch.** The deployment MUST enumerate everything a caller can reach and diff it against the guarded set; a newly reachable unguarded resource MUST raise an alert the same day. Canary actions — executable only via an unguarded path — SHOULD be planted and MUST alarm if fired. | [TARGET] |
+| CM-7 | **Coverage statement.** Every certificate MUST carry a coverage statement: the tools/endpoints mediated as of the last scan, with known-unguarded items **named**, never omitted (EV-3 addendum). Partial coverage may never read as total coverage. | [TARGET] |
+| CM-8 | **Flow catalogue.** The legal flows of a deployment MUST be enumerated end-to-end (Doctrine 0). The conformance suite MUST attempt non-catalogued invocations, including direct resource access that skips the guardian, and prove they cannot be expressed or routed; a successful skip is a gate-BLOCKING finding (extends RG-7/RG-8). | [TARGET] |
+
+## 12. Securing the guardian (SG)
+
+The guardian sees everything, holds the keys, and can mint ALLOWs; it
+is the highest-value target in any deployment and is specified as such.
+
+| ID | Requirement | Status |
+|----|-------------|--------|
+| SG-1 | **Threat model of record.** `specs/THREAT_MODEL.md` MUST exist in the repo and be maintained per release: named adversaries (malicious agent, compromised tenant, rogue administrator, supply-chain attacker, network attacker), assets, and the countermeasure for each threat, mapped to requirement IDs in this specification. | [TARGET] |
+| SG-2 | **Anti-downgrade.** Authorization negotiation MUST NOT fall back: policy pins a minimum assurance per boundary and no weaker method may substitute at runtime (§5 addendum). | [TARGET] |
+| SG-3 | **Minimal pre-handshake surface.** Whatever answers before the two confirmations MUST be near-zero: no information leakage, flood-resistant, and unable to reach internal capabilities (Doctrine 0). | [PARTIAL] — Health only today |
+| SG-4 | **Secure by default.** The daemon MUST refuse to start in production posture with default or placeholder secrets (the built-in default handshake secret is demo-only and MUST hard-fail outside demo posture). A posture check ("guardian doctor") MUST scan a deployment's configuration and name every insecure setting. | [TARGET] — default secret exists today; removal is WO-22 |
+| SG-5 | **History even the operator cannot rewrite.** The audit hash chain head MUST be periodically witnessed externally (anchored where the operator does not control), so history rewriting is detectable and proofs issued before a key compromise remain distinguishable from later ones. | [TARGET] |
+| SG-6 | **Compromise playbook.** Key-compromise detection (canary keys, issuance-anomaly alarms), containment within the DC-14 bound, and a committed customer-disclosure timeline MUST be documented and drilled. | [TARGET] |
+| SG-7 | **Insider separation.** No single administrator may both change policy and alter or suppress the audit trail; evidence handling is walled off from policy administration (extends BM-12). | [TARGET] |
+| SG-8 | **Independent eyes.** Before enterprise claims: an external cryptographic review of the handshake and proof protocol and third-party penetration tests, commissioned by AIMLDS on its own schedule. The product's SDLC is on record: signed commits, two-person review on the security core, SECURITY.md with a disclosure policy and patch commitments. | [TARGET] |
+| SG-9 | **Approval integrity.** Escalation approvals MUST resist rubber-stamping: full context presented, anomaly flags on approval patterns, cooling-off on high-risk actions (supports §6.10). | [TARGET] |
+| SG-10 | **Authenticated time.** Timestamps (PF-15/PF-16, certificate validity) MUST come from an authenticated time source; clock manipulation is treated as an attack and alarmed. | [TARGET] |
+| SG-11 | **Machine-checked handshake.** The handshake state machine (Doctrine 0) MUST be model-checked; "no other transition exists" is proven, not asserted. | [TARGET] |
+| SG-12 | **End of life.** Decommissioning MUST include verifiable destruction of keys and evidence, and tenant exit MUST produce proof of deletion. | [TARGET] |
+
+## 13. Product completeness (PC)
+
+Capabilities a complete product carries beyond the verdict path.
+(None of these change the doctrines; all inherit the honesty labels.)
+
+| ID | Requirement | Status |
+|----|-------------|--------|
+| PC-1 | **Payload data protection.** Configurable detection of secrets and personal data inside action payloads: block exfiltration patterns, redact payloads in the audit trail by default, retain payload contents only under explicit policy. | [TARGET] |
+| PC-2 | **Tool and model supply chain.** Tool manifests are pinned; a tool whose description, schema, or behaviour changes (rug-pull / poisoning) MUST be detected and re-judged before further use. MODEL_LOAD MUST verify signed provenance before ALLOW. | [TARGET] |
+| PC-3 | **Delegation attenuation.** When an agent delegates to another agent, authority MUST only shrink along the chain: delegated capability tokens carry a subset of the delegator's rights, and the chain is recorded in the proof. | [TARGET] |
+| PC-4 | **Policy authoring.** Policy bundles are authored in a declarative format with a validator, unit-test support, simulation against recorded traffic, and a starter template library for common agent types. (Governance of changes: §6.9.) | [TARGET] |
+| PC-5 | **Agent registry.** Guarded agents are enrolled with an owner, a risk tier, and a lifecycle (enroll → operate → decommission); the registry is the deployment's inventory of record and feeds CM-6. | [TARGET] |
+| PC-6 | **Admin-plane RBAC.** The guardian's own surfaces enforce roles (viewer / policy administrator / auditor / super administrator) with SSO federation (§5 methods); role assignment is a BM-6 crossing. | [TARGET] |
+| PC-7 | **Compliance exports.** The checkpoint catalogue (§3) is exportable as auditor-ready evidence packs mapped to the customer's framework (SOC 2, ISO 27001, NIST), plus SIEM-native formats and OpenTelemetry traces/metrics. | [TARGET] |
+| PC-8 | **Certificate transparency.** Issued certificates are appended to a public, append-only transparency log so issuance itself is auditable by anyone. | [TARGET] |
+| PC-9 | **Incident kit.** One-command incident response per deployment: freeze (global kill switch / quarantine), full session reconstruction and replay from the audit trail, and a forensic export sealed for hand-off. | [TARGET] |
+| PC-10 | **Alerting.** Verdict anomalies (BLOCK spikes, bypass alarms, escalation SLA risk) alert through webhooks and common incident channels; silence on a CM-5 alarm is impossible by configuration. | [TARGET] |
+| PC-11 | **Air-gapped mode.** A fully offline deployment profile: local verdicts, offline proof verification, and evidence export by removable media, for industrial and defence environments. | [TARGET] |
+| PC-12 | **Integration wrappers.** Drop-in wrappers for the common agent frameworks and a transparent proxy mode, so adoption never requires rewriting the guarded system. (Extends CC-5 / WO-18.) | [TARGET] |
+| PC-13 | **Customer self-test kit.** The conformance and red-team packs ship with the product so a customer can attack their own deployment and read the results against this specification. | [TARGET] |
+| PC-14 | **Appeal path.** A human behind a BLOCK gets a legible explanation and a request-override route into the escalation queue (§6.10) — never a dead end. | [TARGET] |
+| PC-15 | **Operational completeness.** Encrypted backup and restore of keys and audit (restore is a BM crossing), zero-downtime upgrade with graceful drain, and a published API stability and deprecation policy. | [TARGET] |
+
+## 9A. Implementation map — v3.1 addendum
+
+| Work order | Scope (spec sections) |
+|------------|-----------------------|
+| WO-20 | Complete-mediation core: execution tokens + tool-side checker + credential escrow mode (CM-1, CM-2, CM-3) |
+| WO-21 | Coverage inventory, drift alarms, receipt reconciliation, coverage statement in certificates (CM-5, CM-6, CM-7; after WO-6) |
+| WO-22 | Secure by default: production refusal of default secrets + posture doctor (SG-4) |
+| WO-23 | External witnessing of the audit chain head (SG-5) |
+| WO-24 | Payload data protection: secret/PII detection, redaction, exfiltration blocks (PC-1) |
+| WO-25 | Tool/model supply-chain verification: manifest pinning, change detection, MODEL_LOAD provenance (PC-2) |
+| WO-26 | Admin-plane RBAC + agent registry (PC-5, PC-6) |
+| WO-27 | Mediation conformance: direct-access probe + non-catalogued invocation suite as gate MUSTs (CM-8; extends WO-17) |
+| WO-28 | Delegation attenuation tokens (PC-3) |
+| WO-29 | Compliance exports + alerting hooks (PC-7, PC-10) |
+| WO-30 | Threat model of record, `specs/THREAT_MODEL.md`, maintained per release (SG-1) |
+
+*— End of Revised Specification v3.1 —*
