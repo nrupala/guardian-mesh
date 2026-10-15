@@ -131,6 +131,65 @@ TEE attestation (SEV-SNP/TDX/Nitro), enclave-to-enclave mTLS, remote
 attestation verification, multi-node consensus, external proof anchoring,
 Lean 4 formal verification, Rego/OPA policy engine.
 
+## Part C — Work orders from the Revised Specification v3.0 (2026-10-15)
+
+`specs/GUARDIAN_MESH_REVISED_SPEC.md` is the governing target spec
+(owner-approved 2026-10-15). It folds in the data-center readiness set,
+the hyperscaler-aligned checkpoint catalogue (CP-01…CP-24), the
+trust-boundary map with the two-confirmation rule, pluggable
+authorization (PGP/GPG included), and the release gate as criteria of
+record. Owner direction of 2026-10-15 supersedes the "designed, not
+yet scheduled" line above for the items below (clustered verdicts,
+attestation package, workload mTLS) — they are scheduled here.
+Work these after Part A, in this order, one per night unless the
+nightly run's judgment says otherwise:
+
+### WO-19 (P1) Firewall session eviction + measured Health counters
+Closes v0.4.0 gate findings F1/F2: call ProtocolFirewall::evict_session
+on bus session expiry (or TTL-sweep), and make Health report measured
+per-rule pass/fail counts instead of constants (spec EV-5 groundwork).
+
+### WO-10 (P1) Simulate call + structured verdict reasons
+Simulate/dry-run RPC running identical verdict logic, marked as
+simulation in its proof (spec DC-9); every denial carries structured
+rule IDs + "what would have to change" fields (DC-10).
+
+### WO-11 (P1) Policy governance
+Signed, versioned policy bundles; dual-control change path;
+publication endpoint so judged agents can read current policy
+(spec DC-18, DC-19, BM-6/BM-12).
+
+### WO-12 (P1) Revocation service
+Session/key/certificate revocation with a propagation bound
+(default ≤ 60 s), behaviour-proven by test (spec DC-14, EV-4).
+
+### WO-14 (P2) Boundary authenticators
+SPIFFE/mTLS workload identity (AZ-3) and PGP/GPG administrator
+authorization (AZ-4) plugged into the handshake as second-factor
+framework (spec BM-9, §5).
+
+### WO-13 (P2) Guardian attestation package
+Signed, reproducible release builds with provenance published per
+release (spec CP-19/CP-21, DC-17). Builds on the cargo-zigbuild
+cross-build route recorded in the ledger.
+
+### WO-15 (P2) Multi-tenancy
+Tenant-scoped policy, keys, rate budgets, audit partitions, with
+isolation behaviour-proven in tests (spec DC-15, DC-16, CP-14).
+
+### WO-16 (P2) Clustered verdicts + degraded modes
+Multi-node verdict issuance per architecture v2 consensus levels;
+declared fail-closed degraded modes (spec DC-1…DC-5).
+
+### WO-17 (P2) Conformance suite + chaos drills
+Spec-as-tests in CI: PF table, boundary rules, authorization
+combinations, tenant isolation, tamper behaviour; kill-mid-verdict
+chaos cases (spec RG-7, RG-8).
+
+### WO-18 (P3) Deployment matrix
+Sidecar form (DP-3), edge profile (DP-6), CLI (CC-4), MCP server
+surface (CC-5) — one profile per run, in that order.
+
 ## Part B — Spec inputs from the release gate (GMSI)
 
 Guardian Mesh evolves with the gate. Each item below states what Guardian
@@ -288,3 +347,19 @@ the laptop checkouts are working copies, never the source of truth.
   deploy binary is cross-built on Wright's machine with
   cargo-zigbuild (aarch64-unknown-linux-gnu; blake3 needs the zig cc)
   — the box never builds.
+- 2026-10-15 — **Revised Specification v3.0 adopted** (owner's order):
+  `specs/GUARDIAN_MESH_REVISED_SPEC.md` is the governing target spec,
+  folding in the data-center readiness set (owner-approved: "what you
+  said for muse datacenter is correct"), the hyperscaler-aligned
+  checkpoint catalogue (AWS Well-Architected SEC / Google Security
+  Foundations + BeyondCorp/BeyondProd / Microsoft Cloud Security
+  Benchmark / OCI Security Zones + Cloud Guard / Meta infra zero
+  trust, on a NIST CSF + 800-53 + 800-207 + CIS spine), the release
+  gate as criteria of record, and the owner's new doctrines: deploy
+  on every endpoint class (clouds, servers, laptops, phones, edge,
+  browsers), every boundary crossing needs authorization + handshake
+  with at least two independent confirmations, and authorization by
+  any lawful method — PGP/GPG included. New work orders WO-10…WO-19
+  added as Part C of this pack. Honesty labels in the spec mark
+  SHIPPED / PARTIAL / TARGET; nothing [TARGET] may be described as
+  existing capability.

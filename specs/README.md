@@ -5,6 +5,7 @@ Read these in order to understand *why* the system is shaped the way it is.
 
 | Document | Status | What it covers |
 |----------|--------|----------------|
+| `GUARDIAN_MESH_REVISED_SPEC.md` | **Governing target (v3.0)** | The consolidated specification: universal deployment, trust boundaries + the two-confirmation rule, pluggable authorization (PGP/GPG incl.), hyperscaler-aligned checkpoints (CP-01…CP-24), data-center readiness (DC), the release gate as criteria of record (RG), evidence & certificates (EV). Read this first for direction; honesty labels mark what is shipped vs target |
 | `GUARDIAN_MESH_FORMAL_SPEC.md` | Implemented | Formal spec of the **daemon** that actually exists today — the 5-enclave pipeline, handshake bus, protocol firewall, sealed envelopes |
 | `GUARDIAN_MESH_ARCHITECTURE_v2.md` | Design | Aspirational v2 — TEE abstraction (SEV-SNP/TDX/Nitro), ATTP compat, BFT consensus levels, Lean-4 formal verification, EU AI Act / CAC mapping |
 | `GUARDIAN_MESH_GAP_ANALYSIS.md` | Design | Honest gap analysis between the vision and the shipped code |
@@ -12,11 +13,13 @@ Read these in order to understand *why* the system is shaped the way it is.
 
 ## How to read this
 
-1. Start with `GUARDIAN_MESH_FORMAL_SPEC.md` to see **what is built and tested**.
-2. Read `GUARDIAN_MESH_GAP_ANALYSIS.md` to see **what is missing**.
-3. Read `GUARDIAN_MESH_ARCHITECTURE_v2.md` for the **target vision** only after
-   the first two — it describes hardware TEEs and formal proofs that are not
-   yet implemented.
+1. Start with `GUARDIAN_MESH_REVISED_SPEC.md` for the governing target —
+   what Guardian Mesh is becoming, with honesty labels on what already is.
+2. Read `GUARDIAN_MESH_FORMAL_SPEC.md` to see **what is built and tested**.
+3. Read `GUARDIAN_MESH_GAP_ANALYSIS.md` to see **what is missing**.
+4. Read `GUARDIAN_MESH_ARCHITECTURE_v2.md` for the earlier vision layer —
+   its consensus/TEE/formal-verification material is carried forward by
+   the revised specification (§6, §7.3), which supersedes its direction.
 
 > The implementation lives in `../guardian-meshd/`. If a spec and the code
 > disagree, **the code and its tests win**; file the discrepancy in the gap
