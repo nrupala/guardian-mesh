@@ -151,5 +151,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-14T22:39:06-06:00",
     "message": "docs(nightly): ledger \u2014 WO-1 shipped as v0.3.0, gate verdict, next WO-2"
+  },
+  {
+    "release": 22,
+    "tag": "release/v22",
+    "previous_tag": "release/v21",
+    "sha": "9961abb4193706ce9a12d657e172dffc6aeb9ece",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-14T22:47:53-06:00",
+    "message": "docs(nightly): development home moves to the laptop's OpenCode"
   }
 ]
