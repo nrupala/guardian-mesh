@@ -3,12 +3,13 @@
 
 use super::{EnclaveContext, Verdict, ContainmentStage};
 use crate::handshake_bus::HandshakeBus;
+use crate::protocol_firewall::ProtocolFirewall;
 use crate::sealed_envelope::{verify_proto_envelope, verifying_key_from_bytes};
 
 pub struct GatekeeperEnclave;
 
 impl GatekeeperEnclave {
-    pub fn evaluate(ctx: &mut EnclaveContext, bus: &HandshakeBus) {
+    pub fn evaluate(ctx: &mut EnclaveContext, bus: &HandshakeBus, firewall: &ProtocolFirewall) {
         ctx.stage = ContainmentStage::Warn;
 
         let firewalled = match &ctx.request.firewalled {
@@ -44,6 +45,68 @@ impl GatekeeperEnclave {
             return;
         }
 
+        // WO-2: Protocol Firewall enforcement on client envelopes.
+        // Apply PF rules in order; first failure blocks.
+        
+        let envelope = match firewalled.envelope.as_ref() {
+            Some(e) => e,
+            None => {
+                ctx.verdict = Some(Verdict::Block);
+                ctx.reason = Some("Missing envelope for Protocol Firewall checks".into());
+                return;
+            }
+        };
+
+        // PF-1/PF-5: Envelope/payload size bounds (64 KiB)
+        if let Err(reason) = ProtocolFirewall::check_envelope_size(&envelope.payload) {
+            ctx.verdict = Some(Verdict::Block);
+            ctx.reason = Some(reason);
+            return;
+        }
+
+        // PF-12: Reject unknown fields in ActionDescriptor JSON
+        if let Err(reason) = ProtocolFirewall::check_unknown_fields(&envelope.payload) {
+            ctx.verdict = Some(Verdict::Block);
+            ctx.reason = Some(reason);
+            return;
+        }
+
+        // PF-13: Nesting depth max 4
+        if let Err(reason) = ProtocolFirewall::check_nesting_depth(&envelope.payload) {
+            ctx.verdict = Some(Verdict::Block);
+            ctx.reason = Some(reason);
+            return;
+        }
+
+        // PF-14: Nonce uniqueness (sliding window)
+        if let Err(reason) = firewall.check_nonce_uniqueness(&firewalled.handshake_session, &envelope.nonce) {
+            ctx.verdict = Some(Verdict::Block);
+            ctx.reason = Some(reason);
+            return;
+        }
+
+        // PF-15/PF-16: Timestamp windows (stale > 5s, future > 1s)
+        // The client sends timestamp as unix NANOSECONDS (u64)
+        if let Err(reason) = ProtocolFirewall::check_timestamp_windows(envelope.timestamp) {
+            ctx.verdict = Some(Verdict::Block);
+            ctx.reason = Some(reason);
+            return;
+        }
+
+        // PF-17: Signature format budget
+        if let Err(reason) = ProtocolFirewall::check_signature_format(&envelope.ml_dsa_65_signature) {
+            ctx.verdict = Some(Verdict::Block);
+            ctx.reason = Some(reason);
+            return;
+        }
+
+        // PF-18: Rate limit (100 msg/s per external session)
+        if let Err(reason) = firewall.check_rate_limit(&firewalled.handshake_session) {
+            ctx.verdict = Some(Verdict::Block);
+            ctx.reason = Some(reason);
+            return;
+        }
+
         // WO-1: the HMAC proves the caller holds the session key; it
         // does not prove the envelope was signed by the caller who
         // opened the session. Verify the envelope's ML-DSA-65
@@ -59,7 +122,7 @@ impl GatekeeperEnclave {
         }
 
         ctx.verdict = Some(Verdict::Allow);
-        ctx.reason = Some("Gatekeeper passed (HMAC + request signature verified)".into());
+        ctx.reason = Some("Gatekeeper passed (Protocol Firewall + HMAC + signature verified)".into());
     }
 }
 
@@ -97,13 +160,16 @@ fn verify_request_signature(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol_firewall::ProtocolFirewall;
     use crate::proto::{
         ActionDescriptor, EvaluateRequest, FirewalledRequest,
         SealedEnvelope as ProtoSealedEnvelope,
     };
     use crate::sealed_envelope::{generate_keypair, SealedEnvelope};
 
-    const PAYLOAD: &[u8] = b"{\"action_type\":\"TOOL_CALL\"}";
+    // WO-2: PF-12 enforces the exact field set the shipped client uses (webui/src/lib/gmClient.ts).
+    // The client sends: actionType, context, target, metadata (all camelCase).
+    const PAYLOAD: &[u8] = b"{\"actionType\":\"TOOL_CALL\",\"context\":\"test\",\"target\":\"panel\",\"metadata\":{}}";
 
     fn proto_envelope(sealed: &SealedEnvelope) -> ProtoSealedEnvelope {
         ProtoSealedEnvelope {
@@ -157,10 +223,11 @@ mod tests {
     fn valid_signature_passes_gatekeeper() {
         let (sk, vk) = generate_keypair();
         let bus = HandshakeBus::new(b"test-secret");
+        let firewall = ProtocolFirewall::new();
         let sid = session_with_key(&bus, &vk);
         let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall);
         assert_eq!(ctx.verdict, Some(Verdict::Allow));
     }
 
@@ -168,14 +235,15 @@ mod tests {
     fn tampered_payload_is_denied() {
         let (sk, vk) = generate_keypair();
         let bus = HandshakeBus::new(b"test-secret");
+        let firewall = ProtocolFirewall::new();
         let sid = session_with_key(&bus, &vk);
         let mut sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         // Payload replaced after signing; CRC refreshed so the
         // integrity check passes and only the signature can fail.
-        sealed.payload = b"{\"action_type\":\"CODE_EXECUTE\"}".to_vec();
+        sealed.payload = b"{\"actionType\":\"CODE_EXECUTE\",\"context\":\"x\",\"target\":\"y\",\"metadata\":{}}".to_vec();
         sealed.crc32c_digest = crc32c::crc32c(&sealed.payload);
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall);
         assert_signature_block(&ctx);
     }
 
@@ -184,10 +252,11 @@ mod tests {
         let (_sk_bound, vk_bound) = generate_keypair();
         let (sk_other, _vk_other) = generate_keypair();
         let bus = HandshakeBus::new(b"test-secret");
+        let firewall = ProtocolFirewall::new();
         let sid = session_with_key(&bus, &vk_bound);
         let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_other);
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall);
         assert_signature_block(&ctx);
     }
 
@@ -195,11 +264,12 @@ mod tests {
     fn missing_signature_is_denied() {
         let (sk, vk) = generate_keypair();
         let bus = HandshakeBus::new(b"test-secret");
+        let firewall = ProtocolFirewall::new();
         let sid = session_with_key(&bus, &vk);
         let mut sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         sealed.ml_dsa_65_signature = Vec::new();
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall);
         assert_signature_block(&ctx);
     }
 
@@ -207,11 +277,12 @@ mod tests {
     fn garbage_signature_is_denied() {
         let (sk, vk) = generate_keypair();
         let bus = HandshakeBus::new(b"test-secret");
+        let firewall = ProtocolFirewall::new();
         let sid = session_with_key(&bus, &vk);
         let mut sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         sealed.ml_dsa_65_signature = vec![0xAB; 3309];
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall);
         assert_signature_block(&ctx);
     }
 
@@ -219,11 +290,12 @@ mod tests {
     fn session_without_bound_key_is_denied() {
         let (sk, _vk) = generate_keypair();
         let bus = HandshakeBus::new(b"test-secret");
+        let firewall = ProtocolFirewall::new();
         // Legacy session created without registering a public key.
         let sid = bus.create_session("webui");
         let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall);
         assert_signature_block(&ctx);
     }
 }

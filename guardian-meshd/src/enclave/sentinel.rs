@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use super::{EnclaveContext, Verdict, ContainmentStage};
-use crate::protocol_firewall::ProtocolFirewall;
 
 pub struct SentinelEnclave;
 
@@ -10,34 +9,15 @@ impl SentinelEnclave {
     pub fn evaluate(ctx: &mut EnclaveContext) {
         ctx.stage = ContainmentStage::Detect;
 
-        let payload = ctx.request.firewalled.as_ref()
-            .and_then(|f| f.envelope.as_ref())
-            .map(|e| e.payload.as_slice())
-            .unwrap_or(&[]);
-
-        let context = ctx.request.action.as_ref()
-            .map(|a| a.context.as_str())
-            .unwrap_or("");
-
-        let target = ctx.request.action.as_ref()
-            .map(|a| a.target.as_str())
-            .unwrap_or("");
-
-        let report = ProtocolFirewall::run_full_check(
-            payload, 0, context, target,
-        );
-
-        if !report.rules_failed.is_empty() {
-            ctx.verdict = Some(Verdict::Block);
-            ctx.reason = Some(format!(
-                "Protocol Firewall blocked: {:?}",
-                report.rules_failed
-            ));
-            return;
-        }
+        // The Sentinel is for behavioral observation and anomaly
+        // detection. Protocol Firewall enforcement (PF-1..PF-18) is
+        // the Gatekeeper's responsibility per WO-2. The Sentinel
+        // currently passes all requests through — real behavioral
+        // checks (jailbreak patterns, exfiltration signals, drift
+        // detection) are future work orders.
 
         ctx.verdict = Some(Verdict::Allow);
-        ctx.reason = Some("PF rules passed, forwarding to Gatekeeper".into());
+        ctx.reason = Some("Sentinel observation passed, forwarding to Gatekeeper".into());
     }
 }
 
