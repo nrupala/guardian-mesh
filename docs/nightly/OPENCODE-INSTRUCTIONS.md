@@ -194,3 +194,14 @@ BLOCK).
 - 2026-10-14 — pack created from repo inventory (zero open issues/PRs;
   pending work lives in `specs/` + verified implementation gaps) and the
   release gate's founding GMSI set. WO-1 dispatched first.
+- 2026-10-14 — **WO-1 shipped as v0.3.0** (PR #26, merged a6b7d195):
+  Handshake binds the caller's ML-DSA-65 public key; Evaluate verifies
+  the envelope signature against it, fail-closed. Wright-verified
+  independently: 47 cargo tests green on a fresh checkout; wire-level
+  proof 9/9 on the branch daemon and again 9/9 against the deployed
+  daemon on the Aetheris box (valid → ALLOW + VALID proof; garbage /
+  wrong-key / tampered → permission_denied; keyless handshake →
+  invalid_argument). Release gate: PASS WITH FINDINGS (scanner "tests"
+  failure was a false lead — inline Rust tests; GMSI filed to teach
+  the scanner `#[test]` detection; optional: `.gitignore` name `.env`).
+  Deployed to guardian.aimlds.org the same night. Next: WO-2.
