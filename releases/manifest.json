@@ -160,5 +160,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-14T22:47:53-06:00",
     "message": "docs(nightly): development home moves to the laptop's OpenCode"
+  },
+  {
+    "release": 23,
+    "tag": "release/v23",
+    "previous_tag": "release/v22",
+    "sha": "b0d881df736b5130f24845a439a7637ff9da9bf8",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-14T23:02:31-06:00",
+    "message": "docs(nightly): ledger \u2014 laptop lane at full strength"
   }
 ]
