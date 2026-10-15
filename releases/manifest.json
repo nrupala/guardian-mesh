@@ -133,5 +133,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-14T22:20:15-06:00",
     "message": "docs: nightly build instruction pack \u2014 OpenCode work orders + release-gate spec inputs"
+  },
+  {
+    "release": 20,
+    "tag": "release/v20",
+    "previous_tag": "release/v19",
+    "sha": "a6b7d19510917e162452eea6ddda7800351c41f8",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-14T22:35:54-06:00",
+    "message": "feat(daemon): verify the request signature on Evaluate \u2014 WO-1 (v0.3.0)"
   }
 ]
