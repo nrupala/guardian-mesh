@@ -142,5 +142,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-14T22:35:54-06:00",
     "message": "feat(daemon): verify the request signature on Evaluate \u2014 WO-1 (v0.3.0)"
+  },
+  {
+    "release": 21,
+    "tag": "release/v21",
+    "previous_tag": "release/v20",
+    "sha": "adbc1844191010ec0840dc0624833a594748aede",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-14T22:39:06-06:00",
+    "message": "docs(nightly): ledger \u2014 WO-1 shipped as v0.3.0, gate verdict, next WO-2"
   }
 ]
