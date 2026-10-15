@@ -248,3 +248,43 @@ the laptop checkouts are working copies, never the source of truth.
   `D:\guardian-mesh-work\probe` ran `cargo test` on the laptop —
   47/47 passed. The earlier "cargo shim does not execute" note is
   superseded; laptop-side builds and tests are proven.
+- 2026-10-15 — **WO-2 shipped as v0.4.0** (PR #31, merged 2a98e7be):
+  the Protocol Firewall rule table is enforced on Evaluate — PF-1/5
+  size, PF-12 unknown fields, PF-13 nesting ≤4, PF-14 nonce window
+  (10,000/session), PF-15/16 timestamp windows (stale >5 s, future
+  >1 s, nanosecond field), PF-17 signature format [2420, 3500],
+  PF-18 rate limit 100 msg/s/session (E_RATE_LIMITED). PF-2..PF-11
+  documented not-applicable at the gRPC surface in the PR. Built by
+  the laptop lane (OpenCode, Claude lane) in D:\guardian-mesh-work\wo2;
+  Wright-verified independently: cargo 58/58 on a fresh checkout;
+  wire-level E2E 16/16 against the release build and again 16/16
+  against the deployed daemon on the box (incl. a 115-request burst:
+  exactly 100 allowed, 15 × PF-18). Release gate: PASS WITH FINDINGS
+  (F1 firewall session state never evicted — evict_session has no
+  callers; F2 Health PF counters are constants, not measured; F3–F5
+  informational — see PR #31). Deployed to guardian.aimlds.org the
+  same night (binary sha256 4254b5eb…, rollback kept as
+  guardian-meshd.bak-v030 on the box). GMSI-6 (scanner Rust
+  inline-test detection, second false BLOCKED) and GMSI-7 (bind
+  measured per-rule firewall outcomes into WO-6 evidence packs)
+  filed from this run. Next: WO-3.
+- 2026-10-15 — **Laptop lane operating recipe** (learned on the WO-2
+  run; reuse it): (1) launch OpenCode detached via Win32_Process.Create
+  — children of the SSH session die with it; (2) never pass a long
+  prompt as a CLI argument (the .cmd shim truncates it) — put the task
+  file INSIDE the clone (headless runs auto-reject reads outside the
+  project dir) and pass one short instruction naming it; (3) stdin must
+  be redirected from an empty file (an open SSH stdin makes
+  `opencode run` die with EUNKNOWN/read); (4) working model lane:
+  `anthropic/claude-sonnet-4-5` with the key read from the owner's
+  auth.json by the runner script itself and injected as an env var
+  (never copied, never logged); Zen (`opencode/…`) Claude models
+  currently answer "Model access is disabled" and the laptop's own
+  opencode.db is ~7 GB — run the lane with muse's own data home, not
+  the owner's; (5) git push from the laptop under `muse` is blocked
+  (Git Credential Manager needs an interactive prompt) — the lane
+  commits locally and Wright carries the exact commit to GitHub by
+  git bundle + API push, asserting the tree hash matches; (6) the
+  deploy binary is cross-built on Wright's machine with
+  cargo-zigbuild (aarch64-unknown-linux-gnu; blake3 needs the zig cc)
+  — the box never builds.
