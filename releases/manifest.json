@@ -205,5 +205,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-15T00:26:05-06:00",
     "message": "docs(specs): adopt Revised Specification v3.0 as the governing target spec (#33)"
+  },
+  {
+    "release": 28,
+    "tag": "release/v28",
+    "previous_tag": "release/v27",
+    "sha": "d72096ea3fc34965614037122df229bd9fcd26f5",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-15T15:21:22-06:00",
+    "message": "docs(specs): amend Revised Specification to v3.1 \u2014 charter, closed-path doctrine, complete mediation, securing the guardian (#34)"
   }
 ]
