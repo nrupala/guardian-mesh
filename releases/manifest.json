@@ -187,5 +187,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-15T00:04:17-06:00",
     "message": "feat(daemon): enforce the Protocol Firewall rule table on Evaluate (WO-2) (#31)"
+  },
+  {
+    "release": 26,
+    "tag": "release/v26",
+    "previous_tag": "release/v25",
+    "sha": "2bfb18e4bacd0bdc363117dc10384771ed7955d9",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-15T00:21:49-06:00",
+    "message": "docs(nightly): ledger \u2014 WO-2 shipped as v0.4.0 + laptop lane recipe"
   }
 ]
