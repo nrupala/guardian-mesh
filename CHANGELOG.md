@@ -108,6 +108,19 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   site copy and machine-readable files (llms.txt, descriptor JSON)
   describe the four-call interface and the live deployment.
 - Version bumped `0.2.1` → `0.2.2` (`VERSION`, `guardian-meshd/Cargo.toml`).
+- The daemon now verifies the request signature on Evaluate (WO-1).
+  Handshake takes the caller's ML-DSA-65 verifying key
+  (`source_public_key`, 1952 bytes — a handshake without it is
+  refused) and binds it to the session; the Gatekeeper checks every
+  envelope's signature against the bound key after the session HMAC
+  check. A missing, malformed, or non-verifying signature is denied
+  with a reason naming the signature failure, and the evaluation
+  never reaches the Arbiter. This is a breaking change for pre-0.3.0
+  clients, which sent no key: they must register one at Handshake.
+  The WebUI client does. Test suite: 47 tests (was 32), including
+  service-level tests that valid signatures evaluate and tampered,
+  wrong-key, and unsigned requests are permission-denied.
+- Version bumped `0.2.2` → `0.3.0` (`VERSION`, `guardian-meshd/Cargo.toml`).
 
 ### Notes
 - No deploy target found (no wrangler/Pages/deploy script; Android APK is a

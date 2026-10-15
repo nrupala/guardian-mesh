@@ -96,6 +96,11 @@ message HealthRequest {}
 
 message HandshakeRequest {
   string source_enclave = 1; // Caller identifier, e.g. "webui"
+  // The caller's ML-DSA-65 verifying key (1952 bytes), bound to the
+  // session this handshake opens. Every Evaluate envelope on the
+  // session must carry a signature that verifies against this key;
+  // anything else is denied. (Field 2 is unused.)
+  bytes source_public_key = 3;
 }
 
 message HandshakeResponse {
