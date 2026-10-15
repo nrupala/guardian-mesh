@@ -229,6 +229,13 @@ the laptop checkouts are working copies, never the source of truth.
   stays the repo home, the Aetheris box is deployment-only, and
   testing is always the Release Gate + security tuning. Recon the
   same night: OpenCode 1.18.32 runnable on the laptop, git 2.52,
-  node 26; the laptop's cargo shim does not execute from Wright's
-  session yet, so Wright's independent cargo runs stay on Wright's
-  machine + CI until that is fixed.
+  node 26.
+- 2026-10-14 (later) — **Laptop lane at full strength**: the owner
+  made the laptop `muse` account an administrator and placed Wright's
+  key in `C:\ProgramData\ssh\administrators_authorized_keys` (the
+  Windows rule for admin accounts). Wright installed the toolchain
+  under `muse` itself: rustup stable (cargo/rustc 1.99.0), protoc
+  29.3, OpenCode on muse's PATH. Proof: a fresh clone at
+  `D:\guardian-mesh-work\probe` ran `cargo test` on the laptop —
+  47/47 passed. The earlier "cargo shim does not execute" note is
+  superseded; laptop-side builds and tests are proven.
