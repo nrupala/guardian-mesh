@@ -169,5 +169,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-14T23:02:31-06:00",
     "message": "docs(nightly): ledger \u2014 laptop lane at full strength"
+  },
+  {
+    "release": 24,
+    "tag": "release/v24",
+    "previous_tag": "release/v23",
+    "sha": "d290774ecca2e66c2ba0c6107953eec703ab65d8",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-14T23:03:59-06:00",
+    "message": "docs(nightly): guardrail \u2014 system-level languages only"
   }
 ]
