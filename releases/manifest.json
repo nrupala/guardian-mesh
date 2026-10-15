@@ -196,5 +196,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-15T00:21:49-06:00",
     "message": "docs(nightly): ledger \u2014 WO-2 shipped as v0.4.0 + laptop lane recipe"
+  },
+  {
+    "release": 27,
+    "tag": "release/v27",
+    "previous_tag": "release/v26",
+    "sha": "deb24b54d6c220ae0a2406bc229a22ac06a73926",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-15T00:26:05-06:00",
+    "message": "docs(specs): adopt Revised Specification v3.0 as the governing target spec (#33)"
   }
 ]
