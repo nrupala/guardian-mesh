@@ -161,24 +161,41 @@ BLOCK).
   repo-side contribution is WO-8's fuzz targets, which the Arch isolation
   bench will consume.
 
-## Engine routing
+## Development home and engine routing
 
-- **OpenCode** — primary builder for work orders, one WO per branch/PR.
-  Its output is never trusted on its own tests (owner's standing rule).
-- **DeepSeek** — bulk drafting, docs, first-pass code on dev material
-  only; never production data; Wright verifies before anything ships.
-- **Claude / OpenAI lanes** — independent review of crypto and protocol
-  changes (WO-1, WO-2, WO-3, WO-6) and second-lane verification.
+Owner direction (2026-10-14, replacing the original routing): **development
+happens on the owner's laptop, driven by OpenCode there — never on the
+Aetheris box.** The box is a deployment target only (the daemon and live
+panel services); no building and no OpenCode runs on it. **GitHub is the
+repo's home of record** — every lane works on branches and PRs here, and
+the laptop checkouts are working copies, never the source of truth.
+
+- **OpenCode on the laptop** — the primary builder, one work order per
+  branch/PR. It works in a fresh clone per work order
+  (`D:\guardian-mesh-work\<work-order>`, cloned from GitHub main). The
+  pre-existing `D:\guardian-mesh` checkout is stale and carries the
+  owner's own local changes — never build in it, never clean it.
+  OpenCode's output is never trusted on its own tests (owner's standing
+  rule: "sometimes it screws up").
+- **Model lanes OpenCode may drive, all owner-authorized**: DeepSeek AI,
+  OpenAI, Claude, and OpenCode Zen. DeepSeek stays dev-material-only
+  (specs and code, never production data or real credentials).
 - **Wright** — direction, the whole-app read before changes, independent
-  re-testing from the pushed branch, the release-gate run for each
-  release, merge (green only), deploy, and this file's nightly refresh.
+  re-testing from the pushed branch (fresh checkout; full suites),
+  the release-gate run for each release, merge (green only), deploy to
+  the box, and this file's nightly refresh.
+- **Testing is always the Release Gate** — machine pass + deep review +
+  behaviour proof, verdict recorded in the release record — plus the
+  gate's security tuning for the change's families. No gate verdict, no
+  merge, no deploy.
 
 ## The nightly loop
 
 1. Re-read this file, open issues/PRs, and the release gate's latest
    GMSI filings; refresh this file by PR when new inputs arrived.
-2. Take the highest-priority unfinished work order; one lane builds it
-   on a branch as a draft PR.
+2. Take the highest-priority unfinished work order; the laptop's
+   OpenCode builds it in a fresh per-work-order clone, on a branch, as
+   a draft PR.
 3. Wright verifies independently: fresh checkout of the pushed branch,
    full test suites (`cargo test`, webui build + lint), and behaviour
    proof on the live surface where the change touches one.
@@ -205,3 +222,13 @@ BLOCK).
   failure was a false lead — inline Rust tests; GMSI filed to teach
   the scanner `#[test]` detection; optional: `.gitignore` name `.env`).
   Deployed to guardian.aimlds.org the same night. Next: WO-2.
+- 2026-10-14 — **Development home moved to the laptop** (owner's order):
+  OpenCode on the laptop builds (fresh clone per work order;
+  `D:\guardian-mesh` is stale + owner-dirty, hands off), authorized
+  model lanes are DeepSeek / OpenAI / Claude / OpenCode Zen, GitHub
+  stays the repo home, the Aetheris box is deployment-only, and
+  testing is always the Release Gate + security tuning. Recon the
+  same night: OpenCode 1.18.32 runnable on the laptop, git 2.52,
+  node 26; the laptop's cargo shim does not execute from Wright's
+  session yet, so Wright's independent cargo runs stay on Wright's
+  machine + CI until that is fixed.
