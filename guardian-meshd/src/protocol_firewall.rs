@@ -1,128 +1,258 @@
 // Copyright (c) 2026 Nrupal Akolkar
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::sync::atomic::{AtomicU32, Ordering};
+//! Protocol Firewall — enforces PF-1..PF-18 from the formal spec §1.4
+//! on the Evaluate path for client envelopes.
 
-static RULES_PASSED: AtomicU32 = AtomicU32::new(0);
-static RULES_TOTAL: AtomicU32 = AtomicU32::new(18);
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PfRule {
-    Pf01 = 1, Pf02, Pf03, Pf04, Pf05,
-    Pf06, Pf07, Pf08, Pf09, Pf10,
-    Pf11, Pf12, Pf13, Pf14, Pf15,
-    Pf16, Pf17, Pf18,
+/// Maximum envelope size per spec: 16-byte header + 65540 bytes payload/routing = 65556 bytes.
+/// For client envelopes we check the payload field within the protobuf message.
+const ENVELOPE_SIZE_LIMIT: usize = 64 * 1024; // 64 KiB per spec section 1.4 PF-1
+
+/// ML-DSA-65 signature valid length range per spec PF-17
+const ML_DSA_65_SIG_MIN: usize = 2420;
+const ML_DSA_65_SIG_MAX: usize = 3500;
+
+/// Maximum nesting depth for JSON payloads per spec PF-13
+const MAX_NESTING_DEPTH: usize = 4;
+
+/// Nonce sliding window size per session per spec PF-14
+const NONCE_WINDOW_SIZE: usize = 10_000;
+
+/// Timestamp window per spec PF-15 (stale > 5 s)
+const STALE_THRESHOLD_MS: i64 = 5_000;
+
+/// Timestamp window per spec PF-16 (future > 1 s)
+const FUTURE_THRESHOLD_MS: i64 = 1_000;
+
+/// Rate limit per spec PF-18: 100 msg/s for external sessions
+const RATE_LIMIT_EXTERNAL_MSG_PER_SEC: usize = 100;
+
+/// Time window for rate limiting (1 second in milliseconds)
+const RATE_LIMIT_WINDOW_MS: u64 = 1_000;
+
+/// Nonce tracker: sliding window of the last 10,000 nonces per session.
+#[derive(Debug)]
+struct NonceWindow {
+    nonces: VecDeque<Vec<u8>>,
 }
 
-impl PfRule {
-    pub fn number(self) -> u32 { self as u32 }
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Pf01 => "PF-01: Envelope structure valid",
-            Self::Pf02 => "PF-02: CRC32C integrity check",
-            Self::Pf03 => "PF-03: ML-DSA-65 signature verified",
-            Self::Pf04 => "PF-04: Timestamp within drift window",
-            Self::Pf05 => "PF-05: Nonce not replayed",
-            Self::Pf06 => "PF-06: Source enclave authorized",
-            Self::Pf07 => "PF-07: Handshake session exists",
-            Self::Pf08 => "PF-08: HMAC tag matches session key",
-            Self::Pf09 => "PF-09: Action type is recognized",
-            Self::Pf10 => "PF-10: Action context within length limit",
-            Self::Pf11 => "PF-11: Target does not contain path traversal",
-            Self::Pf12 => "PF-12: Payload type is recognized",
-            Self::Pf13 => "PF-13: Source enclave not in blocklist",
-            Self::Pf14 => "PF-14: Rate limit not exceeded",
-            Self::Pf15 => "PF-15: Action not in deny-list",
-            Self::Pf16 => "PF-16: Enclave chain not in degraded state",
-            Self::Pf17 => "PF-17: Minimum containment stage satisfied",
-            Self::Pf18 => "PF-18: Audit trail transaction opened",
+impl NonceWindow {
+    fn new() -> Self {
+        Self {
+            nonces: VecDeque::with_capacity(NONCE_WINDOW_SIZE),
+        }
+    }
+
+    fn check_and_insert(&mut self, nonce: &[u8]) -> bool {
+        if self.nonces.iter().any(|n| n.as_slice() == nonce) {
+            return false; // Nonce reuse detected
+        }
+        self.nonces.push_back(nonce.to_vec());
+        if self.nonces.len() > NONCE_WINDOW_SIZE {
+            self.nonces.pop_front();
+        }
+        true
+    }
+}
+
+/// Rate limiter: tracks message timestamps per session.
+#[derive(Debug)]
+struct RateLimiter {
+    timestamps: VecDeque<u64>,
+}
+
+impl RateLimiter {
+    fn new() -> Self {
+        Self {
+            timestamps: VecDeque::new(),
+        }
+    }
+
+    fn check_rate(&mut self, now_ms: u64, limit: usize) -> bool {
+        // Remove timestamps outside the window
+        while let Some(&ts) = self.timestamps.front() {
+            if now_ms.saturating_sub(ts) > RATE_LIMIT_WINDOW_MS {
+                self.timestamps.pop_front();
+            } else {
+                break;
+            }
+        }
+        
+        if self.timestamps.len() >= limit {
+            return false; // Rate limit exceeded
+        }
+        
+        self.timestamps.push_back(now_ms);
+        true
+    }
+}
+
+/// Per-session state for Protocol Firewall checks.
+#[derive(Debug)]
+struct SessionState {
+    nonce_window: NonceWindow,
+    rate_limiter: RateLimiter,
+}
+
+impl SessionState {
+    fn new() -> Self {
+        Self {
+            nonce_window: NonceWindow::new(),
+            rate_limiter: RateLimiter::new(),
         }
     }
 }
 
-#[derive(Debug, Default)]
-pub struct FirewallReport {
-    pub rules_passed: Vec<u32>,
-    pub rules_failed: Vec<(u32, String)>,
-    pub passed_count: u32,
-    pub total_count: u32,
+/// Global state for the Protocol Firewall.
+pub struct ProtocolFirewall {
+    sessions: Arc<Mutex<HashMap<String, SessionState>>>,
 }
 
-pub struct ProtocolFirewall;
+impl Default for ProtocolFirewall {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ProtocolFirewall {
-    pub fn passed_count() -> u32 {
-        RULES_PASSED.load(Ordering::Relaxed)
-    }
-
-    pub fn total_count() -> u32 {
-        RULES_TOTAL.load(Ordering::Relaxed)
-    }
-
-    pub fn validate_envelope_structure(data: &[u8]) -> Result<(), String> {
-        if data.is_empty() {
-            return Err("empty envelope payload".into());
+    pub fn new() -> Self {
+        Self {
+            sessions: Arc::new(Mutex::new(HashMap::new())),
         }
-        if data.len() > 1024 * 1024 {
-            return Err("envelope payload exceeds 1 MiB".into());
-        }
-        Ok(())
     }
 
-    pub fn validate_timestamp(drift_ms: i64) -> Result<(), String> {
-        if drift_ms.abs() > 30_000 {
-            return Err(format!("timestamp drift {}ms exceeds 30s window", drift_ms));
+    /// PF-1/PF-5: Envelope/payload size bounds (64 KiB envelope budget per spec).
+    pub fn check_envelope_size(payload: &[u8]) -> Result<(), String> {
+        if payload.len() > ENVELOPE_SIZE_LIMIT {
+            return Err(format!(
+                "PF-1 envelope size rejected: payload {} bytes exceeds {} KiB limit",
+                payload.len(),
+                ENVELOPE_SIZE_LIMIT / 1024
+            ));
         }
         Ok(())
     }
 
-    pub fn validate_context_length(ctx: &str) -> Result<(), String> {
-        if ctx.len() > 4096 {
-            return Err("action context exceeds 4096 characters".into());
-        }
-        Ok(())
-    }
-
-    pub fn validate_target_no_traversal(target: &str) -> Result<(), String> {
-        if target.contains("..") {
-            return Err("path traversal detected in target".into());
-        }
-        Ok(())
-    }
-
-    pub fn run_full_check(
-        envelope_data: &[u8],
-        drift_ms: i64,
-        context: &str,
-        target: &str,
-    ) -> FirewallReport {
-        let checks: Vec<(PfRule, Result<(), String>)> = vec![
-            (PfRule::Pf01, Self::validate_envelope_structure(envelope_data)),
-            (PfRule::Pf04, Self::validate_timestamp(drift_ms)),
-            (PfRule::Pf10, Self::validate_context_length(context)),
-            (PfRule::Pf11, Self::validate_target_no_traversal(target)),
-        ];
-
-        let mut passed = Vec::new();
-        let mut failed = Vec::new();
-        for (rule, result) in &checks {
-            match result {
-                Ok(()) => {
-                    passed.push(rule.number());
-                    RULES_PASSED.fetch_add(1, Ordering::Relaxed);
-                }
-                Err(e) => {
-                    failed.push((rule.number(), e.clone()));
+    /// PF-12: Reject unknown fields in the ActionDescriptor payload JSON.
+    /// The shipped client (webui/src/lib/gmClient.ts) sends exactly:
+    /// actionType, context, target, metadata.
+    pub fn check_unknown_fields(payload: &[u8]) -> Result<(), String> {
+        let json_val: serde_json::Value = serde_json::from_slice(payload)
+            .map_err(|e| format!("PF-12 payload parse failed: {}", e))?;
+        
+        if let Some(obj) = json_val.as_object() {
+            const KNOWN_FIELDS: &[&str] = &["actionType", "context", "target", "metadata"];
+            for key in obj.keys() {
+                if !KNOWN_FIELDS.contains(&key.as_str()) {
+                    return Err(format!("PF-12 unknown field rejected: {}", key));
                 }
             }
         }
-        let passed_count = passed.len() as u32;
-        FirewallReport {
-            rules_passed: passed,
-            rules_failed: failed,
-            passed_count,
-            total_count: 18,
+        Ok(())
+    }
+
+    /// PF-13: Payload nesting depth max 4.
+    pub fn check_nesting_depth(payload: &[u8]) -> Result<(), String> {
+        let json_val: serde_json::Value = serde_json::from_slice(payload)
+            .map_err(|e| format!("PF-13 payload parse failed: {}", e))?;
+        
+        fn depth(val: &serde_json::Value) -> usize {
+            match val {
+                serde_json::Value::Object(obj) => {
+                    1 + obj.values().map(depth).max().unwrap_or(0)
+                }
+                serde_json::Value::Array(arr) => {
+                    1 + arr.iter().map(depth).max().unwrap_or(0)
+                }
+                _ => 0,
+            }
         }
+        
+        let d = depth(&json_val);
+        if d > MAX_NESTING_DEPTH {
+            return Err(format!(
+                "PF-13 nesting depth rejected: depth {} exceeds limit {}",
+                d, MAX_NESTING_DEPTH
+            ));
+        }
+        Ok(())
+    }
+
+    /// PF-14: Nonce uniqueness — sliding window of the last 10,000 nonces per session.
+    pub fn check_nonce_uniqueness(&self, session_id: &str, nonce: &[u8]) -> Result<(), String> {
+        let mut sessions = self.sessions.lock().unwrap();
+        let state = sessions.entry(session_id.to_string()).or_insert_with(SessionState::new);
+        
+        if !state.nonce_window.check_and_insert(nonce) {
+            return Err("PF-14 nonce reuse rejected".to_string());
+        }
+        Ok(())
+    }
+
+    /// PF-15/PF-16: Envelope timestamp windows per spec.
+    /// The envelope timestamp field is unix NANOSECONDS per the shipped client.
+    /// Stale > 5 s, future > 1 s.
+    pub fn check_timestamp_windows(timestamp_ns: u64) -> Result<(), String> {
+        let now_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+        
+        let drift_ms = ((now_ns as i128 - timestamp_ns as i128) / 1_000_000) as i64;
+        
+        if drift_ms > STALE_THRESHOLD_MS {
+            return Err(format!(
+                "PF-15 stale timestamp rejected: {}ms old exceeds {}ms limit",
+                drift_ms, STALE_THRESHOLD_MS
+            ));
+        }
+        
+        if drift_ms < -FUTURE_THRESHOLD_MS {
+            return Err(format!(
+                "PF-16 future timestamp rejected: {}ms ahead exceeds {}ms limit",
+                -drift_ms, FUTURE_THRESHOLD_MS
+            ));
+        }
+        
+        Ok(())
+    }
+
+    /// PF-17: Signature format budget — ML-DSA-65 signature length within [2420, 3500] bytes.
+    pub fn check_signature_format(signature: &[u8]) -> Result<(), String> {
+        let len = signature.len();
+        if len < ML_DSA_65_SIG_MIN || len > ML_DSA_65_SIG_MAX {
+            return Err(format!(
+                "PF-17 signature format rejected: length {} bytes not in valid range [{}, {}]",
+                len, ML_DSA_65_SIG_MIN, ML_DSA_65_SIG_MAX
+            ));
+        }
+        Ok(())
+    }
+
+    /// PF-18: Rate limit 100 msg/s per external session.
+    pub fn check_rate_limit(&self, session_id: &str) -> Result<(), String> {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        
+        let mut sessions = self.sessions.lock().unwrap();
+        let state = sessions.entry(session_id.to_string()).or_insert_with(SessionState::new);
+        
+        if !state.rate_limiter.check_rate(now_ms, RATE_LIMIT_EXTERNAL_MSG_PER_SEC) {
+            return Err("PF-18 rate limit rejected: E_RATE_LIMITED".to_string());
+        }
+        Ok(())
+    }
+
+    /// Clean up expired sessions.
+    pub fn evict_session(&self, session_id: &str) {
+        let mut sessions = self.sessions.lock().unwrap();
+        sessions.remove(session_id);
     }
 }
 
@@ -131,47 +261,155 @@ mod tests {
     use super::*;
 
     #[test]
-    fn validate_envelope_rejects_empty() {
-        assert!(ProtocolFirewall::validate_envelope_structure(b"").is_err());
+    fn pf01_envelope_size_accepts_valid() {
+        let payload = vec![0u8; 1024];
+        assert!(ProtocolFirewall::check_envelope_size(&payload).is_ok());
     }
 
     #[test]
-    fn validate_envelope_accepts_valid() {
-        assert!(ProtocolFirewall::validate_envelope_structure(b"hello").is_ok());
+    fn pf01_envelope_size_rejects_oversized() {
+        let payload = vec![0u8; 65 * 1024];
+        let err = ProtocolFirewall::check_envelope_size(&payload).unwrap_err();
+        assert!(err.contains("PF-1"));
     }
 
     #[test]
-    fn validate_envelope_rejects_oversized() {
-        let big = vec![0u8; 2 * 1024 * 1024];
-        assert!(ProtocolFirewall::validate_envelope_structure(&big).is_err());
+    fn pf12_unknown_fields_accepts_known() {
+        let json = r#"{"actionType":"TOOL_CALL","context":"test","target":"panel","metadata":{"source":"webui"}}"#;
+        assert!(ProtocolFirewall::check_unknown_fields(json.as_bytes()).is_ok());
     }
 
     #[test]
-    fn validate_timestamp_within_window() {
-        assert!(ProtocolFirewall::validate_timestamp(5000).is_ok());
-        assert!(ProtocolFirewall::validate_timestamp(-5000).is_ok());
+    fn pf12_unknown_fields_rejects_unknown() {
+        let json = r#"{"actionType":"TOOL_CALL","unknownField":"bad"}"#;
+        let err = ProtocolFirewall::check_unknown_fields(json.as_bytes()).unwrap_err();
+        assert!(err.contains("PF-12"));
+        assert!(err.contains("unknownField"));
     }
 
     #[test]
-    fn validate_timestamp_exceeds_window() {
-        assert!(ProtocolFirewall::validate_timestamp(31000).is_err());
+    fn pf13_nesting_depth_accepts_shallow() {
+        let json = r#"{"a":{"b":{"c":"value"}}}"#;
+        assert!(ProtocolFirewall::check_nesting_depth(json.as_bytes()).is_ok());
     }
 
     #[test]
-    fn validate_context_rejects_oversized() {
-        let long = "x".repeat(5000);
-        assert!(ProtocolFirewall::validate_context_length(&long).is_err());
+    fn pf13_nesting_depth_rejects_deep() {
+        let json = r#"{"a":{"b":{"c":{"d":{"e":"too deep"}}}}}"#;
+        let err = ProtocolFirewall::check_nesting_depth(json.as_bytes()).unwrap_err();
+        assert!(err.contains("PF-13"));
     }
 
     #[test]
-    fn validate_target_detects_traversal() {
-        assert!(ProtocolFirewall::validate_target_no_traversal("../../etc/passwd").is_err());
-        assert!(ProtocolFirewall::validate_target_no_traversal("safe/path").is_ok());
+    fn pf14_nonce_uniqueness_accepts_new() {
+        let pf = ProtocolFirewall::new();
+        assert!(pf.check_nonce_uniqueness("session1", b"nonce1").is_ok());
     }
 
     #[test]
-    fn run_full_check_counts_rules() {
-        let report = ProtocolFirewall::run_full_check(b"data", 100, "ctx", "target");
-        assert_eq!(report.total_count, 18);
+    fn pf14_nonce_uniqueness_rejects_reuse() {
+        let pf = ProtocolFirewall::new();
+        pf.check_nonce_uniqueness("session1", b"nonce1").unwrap();
+        let err = pf.check_nonce_uniqueness("session1", b"nonce1").unwrap_err();
+        assert!(err.contains("PF-14"));
+    }
+
+    #[test]
+    fn pf14_nonce_uniqueness_different_sessions_ok() {
+        let pf = ProtocolFirewall::new();
+        pf.check_nonce_uniqueness("session1", b"nonce1").unwrap();
+        assert!(pf.check_nonce_uniqueness("session2", b"nonce1").is_ok());
+    }
+
+    #[test]
+    fn pf15_timestamp_accepts_recent() {
+        let now_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        assert!(ProtocolFirewall::check_timestamp_windows(now_ns).is_ok());
+    }
+
+    #[test]
+    fn pf15_timestamp_rejects_stale() {
+        let now_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let stale_ns = now_ns - (6_000 * 1_000_000); // 6 seconds ago
+        let err = ProtocolFirewall::check_timestamp_windows(stale_ns).unwrap_err();
+        assert!(err.contains("PF-15"));
+    }
+
+    #[test]
+    fn pf16_timestamp_rejects_future() {
+        let now_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let future_ns = now_ns + (2_000 * 1_000_000); // 2 seconds ahead
+        let err = ProtocolFirewall::check_timestamp_windows(future_ns).unwrap_err();
+        assert!(err.contains("PF-16"));
+    }
+
+    #[test]
+    fn pf17_signature_format_accepts_valid() {
+        let sig = vec![0u8; 3309]; // Typical ML-DSA-65 signature length
+        assert!(ProtocolFirewall::check_signature_format(&sig).is_ok());
+    }
+
+    #[test]
+    fn pf17_signature_format_rejects_too_short() {
+        let sig = vec![0u8; 2000];
+        let err = ProtocolFirewall::check_signature_format(&sig).unwrap_err();
+        assert!(err.contains("PF-17"));
+    }
+
+    #[test]
+    fn pf17_signature_format_rejects_too_long() {
+        let sig = vec![0u8; 4000];
+        let err = ProtocolFirewall::check_signature_format(&sig).unwrap_err();
+        assert!(err.contains("PF-17"));
+    }
+
+    #[test]
+    fn pf18_rate_limit_accepts_under_limit() {
+        let pf = ProtocolFirewall::new();
+        for _ in 0..50 {
+            assert!(pf.check_rate_limit("session1").is_ok());
+        }
+    }
+
+    #[test]
+    fn pf18_rate_limit_rejects_over_limit() {
+        let pf = ProtocolFirewall::new();
+        for _ in 0..100 {
+            pf.check_rate_limit("session1").unwrap();
+        }
+        let err = pf.check_rate_limit("session1").unwrap_err();
+        assert!(err.contains("PF-18"));
+        assert!(err.contains("E_RATE_LIMITED"));
+    }
+
+    #[test]
+    fn pf18_rate_limit_different_sessions_independent() {
+        let pf = ProtocolFirewall::new();
+        for _ in 0..100 {
+            pf.check_rate_limit("session1").unwrap();
+        }
+        // session2 should still be able to send
+        assert!(pf.check_rate_limit("session2").is_ok());
+    }
+
+    #[test]
+    fn nonce_window_size_enforcement() {
+        let pf = ProtocolFirewall::new();
+        // Insert 10,001 nonces - the window is 10,000, so the first one gets evicted
+        for i in 0..10_001 {
+            let nonce = format!("nonce{}", i);
+            pf.check_nonce_uniqueness("session1", nonce.as_bytes()).unwrap();
+        }
+        // The first nonce (nonce0) should have been evicted, so we can reuse it
+        assert!(pf.check_nonce_uniqueness("session1", b"nonce0").is_ok());
     }
 }

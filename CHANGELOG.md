@@ -121,6 +121,30 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   service-level tests that valid signatures evaluate and tampered,
   wrong-key, and unsigned requests are permission-denied.
 - Version bumped `0.2.2` → `0.3.0` (`VERSION`, `guardian-meshd/Cargo.toml`).
+- The daemon now enforces the Protocol Firewall rule table on the
+  Evaluate path (WO-2). All applicable rules from the formal spec
+  §1.4 are enforced on client envelopes: PF-1/PF-5 envelope/payload
+  size bounds (64 KiB limit); PF-12 unknown-field rejection for
+  ActionDescriptor JSON (strict field set matching the shipped
+  client — actionType, context, target, metadata); PF-13 payload
+  nesting depth max 4; PF-14 nonce uniqueness (sliding window of
+  10,000 nonces per session, reuse rejected); PF-15/PF-16 envelope
+  timestamp windows (stale > 5 s, future > 1 s, nanosecond
+  precision); PF-17 ML-DSA-65 signature format budget (length in
+  [2420, 3500] bytes); PF-18 rate limit (100 msg/s per external
+  session, excess rejected with permission_denied naming
+  E_RATE_LIMITED). Every rejection is a permission_denied error with
+  a plain reason naming the PF rule. Rules PF-2..PF-11 (internal bus
+  routing, magic/version/CRC checks) do not apply to the external
+  Evaluate path where the shipped client speaks gRPC, not the raw
+  envelope wire format; the gRPC layer handles framing and the
+  Gatekeeper operates on the parsed protobuf message. PF-6 (CRC32C)
+  is verified as part of WO-1's signature check (the signature covers
+  crc32c || payload). Test suite: 58 tests (was 47), including named
+  tests for each enforced rule (pf01_envelope_size_*, pf12_*, pf13_*,
+  pf14_*, pf15_*, pf16_*, pf17_*, pf18_*) plus service-level tests
+  confirming valid envelopes evaluate and PF violations are denied.
+- Version bumped `0.3.0` → `0.4.0` (`VERSION`, `guardian-meshd/Cargo.toml`).
 
 ### Notes
 - No deploy target found (no wrangler/Pages/deploy script; Android APK is a

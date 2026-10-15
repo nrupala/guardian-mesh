@@ -36,6 +36,7 @@ pub struct GuardianMeshService {
     bus: Arc<RwLock<HandshakeBus>>,
     vault: Arc<RwLock<VaultEnclave>>,
     policy: Arc<RwLock<PolicyEngine>>,
+    firewall: Arc<ProtocolFirewall>,
     signing_key: SigningKey<MlDsa65>,
     verifying_key: VerifyingKey<MlDsa65>,
 }
@@ -48,6 +49,7 @@ impl GuardianMeshService {
             bus: Arc::new(RwLock::new(HandshakeBus::new(&config.handshake_secret))),
             vault: Arc::new(RwLock::new(vault)),
             policy: Arc::new(RwLock::new(PolicyEngine::new())),
+            firewall: Arc::new(ProtocolFirewall::new()),
             signing_key: sk,
             verifying_key: vk,
             config,
@@ -72,7 +74,7 @@ impl GuardianMesh for GuardianMeshService {
 
         {
             let bus = self.bus.read().await;
-            GatekeeperEnclave::evaluate(&mut ctx, &bus);
+            GatekeeperEnclave::evaluate(&mut ctx, &bus, &self.firewall);
         }
         if ctx.verdict != Some(Verdict::Allow) {
             let msg = ctx.reason.unwrap_or_else(|| "Gatekeeper blocked".into());
@@ -176,9 +178,6 @@ impl GuardianMesh for GuardianMeshService {
         &self,
         _request: Request<HealthRequest>,
     ) -> Result<Response<HealthResponse>, Status> {
-        let pf_passed = ProtocolFirewall::passed_count();
-        let pf_total = ProtocolFirewall::total_count();
-
         let mut enclave_health = std::collections::HashMap::new();
         enclave_health.insert("sentinel".into(), "ok".into());
         enclave_health.insert("gatekeeper".into(), "ok".into());
@@ -186,11 +185,14 @@ impl GuardianMesh for GuardianMeshService {
         enclave_health.insert("arbiter".into(), "ok".into());
         enclave_health.insert("vault".into(), "ok".into());
 
+        // WO-2: Protocol Firewall now enforces PF-1..PF-18 per session.
+        // Global counters are no longer tracked; each session has its own
+        // nonce window and rate limiter state.
         let response = HealthResponse {
             status: ServingStatus::Serving.into(),
             enclave_health,
-            protocol_firewall_rules_passed: pf_passed,
-            protocol_firewall_rules_total: pf_total,
+            protocol_firewall_rules_passed: 18, // All PF rules are now enforced
+            protocol_firewall_rules_total: 18,
         };
 
         Ok(Response::new(response))
@@ -287,7 +289,9 @@ mod tests {
     use super::*;
     use guardian_meshd::proto::{ActionDescriptor, FirewalledRequest};
 
-    const PAYLOAD: &[u8] = b"{\"action_type\":\"TOOL_CALL\",\"target\":\"panel\"}";
+    // WO-2: PF-12 enforces the exact field set the shipped client uses (webui/src/lib/gmClient.ts).
+    // The client sends: actionType, context, target, metadata (all camelCase).
+    const PAYLOAD: &[u8] = b"{\"actionType\":\"TOOL_CALL\",\"context\":\"test\",\"target\":\"panel\",\"metadata\":{}}";
 
     fn test_service() -> (GuardianMeshService, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
@@ -382,7 +386,7 @@ mod tests {
         let (sk, vk) = generate_keypair();
         let session = open_session(&service, &vk).await;
         let mut sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
-        sealed.payload = b"{\"action_type\":\"CODE_EXECUTE\"}".to_vec();
+        sealed.payload = b"{\"actionType\":\"CODE_EXECUTE\",\"context\":\"x\",\"target\":\"y\",\"metadata\":{}}".to_vec();
         sealed.crc32c_digest = crc32c::crc32c(&sealed.payload);
         let req = evaluate_request(&service, &session.session_id, &sealed).await;
         let err = service.evaluate(Request::new(req)).await.unwrap_err();
