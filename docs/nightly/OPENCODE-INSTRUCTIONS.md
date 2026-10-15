@@ -36,6 +36,15 @@ tests. Nothing merges red. Every release carries a release-gate verdict.
 7. Every change lands as a draft PR, full CI green, Wright-verified, then
    merged. Version bump + CHANGELOG entry + public release-log update ride
    with every release.
+8. **System-level language only.** Guardian Mesh is a system-level product
+   and the daemon is Rust because execution speed is a security property
+   (owner's doctrine, 2026-10-14). No Python — or any slow interpreted
+   language — in the product runtime: core and performance/security-
+   critical components are Rust (POSIX-class system languages only: Rust,
+   C, C++). The browser interface is TypeScript because that is the
+   browser's native layer. Interpreted languages may appear only as
+   throwaway scaffolding outside the shipped product (test harnesses,
+   one-off verification scripts) and are never shipped as components.
 
 ## Part A — Work orders from the repo
 
