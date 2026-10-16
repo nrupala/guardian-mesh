@@ -223,5 +223,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-15T23:24:25-06:00",
     "message": "docs(nightly): pack refresh \u2014 file GMSI-6..47 from the 2026-10-15 fleet re-gate (#35)"
+  },
+  {
+    "release": 30,
+    "tag": "release/v30",
+    "previous_tag": "release/v29",
+    "sha": "f093f27ee18b5b9fe77f3496727f2ee0ff6dd57c",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-16T10:24:20-06:00",
+    "message": "docs(specs): standards compliance review \u2014 ISO/IEC 22989 + cybersecurity family (#36)"
   }
 ]
