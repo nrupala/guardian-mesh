@@ -241,5 +241,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-16T11:01:49-06:00",
     "message": "docs(specs): compliance development plan \u2014 build the missing compliances (#37)"
+  },
+  {
+    "release": 32,
+    "tag": "release/v32",
+    "previous_tag": "release/v31",
+    "sha": "d187fc7f768f8d109ca869e3c3b79e397a508d4e",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-16T11:08:28-06:00",
+    "message": "license: relicense Guardian Mesh to Apache 2.0 + Payment Rider (#38)"
   }
 ]
