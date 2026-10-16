@@ -158,8 +158,11 @@ rules, and the enclave contract.
 
 ## License
 
-Split licensing: the interface (`webui/`, `specs/`, and the generated
-client bindings at the repository root) is licensed under the Apache
-License, Version 2.0, and the core (`guardian-meshd/`) is licensed
-under the GNU Affero General Public License, version 3 or later
-(AGPL-3.0-or-later) — see [LICENSE](LICENSE) for the full map.
+**Apache License, Version 2.0, plus the AIMLDS Payment Rider** —
+one license for the whole repository (the interface, the core
+daemon, and the specifications). The code is free to use, study,
+modify, and self-host at any scale; the Rider reserves two things
+to paid commercial license: offering Guardian Mesh's verdicts or
+certification as a service to third parties, and issuing
+certificates under the Guardian Mesh name. See [LICENSE](LICENSE)
+and [LICENSE-RIDER.md](LICENSE-RIDER.md).

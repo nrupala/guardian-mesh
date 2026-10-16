@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Nrupal Akolkar
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 //! Protocol Firewall — enforces PF-1..PF-18 from the formal spec §1.4
 //! on the Evaluate path for client envelopes.

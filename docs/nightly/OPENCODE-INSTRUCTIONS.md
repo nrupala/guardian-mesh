@@ -26,9 +26,15 @@ tests. Nothing merges red. Every release carries a release-gate verdict.
    Lean 4 verification are design, not shipped — never present them as built.
 2. **Liability boundary.** A certificate warrants only the exact item tested,
    against the policy named, on the date stamped — never deployment choices.
-3. **Licensing split.** `guardian-meshd/` (core) is AGPL-3.0-or-later;
-   `webui/` (interface) is Apache-2.0. New webui files carry the Apache-2.0
-   SPDX header; new core files carry the AGPL header.
+3. **License: Apache 2.0 + Payment Rider** (owner's decision
+   2026-10-16, replacing the former AGPL/Apache split). The whole
+   repo — core, interface, specs — is Apache License, Version 2.0
+   plus the AIMLDS Payment Rider (`LICENSE-RIDER.md`): free to use,
+   modify, and self-host at any scale; offering Guardian Mesh
+   verdicts/certification as a service to third parties, or issuing
+   certificates under the Guardian Mesh name, requires a paid
+   commercial license. New files carry the Apache-2.0 SPDX header.
+   Never describe the license as unmodified Apache 2.0.
 4. **Fail closed.** No answer from the daemon means BLOCK. Undecided means
    BLOCK. A check that cannot run is reported NOT RUN, never PASS.
 5. **Deterministic enforcement.** No LLM in any verdict path.
@@ -289,6 +295,17 @@ Note on WO-29: the compliance plan sets its acceptance bar —
 every CP-01…CP-24 checkpoint emits a machine-readable result per
 deployment (PASS/FAIL/N/A/NOT RUN + evidence pointer), exportable
 mapped to NIST CSF 2.0 + SP 800-53 + ISO 27001 Annex A themes.
+
+### WO-37 (P1) Touchpoint wiring program (dogfood coverage)
+Owner's directive 2026-10-16: Guardian Mesh connected at every
+touchpoint. The map of record is the goal file
+`touchpoint-wiring-map.md` (T1 release gate, T2 publishing
+pipeline, T3 Conduit, T4 fleet repos, T5 nightly lane, T6
+oc-bridge, T7 MyMilo loop, T8 GM's own surfaces). Wire one
+touchpoint per run in map order: verdict before the action, proof
+after it, coverage entry updated. A touchpoint counts as wired
+only when its proof verifies offline (CM-6/CM-7 discipline
+applied to our own fleet first).
 
 ## Part B — Spec inputs from the release gate (GMSI)
 
@@ -730,6 +747,17 @@ the laptop checkouts are working copies, never the source of truth.
   track (42001/27001/SOC 2) is staged demand-led in the plan —
   groundwork only, certification spend on customer requirement,
   never theatre ahead of revenue.
+- 2026-10-16 — **Relicensed: Apache 2.0 + Payment Rider** (owner's
+  decision: "Apache two license plus payment rider"). The former
+  split (AGPL core / Apache interface) is retired: root LICENSE and
+  guardian-meshd/LICENSE now carry the canonical Apache 2.0 text,
+  LICENSE-RIDER.md carries the rider (free use/self-hosting at any
+  scale; paid license only for offering verdicts/certification as
+  a service or issuing certificates under the name), README and
+  guardrail 3 updated, all daemon SPDX headers swept AGPL→Apache-2.0
+  (verified: zero AGPL strings remain in sources). Honest naming
+  rule in the rider itself: always "Apache License 2.0 + Payment
+  Rider", never bare Apache 2.0.
 - 2026-10-15 (nightly) — **Pack refreshed: GMSI-6…47 filed.** The
   WO-1/WO-2 gate runs (GMSI-6/7) and the release gate's 2026-10-15
   fleet re-gate — 13 product packs — filed the spec inputs now
