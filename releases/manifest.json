@@ -232,5 +232,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-16T10:24:20-06:00",
     "message": "docs(specs): standards compliance review \u2014 ISO/IEC 22989 + cybersecurity family (#36)"
+  },
+  {
+    "release": 31,
+    "tag": "release/v31",
+    "previous_tag": "release/v30",
+    "sha": "d655d44b53250c476b9c5b8f6a7fa58ecd0c7a32",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-16T11:01:49-06:00",
+    "message": "docs(specs): compliance development plan \u2014 build the missing compliances (#37)"
   }
 ]
