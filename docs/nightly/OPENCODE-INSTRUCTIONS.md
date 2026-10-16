@@ -256,6 +256,40 @@ terms defined against them; add 22989 + the SC 42 family to the
 §3 standards spine. Keep the compliance review refreshed per
 release (RG-3). Docs-only; Wright lane acceptable.
 
+### Compliance development plan items (2026-10-16)
+From `specs/COMPLIANCE_DEVELOPMENT_PLAN.md` — build the missing
+compliances as evidence-producing machinery, never as prose:
+
+### WO-32 (P1) AI risk register + process
+`specs/RISK_REGISTER.md` per ISO/IEC 23894: risks scored, owned,
+tied to THREAT_MODEL entries and their mitigations; reviewed at
+every release gate run, review recorded in the gate verdict.
+After WO-30. Docs-only; Wright lane acceptable.
+
+### WO-33 (P2) NIST AI RMF profile
+Profile doc mapping Govern/Map/Measure/Manage to real Guardian
+Mesh mechanisms only (gate, risk register, policy governance);
+zero aspirational mappings. After WO-32. Docs-only.
+
+### WO-35 (P2) Validated-module crypto path (FIPS 140-3)
+Cryptographic provider boundary in the daemon + PKCS#11 provider
+so keys can live in an HSM/KMS; documented validated-module
+deployment profile (validation is the module vendor's, cited,
+never implied ours). Acceptance: daemon runs end-to-end with
+signing keys in an external PKCS#11 token (software token in
+test). After WO-3. Laptop lane.
+
+### WO-36 (P3) EU AI Act deployer pack
+Customer-facing mapping from the WO-29 evidence export to
+deployer obligations (Art. 9/12/14/15), generated from a real
+export — framed "supports deployer obligations", never
+"compliant product". After WO-29.
+
+Note on WO-29: the compliance plan sets its acceptance bar —
+every CP-01…CP-24 checkpoint emits a machine-readable result per
+deployment (PASS/FAIL/N/A/NOT RUN + evidence pointer), exportable
+mapped to NIST CSF 2.0 + SP 800-53 + ISO 27001 Annex A themes.
+
 ## Part B — Spec inputs from the release gate (GMSI)
 
 Guardian Mesh evolves with the gate. Each item below states what Guardian
@@ -682,6 +716,20 @@ the laptop checkouts are working copies, never the source of truth.
   alerting, air-gapped mode, integration wrappers, self-test kit,
   appeal path, operational completeness). Work orders WO-20…WO-30
   added as Part D of this pack.
+- 2026-10-16 — **Standards compliance review + development plan**
+  (owner's order): `specs/STANDARDS_COMPLIANCE_REVIEW.md` (PR #36)
+  found ISO/IEC 22989 PARTIAL (terminology form gap), 23894
+  PARTIAL, CSF/800-53 PARTIAL, FIPS 140-3 GAP (not claimed), SLSA
+  TARGET, no organizational certifications held or claimed.
+  `specs/COMPLIANCE_DEVELOPMENT_PLAN.md` converts every gap into
+  builds with acceptance evidence: WO-31 (terminology annex),
+  WO-32 (AI risk register per 23894, after WO-30), WO-33 (NIST AI
+  RMF profile), WO-29 bar raised (per-deployment CP evidence
+  export), WO-36 (EU AI Act deployer pack), WO-35 (PKCS#11
+  validated-module path, after WO-3), WO-13 (SLSA). Organizational
+  track (42001/27001/SOC 2) is staged demand-led in the plan —
+  groundwork only, certification spend on customer requirement,
+  never theatre ahead of revenue.
 - 2026-10-15 (nightly) — **Pack refreshed: GMSI-6…47 filed.** The
   WO-1/WO-2 gate runs (GMSI-6/7) and the release gate's 2026-10-15
   fleet re-gate — 13 product packs — filed the spec inputs now
