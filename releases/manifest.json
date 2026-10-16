@@ -214,5 +214,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-15T15:21:22-06:00",
     "message": "docs(specs): amend Revised Specification to v3.1 \u2014 charter, closed-path doctrine, complete mediation, securing the guardian (#34)"
+  },
+  {
+    "release": 29,
+    "tag": "release/v29",
+    "previous_tag": "release/v28",
+    "sha": "2e6a35dd5fce08964cc66aaceb0f55d76a495a29",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-15T23:24:25-06:00",
+    "message": "docs(nightly): pack refresh \u2014 file GMSI-6..47 from the 2026-10-15 fleet re-gate (#35)"
   }
 ]
