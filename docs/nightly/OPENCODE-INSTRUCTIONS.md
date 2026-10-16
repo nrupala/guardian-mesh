@@ -246,6 +246,16 @@ proof (PC-3).
 CP-catalogue auditor evidence packs, SIEM formats, OTel export
 (PC-7); anomaly alerting hooks (PC-10).
 
+### WO-31 (P2) Standards alignment upkeep
+From the 2026-10-16 standards compliance review
+(`specs/STANDARDS_COMPLIANCE_REVIEW.md`): add a terminology annex
+to the revised specification adopting ISO/IEC 22989 terms (AI
+agent, AI system, human oversight, verification vs validation,
+trustworthiness characteristics) with Guardian Mesh's product
+terms defined against them; add 22989 + the SC 42 family to the
+§3 standards spine. Keep the compliance review refreshed per
+release (RG-3). Docs-only; Wright lane acceptable.
+
 ## Part B — Spec inputs from the release gate (GMSI)
 
 Guardian Mesh evolves with the gate. Each item below states what Guardian
