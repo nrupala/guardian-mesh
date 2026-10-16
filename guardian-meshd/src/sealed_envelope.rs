@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Nrupal Akolkar
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 
 use crc32c::crc32c;
 use ml_dsa::{MlDsa65, Keypair, SigningKey, VerifyingKey, Signer, Verifier, SignatureEncoding, Signature};

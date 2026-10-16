@@ -4,7 +4,7 @@
 // @ts-nocheck
 //
 // Copyright (c) 2026 Nrupal Akolkar
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: Apache-2.0
 //
 import type { RpcTransport } from "@protobuf-ts/runtime-rpc";
 import type { ServiceInfo } from "@protobuf-ts/runtime-rpc";
