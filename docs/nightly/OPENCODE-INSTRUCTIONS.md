@@ -279,6 +279,240 @@ BLOCK).
   stays in git history; certification of a repository must state whether
   history was scanned, not only the working tree. Certificate schema
   (WO-6) carries a `scope` field: `working-tree` | `full-history`.
+
+The founding set above (GMSI-1…5) dates to 2026-10-14. GMSI-6…47 were
+filed by the WO-1/WO-2 gate runs and the release gate's 2026-10-15
+fleet re-gate (13 product packs: RA/devinfo, codetopo, Conduit
+filings, Conduit DCR, dogear, FareSutra, KalaBodha, LetsAskIt,
+Linktary, MyKey, site tier, thinkwithfinance, Verdict). Repeats are
+consolidated into one canonical item with every filing named;
+onsmartgrid and the Conduit Router re-run filed none. These inputs
+queue behind the Part A work orders: they land as proof fields in
+WO-6's certificate schema and as standing probe sets in the gate,
+and none becomes a gate MUST until behaviour-proven here.
+
+- **GMSI-6 — The gate scanner must detect inline Rust tests.**
+  WO-1 and WO-2 both drew a false scanner BLOCKED ("no test suite")
+  on a repo whose tests are Rust `#[test]` functions. Gate tooling
+  input, filed from both runs: the scanner learns inline-test
+  detection so the class cannot false-block a third release.
+- **GMSI-7 — Evidence packs bind measured firewall outcomes.**
+  WO-6 certificates carry the daemon's measured per-rule PF
+  pass/fail counts, never constants (WO-2 gate finding F2). The
+  measurement itself is WO-19 (Health counters + session eviction).
+- **GMSI-8 — Transport floor proof.** Filed seven times in one day
+  (aimlds M1, Conduit filings F-R1, codetopo F-R1, FareSutra,
+  LetsAskIt N1, KalaBodha, thinkwithfinance M3): GM must prove, per
+  host and from outside, that plain HTTP refuses or redirects, HSTS
+  is served, the TLS floor holds, and a baseline header set exists —
+  on every origin, workers.dev and second origins included. Header
+  inventories read off HTTPS responses alone missed this class
+  repeatedly; the probe set includes an http:// fetch of every host.
+- **GMSI-9 — Deployed == gated, continuously.** (aimlds worker-drift
+  sentinel + source-of-record census; Conduit filings currency
+  markers; dogear cross-surface version census.) Deployed artifacts
+  are hash/marker-compared against the repo of record on a cadence;
+  where hashes are unavailable from outside, behaviour markers (a
+  response only current code produces) are the standing check.
+  Every deployment maps to a repo + commit; unmapped deployments
+  are findings by construction.
+- **GMSI-10 — A claimed safeguard must be proven armed.** (aimlds
+  gate-activation probe; Linktary provisioned-safeguard sentinel.)
+  Every safeguard whose code says "activates when configured" gets
+  a production probe proving it is ON — key/discovery endpoints
+  fetched on a cadence, an empty published key set on a product
+  claiming signed artifacts is an alert. Code review cannot see
+  config; only the probe can.
+- **GMSI-11 — Public-claims / copy-vs-state differ.** (KalaBodha
+  public-claims sentinel; Conduit filings cross-surface copy;
+  codetopo copy-vs-code drift incl. executing the published
+  quickstart against the current CLI; site-tier claims-vs-state;
+  thinkwithfinance claims-vs-record; dogear claims-vs-config.)
+  Load-bearing public claims — what is live, who the processor is,
+  licence, price, feature availability, "no tracking" — are diffed
+  against the live surface, the served bytes, the zone config, and
+  the repo of record at every gate and on a cadence.
+- **GMSI-12 — Release-record completeness.** (codetopo C-P1;
+  thinkwithfinance M4; Linktary release-log monitor.) GM diffs every
+  product's public release record against the gate register: an
+  entry must carry changes + testing record + gate verdict + GM
+  verifier record, and the log's freshness is monitored against
+  deploys. A release whose notes carry no verdict word is
+  detectable mechanically — C-P1 escaped because nobody diffed.
+- **GMSI-13 — Payment-state truth.** (codetopo built-but-not-live;
+  LetsAskIt payment-mode proof; site-tier checkout-liveness.) GM
+  distinguishes *code exists* / *deployed* / *purchasable* for every
+  payment surface, proves a rail's mode (test vs live) from the
+  deployed surface + config-in-VC, and flags present-tense sales
+  copy that outruns it. A checkout configured with a zero or
+  placeholder vendor id, or sitting on a closed rail, is detectable
+  from served bytes alone and pages the owner.
+- **GMSI-14 — Rate-limit proof that survives reality.** (Conduit
+  filings egress rotation; Verdict F1 eventual consistency.) Per-IP
+  caps are unprovable from a rotating egress: GM needs a
+  fixed-egress probe lane (or a counter-state test hook) so cap
+  proofs are live, not code-read — and must state and prove the
+  enforcement bound a counter actually delivers under eventual
+  consistency.
+- **GMSI-15 — Soft-404, catch-all, and well-known correctness.**
+  (Conduit filings F-R2; dogear catch-all detector; LetsAskIt
+  well-known.) Unknown paths and the /.well-known/* space are
+  probed against the product's declared documents, never assumed:
+  a 200 + homepage (or HTML shell) on an unknown path hides missing
+  privacy/changelog/security pages behind green statuses.
+- **GMSI-16 — Auth-surface proof runs on the deployed server.**
+  (Conduit DCR 1–3, the 2026-10-15 escape class.) Validation rules
+  on registration/auth endpoints are behaviour-proven on the
+  DEPLOYED server at every auth-surface release — fragment,
+  userinfo, non-loopback http, and loopback redirect variants
+  probed with requests + responses filed; the served consent
+  screen's content is proven (redirect hostname + unverified-client
+  warning present); token-binding negative probes (code reuse,
+  wrong PKCE verifier, mismatched redirect_uri) must all fail live
+  before an OAuth release may call itself tested. The 2026-10-14
+  gate shipped a rate cap on this endpoint without ever probing its
+  validation rules.
+- **GMSI-17 — Silent-failure sentinel.** (dogear F1.) Surfaces whose
+  core act depends on a runtime capability (browser speech voices
+  is the filed case) are probed from a capability-less vantage, and
+  a user-visible fallback message is required. The defect was
+  invisible to every code-level check.
+- **GMSI-18 — Deploy attestation coverage.** (dogear.) Every
+  production deployment id maps to a ledger certificate; an
+  unattested production deployment is a mechanical management
+  signal, not a judgment call.
+- **GMSI-19 — Exposure proofs, probed from the internet side.**
+  (FareSutra H1/H2.) GM enumerates unauthenticated WRITE endpoints
+  and "private to this deployment" data stores on public URLs, and
+  flags any public GET returning accumulated operator/user activity
+  (search history, watches, ledgers), classifying what it discloses.
+  The single-tenant assumption is probed, never read off the code
+  comment that asserts it.
+- **GMSI-20 — Amplification accounting.** (FareSutra.) Features that
+  convert anonymous reads into recurring operator spend
+  (auto-watch → daily re-search is the filed shape) carry a cost
+  proof: entries minted per anonymous request × recheck cost ×
+  retention, plus cap-eviction effects on legitimate entries.
+- **GMSI-21 — One product, one verdict.** (FareSutra H3.) When two
+  engines emit judgments, GM diffs them on identical inputs in the
+  served response; a contradiction (BUY NOW vs WAIT on the same
+  item) is a finding.
+- **GMSI-22 — Fallback truth per route.** (FareSutra M2.) A
+  fixture/demo fallback is verified against the REQUESTED route,
+  not merely labelled in the response — an honest warning over the
+  wrong city's deals is still a wrong answer.
+- **GMSI-23 — Artifact-link liveness.** (FareSutra M6.) Links
+  presented as verifiable proof (certificates) are re-fetched after
+  an isolate-recycle interval; in-memory registries fail this by
+  construction.
+- **GMSI-24 — Audit-chain independent verification.** (KalaBodha.)
+  A hash-chained audit log is re-computed independently from its
+  public endpoint as a standing GM proof for any product claiming
+  tamper-evidence (done by hand there for entries 1–4). For
+  Guardian Mesh itself this lands with WO-4's audit read path.
+- **GMSI-25 — Public-metadata exposure census.** (KalaBodha
+  Medium 4 class.) For transparency endpoints, what an
+  unauthenticated seq/id walk actually discloses per tenant is
+  enumerated and measured, so "public by design" is a measured
+  quantity, not a posture.
+- **GMSI-26 — Fingerprint-binding probe.** (KalaBodha; extends
+  GMSI-2.) For envelope stores, a probe stores under a mismatched
+  registered fingerprint and records accept/reject; GM holds the
+  standing probe-key pattern for it (the probe needs an
+  operator-minted key).
+- **GMSI-27 — Returning-user data rights.** (LetsAskIt F4/N2, an
+  escape that survived in-session-only testing twice.) GM's probe
+  identity returns in a NEW session with persisted state
+  (cookie/localStorage) and re-tests read/delete; deletion proven
+  in-session is not deletion proven.
+- **GMSI-28 — Origin parity.** (LetsAskIt.) Any origin serving the
+  same worker is exposure: GM inventories every origin and probes
+  each at parity; the parity itself needs a standing proof.
+- **GMSI-29 — Subprocessor differ.** (Linktary.) Third-party origins
+  extracted from served pages (fonts/CDN/analytics) are diffed
+  against the privacy page's declared subprocessor list; drift is
+  an alert.
+- **GMSI-30 — SSRF probe set, reusable.** (Linktary spelling
+  battery; Verdict SSRF class.) For any feature fetching a
+  user-supplied URL: integer/octal/hex IPv4, IPv6 tunnelled forms,
+  metadata hosts, and private ranges must all be refused before
+  fetch — proven as a battery, not spot-checked.
+- **GMSI-31 — Data-minimisation proofs.** (Verdict 2 + 6.) A
+  share/summary token must provably contain no source content, and
+  a channel reply (the email channel is the filed case) must
+  contain no raw source content beyond the derived verdict
+  summary — proven by rendering inspection, not by code reading.
+- **GMSI-32 — Signed-token tamper proof.** (Verdict 4; extends
+  GMSI-1.) A signed verdict/certificate token must fail
+  verification after ANY payload mutation — proven by forgery
+  probes (mutated payload + stale signature reads NOT VALID, never
+  partially verified).
+- **GMSI-33 — Connector-bound parity.** (Verdict 5.) A connector
+  endpoint (MCP is the filed case) enforces the same free-tier /
+  rate bound as the web surface it mirrors; the bound is proven on
+  the connector, not inferred from shared code.
+- **GMSI-34 — Encrypted-file tamper battery.** (MyKey, passed 9/9 by
+  hand there.) Nine mutations — bitflip per blob class, cross-entry
+  blob swap, header/KDF downgrade, version downgrade, truncation —
+  all must reject. GM runs this battery against any encrypted-file
+  product and diffs the outcomes.
+- **GMSI-35 — Dependency-ceiling detector.** (MyKey M1.) Auditors
+  report vulnerable versions; nobody flags a pin whose upper bound
+  excludes *every* patched release, which makes the vuln
+  unfixable-by-construction. GM diffs pin ranges against
+  fix-version sets.
+- **GMSI-36 — Version-label integrity.** (MyKey F7; Linktary
+  version-coherence.) One version string names exactly one code
+  state across tag, main, and shipped artifacts; /health vs
+  service-descriptor vs package/tag coherence is checked per
+  product with a drift alarm.
+- **GMSI-37 — Claim-vs-binary permission diff.** (MyKey.) A
+  capability claim ("makes no network calls") is diffed against the
+  shipped binary's permission manifest. Filed as PROVEN aligned
+  there — keep the check; it is cheap and decisive.
+- **GMSI-38 — Bootstrap-trust asymmetry.** (MyKey F9.) When two
+  import paths protect the same asset, their fresh-device trust
+  requirements are diffed; the weaker one is a finding even when
+  each is defensible alone.
+- **GMSI-39 — Download-chain pinning.** (MyKey F4.) Binaries and
+  their checksums served from one mutable source are a single point
+  of compromise: GM requires at least one out-of-band pinned value
+  per shipped artifact and flags branch-tip download URLs.
+- **GMSI-40 — Advertised-endpoint liveness.** (site-tier DNS
+  sentinel.) Hosts/paths advertised in well-known / llms.txt /
+  discovery docs are continuously resolved + probed; a dead
+  advertised API host or an HTML-serving keys URL is mechanically
+  detectable drift.
+- **GMSI-41 — Policy-behind-form census.** (site-tier.) Live POST
+  routes are enumerated fleet-wide and each form-hosting page is
+  checked for a linked privacy policy; three of five properties in
+  the filed run collected PII with no policy.
+- **GMSI-42 — Attribution-line verifier.** (site-tier.) The footer
+  attribution line is fetched on every public surface and its link
+  targets + referral code verified against the standing rule (it
+  was absent on the flagship and stripped on AxiomCode in the
+  filed run).
+- **GMSI-43 — Integrity-enrolment census.** (site-tier.) Every live
+  customer host appears in the site-integrity baselines; an
+  unenrolled live host is the gap this census catches mechanically.
+- **GMSI-44 — Liveness beyond reachability.** (thinkwithfinance
+  M1/M2.) A publisher/scheduled job whose last-run age exceeds ~2×
+  its cadence alerts, and N consecutive scheduled-run failures
+  alert — the filed site was HTTP-200 and dead for 5 days, its
+  filler failing 7 straight days unnoticed. Reachability
+  monitoring is structurally blind to this class.
+- **GMSI-45 — Doctrine-source monitor.** (aimlds H1.) A scheduled
+  sample of served output asserts the declared provenance/source
+  equals the doctrine registry's production source; a silent
+  fallback to a development-only source is a finding, never a
+  default.
+- **GMSI-46 — Paid-surface probe.** (aimlds.) An unauthenticated
+  request to every endpoint the product copy calls paid/gated
+  expects 401 — run at every gate and weekly in the sweep.
+- **GMSI-47 — Capability-token storage.** (codetopo F-R3.) Bearer
+  tokens stored as lookup keys are hashed at rest by default; GM's
+  store inspection flags any table whose key column is itself a
+  live capability.
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
@@ -438,3 +672,13 @@ the laptop checkouts are working copies, never the source of truth.
   alerting, air-gapped mode, integration wrappers, self-test kit,
   appeal path, operational completeness). Work orders WO-20…WO-30
   added as Part D of this pack.
+- 2026-10-15 (nightly) — **Pack refreshed: GMSI-6…47 filed.** The
+  WO-1/WO-2 gate runs (GMSI-6/7) and the release gate's 2026-10-15
+  fleet re-gate — 13 product packs — filed the spec inputs now
+  carried in Part B; onsmartgrid and the Conduit Router re-run
+  filed none. Repeats are consolidated (the transport floor,
+  GMSI-8, was filed seven times in one day — the fleet's loudest
+  repeat class). The work-order order does not change: the new
+  inputs queue behind Part A and land through WO-6's certificate
+  schema and the gate's standing probe sets, each becoming a MUST
+  only once behaviour-proven here. Next: WO-3.
