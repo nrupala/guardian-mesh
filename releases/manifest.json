@@ -268,5 +268,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-16T23:58:10-06:00",
     "message": "feat(daemon): persistent ML-DSA-65 signing key with Health fingerprint (WO-3) \u2014 v0.5.0 (#40)"
+  },
+  {
+    "release": 35,
+    "tag": "release/v35",
+    "previous_tag": "release/v34",
+    "sha": "5e2795557611aee9575dd2bf47daa630b93dbce8",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-17T00:06:54-06:00",
+    "message": "docs(nightly): ledger \u2014 WO-3 shipped as v0.5.0 (#41)"
   }
 ]
