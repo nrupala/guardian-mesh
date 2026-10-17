@@ -769,3 +769,38 @@ the laptop checkouts are working copies, never the source of truth.
   inputs queue behind Part A and land through WO-6's certificate
   schema and the gate's standing probe sets, each becoming a MUST
   only once behaviour-proven here. Next: WO-3.
+- 2026-10-17 — **WO-3 shipped as v0.5.0** (PR #40, merged 5ecf9074):
+  the daemon's ML-DSA-65 signing key persists — the 32-byte seed is
+  generated on first start into `<workspace>/keys/daemon_signing_key.bin`
+  (mode 0600, permissions set before the seed is written, fsync'd) and
+  loaded on later starts; a corrupt or unreadable key file fails
+  closed with a FATAL naming the file — never a silent regeneration.
+  Health reports `signing_key_fingerprint` (proto field 5): lowercase
+  hex SHA-256 of the public key — fingerprint only, never key
+  material (GMSI-2's GM-side half). Generation/storage/backup/rotation
+  documented in `guardian-meshd/README.md`. Built by the laptop lane
+  (OpenCode, Claude lane) across two runs — the first died mid-work
+  when the laptop restarted for updates; a continuation run finished
+  it; Wright carried the commit by git bundle with tree-hash equality
+  asserted (lane tree 72de5f98 == pushed tree). Wright-verified
+  independently: cargo 65/65 on a fresh checkout (58 at v0.4.0);
+  wire-level two-boot proof — proof issued under boot 1 verifies
+  VALID under boot 2 (distinct processes), corrupt key → exit 1,
+  restored key → validity returns, fresh workspace → different
+  fingerprint and the old proof correctly invalid there. Release
+  gate: PASS WITH FINDINGS (F1 low cosmetic — the FATAL line doubles
+  its prefix; F2 low — the keys/ directory's permissions are not
+  pinned; scanner "tests" BLOCKED is the GMSI-6 false lead, third
+  occurrence, resolved by the direct suite evidence; Kali/Arch
+  backbone families NOT RUN — benches not yet built). Verification
+  also caught the relicense sweep's misses — daemon Cargo.toml still
+  declared AGPL, build.rs carried an AGPL SPDX header, CONTRIBUTING
+  still described split licensing — fixed on the branch (8fe51bab)
+  to Apache License 2.0 + Payment Rider. Deployed to
+  guardian.aimlds.org the same night (binary sha256 d93df02d…,
+  rollback kept as guardian-meshd.bak-v040): production key
+  generated on first start; production signing fingerprint
+  dd2cf1a350e0b31c30fcf0db2d1dd73ade7487af08385ddce6b99e7d1f40a8c9,
+  stable across a service restart with a pre-restart proof still
+  VALID; box E2E 16/16; unauthenticated web check still 302.
+  Next: WO-4.
