@@ -37,6 +37,69 @@ Request ─▶ SENTINEL ─▶ GATEKEEPER ─▶ WITNESS ─▶ ARBITER ─▶ V
 ML-DSA-65 signature + timestamp + nonce) that can be serialized and verified —
 this is the unit of trust exchanged with the daemon.
 
+## Persistent Signing Key
+
+The daemon's ML-DSA-65 signing key persists across restarts, so proofs issued
+by different instances of the same daemon verify against the same public key.
+
+### Key Storage
+
+On first start, the daemon generates a fresh ML-DSA-65 keypair and stores the
+seed (32 bytes) to:
+
+```
+{GUARDIAN_MESH_WORKSPACE}/keys/daemon_signing_key.bin
+```
+
+The file is created with **restrictive permissions** (0600 on Unix; on other
+platforms the file system's default for user-only files applies). Operators
+should ensure the workspace directory itself is protected from unauthorized
+access.
+
+On subsequent starts, the daemon loads the existing seed and reconstructs the
+same keypair. Proofs issued across restarts verify against the same public key.
+
+### Fingerprint
+
+The **Health RPC** reports the signing-key fingerprint in the
+`signing_key_fingerprint` field: the lowercase hex-encoded SHA-256 hash of the
+daemon's ML-DSA-65 public key (1952 bytes). This fingerprint allows operators
+and clients to identify the daemon's signing identity without exposing key
+material.
+
+### Fail-Closed Behavior
+
+If the stored key file exists but is **corrupt** or the **wrong length**, the
+daemon fails closed: it exits with a clear **FATAL** log naming the problem and
+does NOT silently regenerate the key. Silently changing the signing identity
+would invalidate all outstanding proofs and must be an operator decision, not a
+default behavior.
+
+### Backup
+
+To back up the signing key, copy the key file:
+
+```bash
+cp {GUARDIAN_MESH_WORKSPACE}/keys/daemon_signing_key.bin /secure/backup/location/
+```
+
+### Rotation
+
+To rotate the signing key:
+
+1. **Stop the daemon.**
+2. **Move the old key aside** (do NOT delete it immediately — keep it in case
+   old proofs need verification):
+   ```bash
+   mv {GUARDIAN_MESH_WORKSPACE}/keys/daemon_signing_key.bin \
+      {GUARDIAN_MESH_WORKSPACE}/keys/daemon_signing_key.bin.old
+   ```
+3. **Start the daemon.** It will generate a fresh keypair.
+
+**Note:** Proofs issued under the old key will stop verifying against the new
+fingerprint. This is expected behavior. Clients must obtain fresh proofs from
+the daemon after rotation.
+
 ## Protocol
 
 `proto/guardian_mesh.proto` defines three RPCs:
@@ -81,7 +144,7 @@ All via environment variables (`src/config.rs`):
 ```bash
 cargo build --release            # release binary
 cargo clippy --all-targets -- -D warnings   # must be clean
-cargo test                        # 31 unit tests, all green
+cargo test                        # 64 unit tests, all green
 ```
 
 Requires `protoc` on `PATH` (protobuf codegen runs in `build.rs`).

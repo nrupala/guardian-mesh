@@ -17,7 +17,7 @@ use guardian_meshd::handshake_bus::{HandshakeBus, SESSION_TTL_SECS};
 use guardian_meshd::policy::PolicyEngine;
 use guardian_meshd::protocol_firewall::ProtocolFirewall;
 use guardian_meshd::sealed_envelope::{generate_keypair, SealedEnvelope, ML_DSA_65_VERIFYING_KEY_LEN};
-use guardian_meshd::sealed_envelope::verify_proto_envelope;
+use guardian_meshd::sealed_envelope::{verify_proto_envelope, load_or_generate_signing_key, compute_fingerprint};
 use guardian_meshd::proto::{
     guardian_mesh_server::{GuardianMesh, GuardianMeshServer},
     EvaluateRequest, EvaluateResponse, AuditProof,
@@ -42,10 +42,10 @@ pub struct GuardianMeshService {
 }
 
 impl GuardianMeshService {
-    pub fn new(config: Config) -> Self {
-        let (sk, vk) = generate_keypair();
+    pub fn new(config: Config) -> Result<Self, String> {
+        let (sk, vk) = load_or_generate_signing_key(config.keys_dir())?;
         let vault = VaultEnclave::new(10_000, config.audit_dir());
-        Self {
+        Ok(Self {
             bus: Arc::new(RwLock::new(HandshakeBus::new(&config.handshake_secret))),
             vault: Arc::new(RwLock::new(vault)),
             policy: Arc::new(RwLock::new(PolicyEngine::new())),
@@ -53,7 +53,7 @@ impl GuardianMeshService {
             signing_key: sk,
             verifying_key: vk,
             config,
-        }
+        })
     }
 }
 
@@ -188,11 +188,13 @@ impl GuardianMesh for GuardianMeshService {
         // WO-2: Protocol Firewall now enforces PF-1..PF-18 per session.
         // Global counters are no longer tracked; each session has its own
         // nonce window and rate limiter state.
+        let fingerprint = compute_fingerprint(&self.verifying_key);
         let response = HealthResponse {
             status: ServingStatus::Serving.into(),
             enclave_health,
             protocol_firewall_rules_passed: 18, // All PF rules are now enforced
             protocol_firewall_rules_total: 18,
+            signing_key_fingerprint: fingerprint,
         };
 
         Ok(Response::new(response))
@@ -255,7 +257,13 @@ fn real_main() {
             .parse()
             .expect("invalid bind address");
 
-        let service = GuardianMeshService::new(config);
+        let service = match GuardianMeshService::new(config) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("FATAL: {}", e);
+                std::process::exit(1);
+            }
+        };
 
         println!("Guardian Mesh daemon listening on {}", addr);
 
@@ -298,7 +306,8 @@ mod tests {
         let mut config = Config::default();
         config.workspace_dir = dir.path().join("ws").to_string_lossy().into_owned();
         config.output_dir = dir.path().join("out").to_string_lossy().into_owned();
-        (GuardianMeshService::new(config), dir)
+        config.ensure_dirs().unwrap();
+        (GuardianMeshService::new(config).unwrap(), dir)
     }
 
     async fn open_session(
@@ -420,5 +429,92 @@ mod tests {
         let req = evaluate_request(&service, &session.session_id, &sealed).await;
         let err = service.evaluate(Request::new(req)).await.unwrap_err();
         assert_eq!(err.code(), tonic::Code::PermissionDenied);
+    }
+
+    #[tokio::test]
+    async fn health_reports_signing_key_fingerprint() {
+        let (service, _dir) = test_service();
+        let resp = service
+            .health(Request::new(HealthRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        
+        // Fingerprint must be 64 lowercase hex chars (SHA-256)
+        assert_eq!(resp.signing_key_fingerprint.len(), 64);
+        assert!(resp.signing_key_fingerprint.chars().all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()));
+        
+        // Must match the manually computed fingerprint
+        let expected = compute_fingerprint(&service.verifying_key);
+        assert_eq!(resp.signing_key_fingerprint, expected);
+    }
+
+    #[tokio::test]
+    async fn persistent_key_proof_verifies_across_instances() {
+        // Create a workspace directory shared by both instances
+        let dir = tempfile::tempdir().unwrap();
+        let ws_path = dir.path().join("ws").to_string_lossy().into_owned();
+        let out_path = dir.path().join("out").to_string_lossy().into_owned();
+        
+        let mut config1 = Config::default();
+        config1.workspace_dir = ws_path.clone();
+        config1.output_dir = out_path.clone();
+        config1.ensure_dirs().unwrap();
+
+        // First instance: generate proof
+        let service1 = GuardianMeshService::new(config1).unwrap();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service1, &vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service1, &session.session_id, &sealed).await;
+        let resp1 = service1
+            .evaluate(Request::new(req))
+            .await
+            .unwrap()
+            .into_inner();
+        let proof_envelope = resp1.proof_envelope.unwrap();
+
+        // Second instance: verify the proof from the first
+        let mut config2 = Config::default();
+        config2.workspace_dir = ws_path;
+        config2.output_dir = out_path;
+        let service2 = GuardianMeshService::new(config2).unwrap();
+        let verify_resp = service2
+            .verify_proof(Request::new(VerifyProofRequest {
+                proof_envelope: Some(proof_envelope.clone()),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        
+        assert!(verify_resp.valid, "proof should verify: {}", verify_resp.reason);
+
+        // Fingerprints must match
+        let fp1 = service1.health(Request::new(HealthRequest {})).await.unwrap().into_inner().signing_key_fingerprint;
+        let fp2 = service2.health(Request::new(HealthRequest {})).await.unwrap().into_inner().signing_key_fingerprint;
+        assert_eq!(fp1, fp2);
+    }
+
+    #[tokio::test]
+    async fn corrupt_signing_key_causes_startup_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = Config::default();
+        config.workspace_dir = dir.path().join("ws").to_string_lossy().into_owned();
+        config.output_dir = dir.path().join("out").to_string_lossy().into_owned();
+        config.ensure_dirs().unwrap();
+
+        // Write a corrupt key file
+        let key_path = config.keys_dir().join("daemon_signing_key.bin");
+        std::fs::write(&key_path, b"this is corrupt data").unwrap();
+
+        // Service creation must fail
+        let result = GuardianMeshService::new(config);
+        match result {
+            Ok(_) => panic!("expected service creation to fail with corrupt key"),
+            Err(err) => {
+                assert!(err.contains("FATAL"));
+                assert!(err.contains("invalid length"));
+            }
+        }
     }
 }
