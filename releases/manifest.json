@@ -250,5 +250,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-16T11:08:28-06:00",
     "message": "license: relicense Guardian Mesh to Apache 2.0 + Payment Rider (#38)"
+  },
+  {
+    "release": 33,
+    "tag": "release/v33",
+    "previous_tag": "release/v32",
+    "sha": "8eb07c6a51ea4dd3e3190e2bec588583c50df43a",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-16T23:19:18-06:00",
+    "message": "docs(nightly): fix WO-7 licensing drift (Apache 2.0 + Payment Rider) (#39)"
   }
 ]
