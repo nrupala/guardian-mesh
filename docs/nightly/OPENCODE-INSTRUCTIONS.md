@@ -118,7 +118,8 @@ then the minimal implementation.
 different enclave set, says "License: MIT", and lists audit logging and
 the policy engine as not implemented — all superseded. Rewrite it to the
 shipped Sentinel/Gatekeeper/Witness/Arbiter/Vault design and the
-AGPL-core/Apache-interface licensing. Remove the duplicate
+Apache License 2.0 + Payment Rider licensing (2026-10-16). Remove
+the duplicate
 `specs/GUARDIAN_MESH_GAP_ANALYSIS (1).md` (byte-identical copy).
 
 ### WO-8 (P2) Fuzz the boundaries (hardening rule H6)
