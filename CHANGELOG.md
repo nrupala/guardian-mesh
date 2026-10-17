@@ -145,6 +145,30 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   pf14_*, pf15_*, pf16_*, pf17_*, pf18_*) plus service-level tests
   confirming valid envelopes evaluate and PF violations are denied.
 - Version bumped `0.3.0` → `0.4.0` (`VERSION`, `guardian-meshd/Cargo.toml`).
+- The daemon now persists its ML-DSA-65 signing key across restarts
+  (WO-3). On first start, the daemon generates a fresh keypair and
+  writes the seed to `{workspace}/keys/daemon_signing_key.bin` with
+  0600 permissions on Unix (restrictive file permissions on all
+  platforms). On later starts, it loads the existing seed and
+  reconstructs the same keypair, so proofs issued across restarts
+  verify against the same public key. If the stored key file exists
+  but is corrupt or the wrong length, the daemon fails closed: it
+  exits with a clear FATAL log naming the problem and never silently
+  regenerates over an existing file (silently changing the signing
+  identity would invalidate outstanding proofs and must be an operator
+  decision). The Health RPC now reports the signing-key fingerprint
+  (the lowercase hex SHA-256 of the daemon's ML-DSA-65 public key,
+  never the key material itself) in the new `signing_key_fingerprint`
+  field. Operators can back up the key by copying
+  `daemon_signing_key.bin`; to rotate, stop the daemon, move the old
+  key aside, and restart (proofs issued under the old key will stop
+  verifying against the new fingerprint, which is expected behavior).
+  Test suite: 64 tests (was 58), including tests that a key generated
+  on first start is loaded byte-identical on second start, that the
+  fingerprint equals the SHA-256 of the public key, that a proof from
+  one instance verifies against a second instance on the same
+  workspace, and that a corrupt key triggers startup failure.
+- Version bumped `0.4.0` → `0.5.0` (`VERSION`, `guardian-meshd/Cargo.toml`).
 
 ### Notes
 - No deploy target found (no wrangler/Pages/deploy script; Android APK is a
