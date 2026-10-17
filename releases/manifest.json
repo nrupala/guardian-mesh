@@ -259,5 +259,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-16T23:19:18-06:00",
     "message": "docs(nightly): fix WO-7 licensing drift (Apache 2.0 + Payment Rider) (#39)"
+  },
+  {
+    "release": 34,
+    "tag": "release/v34",
+    "previous_tag": "release/v33",
+    "sha": "5ecf90742e3746dede41e86d466905ccf85aaa62",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-16T23:58:10-06:00",
+    "message": "feat(daemon): persistent ML-DSA-65 signing key with Health fingerprint (WO-3) \u2014 v0.5.0 (#40)"
   }
 ]
