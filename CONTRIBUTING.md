@@ -39,8 +39,8 @@ certifying compliance with the [Developer Certificate of Origin 1.1](https://dev
 
 ## License
 
-Split licensing: Apache-2.0 for the interface, AGPL-3.0-or-later
-for the core — see [LICENSE](LICENSE).
+Apache License 2.0 + AIMLDS Payment Rider for the whole
+repository — see [LICENSE](LICENSE) and [LICENSE-RIDER.md](LICENSE-RIDER.md).
 ## Portfolio certification (2026-10-05)
 
 Standing process additions, alongside the governance above:
