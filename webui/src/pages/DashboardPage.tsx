@@ -11,6 +11,7 @@ import {
   runEvaluation,
   sessionState,
   verifyProofEnvelope,
+  fetchAuditLog,
   base64ToBytes,
   bytesToBase64,
 } from "../lib/gmClient"
@@ -22,6 +23,7 @@ import type {
   EvaluateResponse,
   HealthResponse,
   VerifyProofResponse,
+  ReadAuditLogResponse,
 } from "../gen/guardian_mesh_pb"
 
 export function DashboardPage() {
@@ -75,7 +77,6 @@ function DemoPanel() {
         <section className="dash-section">
           <h2>Quick Actions</h2>
           <div className="action-grid">
-            <button className="action-btn" disabled>View Audit Log</button>
             <button className="action-btn" disabled>Run Evaluation</button>
             <button className="action-btn" disabled>Verify Proof</button>
             <button className="action-btn" disabled>Health Check</button>
@@ -139,8 +140,13 @@ function LivePanel() {
   const [verifyResult, setVerifyResult] = useState<VerifyProofResponse | null>(null)
   const [verifyError, setVerifyError] = useState<string | null>(null)
 
+  const [auditLog, setAuditLog] = useState<ReadAuditLogResponse | null>(null)
+  const [auditLoading, setAuditLoading] = useState(false)
+  const [auditError, setAuditError] = useState<string | null>(null)
+
   const evalRef = useRef<HTMLElement | null>(null)
   const verifyRef = useRef<HTMLElement | null>(null)
+  const auditRef = useRef<HTMLElement | null>(null)
 
   const doHealth = useCallback(async () => {
     setCheckingHealth(true)
@@ -228,6 +234,19 @@ function LivePanel() {
       return
     }
     await doVerify(envelope)
+  }
+
+  const doFetchAuditLog = async () => {
+    setAuditLoading(true)
+    setAuditError(null)
+    try {
+      const log = await fetchAuditLog(client)
+      setAuditLog(log)
+    } catch (e) {
+      setAuditError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAuditLoading(false)
+    }
   }
 
   const sess = sessionState()
@@ -321,6 +340,14 @@ function LivePanel() {
             <button
               className="action-btn"
               onClick={() =>
+                auditRef.current?.scrollIntoView({ behavior: "smooth" })
+              }
+            >
+              View Audit Log
+            </button>
+            <button
+              className="action-btn"
+              onClick={() =>
                 evalRef.current?.scrollIntoView({ behavior: "smooth" })
               }
             >
@@ -339,6 +366,81 @@ function LivePanel() {
             Every action below talks to the daemon when you press it — nothing
             is pre-computed.
           </p>
+        </section>
+
+        <section className="dash-section" ref={auditRef}>
+          <h2>Audit Log</h2>
+          <p className="hint">
+            The audit trail lists every evaluation the daemon has made, in
+            append order, with chain verification status showing whether the
+            log is intact.
+          </p>
+          <button
+            className="action-btn"
+            onClick={() => void doFetchAuditLog()}
+            disabled={auditLoading}
+          >
+            {auditLoading ? "Loading…" : "Load Audit Log"}
+          </button>
+          {auditLog && (
+            <div className="audit-log-container">
+              {auditLog.verification && (
+                <div
+                  className={`verdict-panel ${auditLog.verification.verified ? "verdict-allow" : "verdict-block"}`}
+                >
+                  <p className="verdict-word">
+                    Chain: {auditLog.verification.verified ? "VERIFIED" : "BROKEN"}
+                  </p>
+                  <p>{auditLog.verification.statusMessage}</p>
+                  <p className="status-sub">
+                    Entries checked: {auditLog.verification.entriesChecked}
+                    {!auditLog.verification.verified &&
+                      Number(auditLog.verification.firstBreakPosition) > 0 &&
+                      ` · First break at position ${auditLog.verification.firstBreakPosition}`}
+                  </p>
+                </div>
+              )}
+              {auditLog.entries.length === 0 ? (
+                <p className="hint">No entries in the audit log yet.</p>
+              ) : (
+                <div className="audit-entries">
+                  {auditLog.entries.map((entry) => (
+                    <div key={entry.sequence} className="audit-entry card">
+                      <div className="audit-entry-header">
+                        <span className="audit-seq">#{entry.sequence}</span>
+                        <span className={`verdict-tag verdict-${entry.verdict.toLowerCase()}`}>
+                          {entry.verdict}
+                        </span>
+                        <span className="audit-timestamp">
+                          {new Date(Number(entry.timestamp) * 1000).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="audit-entry-body">
+                        <p>
+                          <strong>Action:</strong> {entry.actionId}
+                        </p>
+                        <p>
+                          <strong>Reason:</strong> {entry.reason || "(none)"}
+                        </p>
+                        <p className="status-sub">
+                          Chain: {entry.enclaveChain}
+                        </p>
+                        <p className="status-sub">
+                          Hash: {entry.chainHash.slice(0, 16)}…
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {auditError && (
+            <div className="verdict-panel verdict-block">
+              <p className="verdict-word">Could not load audit log</p>
+              <p>{auditError}</p>
+            </div>
+          )}
         </section>
 
         <section className="dash-section" ref={evalRef}>

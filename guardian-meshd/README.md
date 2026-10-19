@@ -102,12 +102,14 @@ the daemon after rotation.
 
 ## Protocol
 
-`proto/guardian_mesh.proto` defines three RPCs:
+`proto/guardian_mesh.proto` defines five RPCs:
 
 ```proto
-rpc Evaluate    (EvaluateRequest)    returns (EvaluateResponse)
-rpc VerifyProof (VerifyProofRequest) returns (VerifyProofResponse)
-rpc Health      (HealthRequest)      returns (HealthResponse)
+rpc Evaluate      (EvaluateRequest)      returns (EvaluateResponse)
+rpc VerifyProof   (VerifyProofRequest)   returns (VerifyProofResponse)
+rpc Health        (HealthRequest)        returns (HealthResponse)
+rpc Handshake     (HandshakeRequest)     returns (HandshakeResponse)
+rpc ReadAuditLog  (ReadAuditLogRequest)  returns (ReadAuditLogResponse)
 ```
 
 - **Evaluate** runs the full pipeline and returns `ALLOW | BLOCK | THROTTLE | ESCALATE`
@@ -117,6 +119,83 @@ rpc Health      (HealthRequest)      returns (HealthResponse)
   daemon's verifying key.
 - **Health** reports `SERVING` plus per-enclave status and protocol-firewall
   rule pass/total counters.
+- **Handshake** opens a session and binds the caller's ML-DSA-65 public key to it.
+  Returns session ID and HMAC key for subsequent `Evaluate` calls.
+- **ReadAuditLog** returns the Vault's hash-chained audit trail in append order
+  plus chain verification status.
+
+## Audit Trail Read Path
+
+The Vault appends every evaluation to a hash-chained audit log stored on disk
+(`{GUARDIAN_MESH_WORKSPACE}/audit/audit_<day>.jsonl`). The `ReadAuditLog` RPC
+exposes a read-only view of this log.
+
+### What it returns
+
+- **Audit entries** in append order, each carrying:
+  - `sequence` — position in the log (0-indexed)
+  - `timestamp` — Unix seconds when the entry was sealed
+  - `action_id` — hex-encoded action type
+  - `verdict` — the Arbiter's decision (`ALLOW`, `BLOCK`, etc.)
+  - `enclave_chain` — the full enclave chain that processed this action
+  - `chain_hash` — the stored hash for this entry (SHA-256 of prev_hash ||
+    timestamp || action_id || verdict || enclave_chain || reason)
+  - `reason` — the verdict reason or error detail
+
+- **Chain verification status** computed by re-walking the chain at read time:
+  - `verified` — `true` if the chain is intact, `false` if any entry breaks it
+  - `entries_checked` — how many entries were verified
+  - `first_break_position` — if not verified, the 0-indexed position of the
+    first broken entry (0 if verified)
+  - `status_message` — human-readable summary
+
+### What chain verification proves
+
+Chain verification **proves** that the log has not been altered since the daemon
+wrote it:
+
+- Each entry's stored `chain_hash` is re-computed from the entry's own data plus
+  the previous entry's hash, starting from a known genesis hash (64 zeros).
+- If every computed hash matches its stored value, the chain is intact — no
+  entry was inserted, deleted, or modified.
+- If any computed hash does not match, verification reports the **first** broken
+  position, not a generic failure.
+
+Chain verification **does not prove**:
+
+- That the daemon itself was not compromised when it wrote the log (a
+  compromised daemon could write a valid but dishonest chain).
+- That the log file was not replaced wholesale (chain verification checks
+  internal consistency, not authenticity of the log's origin).
+- That entries represent real evaluations (the RPC reads what the Vault wrote;
+  it does not re-evaluate actions).
+
+### What to do when verification reports a break
+
+A broken chain means the log file was edited after the daemon wrote it. This is
+a **security incident**:
+
+1. **Do not trust the log contents.** Any entry could have been altered,
+   inserted, or deleted.
+2. **Preserve the log file** for forensic analysis (copy it to a secure
+   location; do not modify or delete it).
+3. **Investigate** who had write access to `{GUARDIAN_MESH_WORKSPACE}/audit/`
+   and when the modification occurred.
+4. **Check backups** (if any) for an intact log prior to the break.
+5. **Rotate the daemon's workspace** (move the current workspace aside, start
+   fresh) if the integrity of the entire workspace is suspect.
+
+The `first_break_position` tells you where to start looking: the entry at that
+position is the first one that does not match its expected chain hash. The
+break could be at that entry itself or earlier (if an earlier entry was edited,
+all subsequent hashes would also fail).
+
+### Read-only guarantee
+
+The `ReadAuditLog` RPC and the live panel's audit view **do not mutate** the
+log, the chain, or any daemon state. They are read-only operations. If the log
+file is missing or unreadable, the RPC returns a clear error distinguishing
+"log exists and is empty" from "log file is unreadable."
 
 ## Protocol Firewall (18 rules)
 

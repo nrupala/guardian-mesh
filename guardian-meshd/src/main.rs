@@ -24,6 +24,8 @@ use guardian_meshd::proto::{
     VerifyProofRequest, VerifyProofResponse,
     HealthRequest, HealthResponse,
     HandshakeRequest, HandshakeResponse,
+    ReadAuditLogRequest, ReadAuditLogResponse,
+    AuditLogEntry, ChainVerificationStatus,
     SealedEnvelope as ProtoSealedEnvelope,
     health_response::ServingStatus,
 };
@@ -232,6 +234,47 @@ impl GuardianMesh for GuardianMeshService {
             session_id: session.session_id,
             session_key: session.session_key.to_vec(),
             ttl_seconds: SESSION_TTL_SECS,
+        }))
+    }
+
+    async fn read_audit_log(
+        &self,
+        _request: Request<ReadAuditLogRequest>,
+    ) -> Result<Response<ReadAuditLogResponse>, Status> {
+        let vault = self.vault.read().await;
+        
+        // Read all entries from the audit log files
+        let entries = vault.read_audit_log()
+            .map_err(|e| Status::internal(format!("Failed to read audit log: {}", e)))?;
+        
+        // Verify the chain
+        let verification = vault.verify_chain(&entries);
+        
+        // Convert to proto format
+        let proto_entries: Vec<AuditLogEntry> = entries
+            .iter()
+            .enumerate()
+            .map(|(seq, entry)| AuditLogEntry {
+                sequence: seq as u64,
+                timestamp: entry.timestamp,
+                action_id: entry.action_id.clone(),
+                verdict: entry.verdict.clone(),
+                enclave_chain: entry.enclave_chain.clone(),
+                chain_hash: entry.chain_hash.clone(),
+                reason: entry.reason.clone(),
+            })
+            .collect();
+        
+        let proto_verification = ChainVerificationStatus {
+            verified: verification.verified,
+            entries_checked: verification.entries_checked,
+            first_break_position: verification.first_break_position.unwrap_or(0),
+            status_message: verification.status_message,
+        };
+        
+        Ok(Response::new(ReadAuditLogResponse {
+            entries: proto_entries,
+            verification: Some(proto_verification),
         }))
     }
 }
@@ -516,5 +559,76 @@ mod tests {
                 assert!(err.contains("invalid length"));
             }
         }
+    }
+
+    #[tokio::test]
+    async fn read_audit_log_returns_entries_from_evaluations() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        
+        // Run 3 evaluations
+        for _ in 0..3 {
+            let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+            let req = evaluate_request(&service, &session.session_id, &sealed).await;
+            let _ = service.evaluate(Request::new(req)).await.unwrap();
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        }
+        
+        // Read the audit log
+        let resp = service
+            .read_audit_log(Request::new(ReadAuditLogRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        
+        assert_eq!(resp.entries.len(), 3);
+        assert!(resp.verification.is_some());
+        let verification = resp.verification.unwrap();
+        assert!(verification.verified, "Chain should verify: {}", verification.status_message);
+        assert_eq!(verification.entries_checked, 3);
+    }
+
+    #[tokio::test]
+    async fn read_audit_log_chain_verification_valid() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        
+        // Run evaluations
+        for _ in 0..5 {
+            let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+            let req = evaluate_request(&service, &session.session_id, &sealed).await;
+            let _ = service.evaluate(Request::new(req)).await.unwrap();
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        }
+        
+        let resp = service
+            .read_audit_log(Request::new(ReadAuditLogRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        
+        let verification = resp.verification.unwrap();
+        assert!(verification.verified);
+        assert_eq!(verification.entries_checked, 5);
+        assert_eq!(verification.first_break_position, 0);
+    }
+
+    #[tokio::test]
+    async fn read_audit_log_empty_log() {
+        let (service, _dir) = test_service();
+        
+        let resp = service
+            .read_audit_log(Request::new(ReadAuditLogRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        
+        assert_eq!(resp.entries.len(), 0);
+        let verification = resp.verification.unwrap();
+        assert!(verification.verified);
+        assert_eq!(verification.entries_checked, 0);
+        assert!(verification.status_message.contains("empty"));
     }
 }

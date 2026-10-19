@@ -4,7 +4,7 @@
 // @ts-nocheck
 //
 // Copyright (c) 2026 Nrupal Akolkar
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //
 import { ServiceType } from "@protobuf-ts/runtime-rpc";
 import type { BinaryWriteOptions } from "@protobuf-ts/runtime";
@@ -237,6 +237,10 @@ export interface HealthResponse {
      * @generated from protobuf field: uint32 protocol_firewall_rules_total = 4
      */
     protocolFirewallRulesTotal: number;
+    /**
+     * @generated from protobuf field: string signing_key_fingerprint = 5
+     */
+    signingKeyFingerprint: string; // SHA-256 of the daemon's ML-DSA-65 public key (lowercase hex)
 }
 /**
  * @generated from protobuf enum guardian_mesh.HealthResponse.ServingStatus
@@ -289,6 +293,80 @@ export interface AuditProof {
      * @generated from protobuf field: bytes merkle_root = 16
      */
     merkleRoot: Uint8Array; // Optional — for batch audit verification
+}
+// ── ReadAuditLog RPC ──────────────────────
+
+/**
+ * @generated from protobuf message guardian_mesh.ReadAuditLogRequest
+ */
+export interface ReadAuditLogRequest {
+}
+/**
+ * @generated from protobuf message guardian_mesh.ReadAuditLogResponse
+ */
+export interface ReadAuditLogResponse {
+    /**
+     * @generated from protobuf field: repeated guardian_mesh.AuditLogEntry entries = 1
+     */
+    entries: AuditLogEntry[];
+    /**
+     * @generated from protobuf field: guardian_mesh.ChainVerificationStatus verification = 2
+     */
+    verification?: ChainVerificationStatus;
+}
+/**
+ * @generated from protobuf message guardian_mesh.AuditLogEntry
+ */
+export interface AuditLogEntry {
+    /**
+     * @generated from protobuf field: uint64 sequence = 1
+     */
+    sequence: string; // Position in the log (0-indexed)
+    /**
+     * @generated from protobuf field: uint64 timestamp = 2
+     */
+    timestamp: string; // Unix seconds
+    /**
+     * @generated from protobuf field: string action_id = 3
+     */
+    actionId: string; // Hex-encoded action type
+    /**
+     * @generated from protobuf field: string verdict = 4
+     */
+    verdict: string; // ALLOW, BLOCK, etc.
+    /**
+     * @generated from protobuf field: string enclave_chain = 5
+     */
+    enclaveChain: string; // Full chain as stored
+    /**
+     * @generated from protobuf field: string chain_hash = 6
+     */
+    chainHash: string; // The stored chain hash for this entry
+    /**
+     * @generated from protobuf field: string reason = 7
+     */
+    reason: string; // Verdict reason/detail
+}
+/**
+ * @generated from protobuf message guardian_mesh.ChainVerificationStatus
+ */
+export interface ChainVerificationStatus {
+    /**
+     * @generated from protobuf field: bool verified = 1
+     */
+    verified: boolean; // true if the chain is intact
+    /**
+     * @generated from protobuf field: uint64 entries_checked = 2
+     */
+    entriesChecked: string; // How many entries were verified
+    /**
+     * @generated from protobuf field: uint64 first_break_position = 3
+     */
+    firstBreakPosition: string; // If not verified, position of first break (0-indexed); 0 if verified
+    /**
+     * @generated from protobuf field: string status_message = 4
+     */
+    statusMessage: string; // Human-readable status
 }
 // @generated message type with reflection information, may provide speed optimized methods
 class SealedEnvelope$Type extends MessageType<SealedEnvelope> {
@@ -943,7 +1021,8 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
             { no: 1, name: "status", kind: "enum", T: () => ["guardian_mesh.HealthResponse.ServingStatus", HealthResponse_ServingStatus] },
             { no: 2, name: "enclave_health", kind: "map", K: 9 /*ScalarType.STRING*/, V: { kind: "scalar", T: 9 /*ScalarType.STRING*/ } },
             { no: 3, name: "protocol_firewall_rules_passed", kind: "scalar", T: 13 /*ScalarType.UINT32*/ },
-            { no: 4, name: "protocol_firewall_rules_total", kind: "scalar", T: 13 /*ScalarType.UINT32*/ }
+            { no: 4, name: "protocol_firewall_rules_total", kind: "scalar", T: 13 /*ScalarType.UINT32*/ },
+            { no: 5, name: "signing_key_fingerprint", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<HealthResponse>): HealthResponse {
@@ -952,6 +1031,7 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
         message.enclaveHealth = {};
         message.protocolFirewallRulesPassed = 0;
         message.protocolFirewallRulesTotal = 0;
+        message.signingKeyFingerprint = "";
         if (value !== undefined)
             reflectionMergePartial<HealthResponse>(this, message, value);
         return message;
@@ -972,6 +1052,9 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
                     break;
                 case /* uint32 protocol_firewall_rules_total */ 4:
                     message.protocolFirewallRulesTotal = reader.uint32();
+                    break;
+                case /* string signing_key_fingerprint */ 5:
+                    message.signingKeyFingerprint = reader.string();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -1013,6 +1096,9 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
         /* uint32 protocol_firewall_rules_total = 4; */
         if (message.protocolFirewallRulesTotal !== 0)
             writer.tag(4, WireType.Varint).uint32(message.protocolFirewallRulesTotal);
+        /* string signing_key_fingerprint = 5; */
+        if (message.signingKeyFingerprint !== "")
+            writer.tag(5, WireType.LengthDelimited).string(message.signingKeyFingerprint);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -1110,6 +1196,264 @@ class AuditProof$Type extends MessageType<AuditProof> {
  * @generated MessageType for protobuf message guardian_mesh.AuditProof
  */
 export const AuditProof = new AuditProof$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class ReadAuditLogRequest$Type extends MessageType<ReadAuditLogRequest> {
+    constructor() {
+        super("guardian_mesh.ReadAuditLogRequest", []);
+    }
+    create(value?: PartialMessage<ReadAuditLogRequest>): ReadAuditLogRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        if (value !== undefined)
+            reflectionMergePartial<ReadAuditLogRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ReadAuditLogRequest): ReadAuditLogRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ReadAuditLogRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.ReadAuditLogRequest
+ */
+export const ReadAuditLogRequest = new ReadAuditLogRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class ReadAuditLogResponse$Type extends MessageType<ReadAuditLogResponse> {
+    constructor() {
+        super("guardian_mesh.ReadAuditLogResponse", [
+            { no: 1, name: "entries", kind: "message", repeat: 2 /*RepeatType.UNPACKED*/, T: () => AuditLogEntry },
+            { no: 2, name: "verification", kind: "message", T: () => ChainVerificationStatus }
+        ]);
+    }
+    create(value?: PartialMessage<ReadAuditLogResponse>): ReadAuditLogResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.entries = [];
+        if (value !== undefined)
+            reflectionMergePartial<ReadAuditLogResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ReadAuditLogResponse): ReadAuditLogResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* repeated guardian_mesh.AuditLogEntry entries */ 1:
+                    message.entries.push(AuditLogEntry.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                case /* guardian_mesh.ChainVerificationStatus verification */ 2:
+                    message.verification = ChainVerificationStatus.internalBinaryRead(reader, reader.uint32(), options, message.verification);
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ReadAuditLogResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* repeated guardian_mesh.AuditLogEntry entries = 1; */
+        for (let i = 0; i < message.entries.length; i++)
+            AuditLogEntry.internalBinaryWrite(message.entries[i], writer.tag(1, WireType.LengthDelimited).fork(), options).join();
+        /* guardian_mesh.ChainVerificationStatus verification = 2; */
+        if (message.verification)
+            ChainVerificationStatus.internalBinaryWrite(message.verification, writer.tag(2, WireType.LengthDelimited).fork(), options).join();
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.ReadAuditLogResponse
+ */
+export const ReadAuditLogResponse = new ReadAuditLogResponse$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class AuditLogEntry$Type extends MessageType<AuditLogEntry> {
+    constructor() {
+        super("guardian_mesh.AuditLogEntry", [
+            { no: 1, name: "sequence", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 2, name: "timestamp", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 3, name: "action_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 4, name: "verdict", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 5, name: "enclave_chain", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 6, name: "chain_hash", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 7, name: "reason", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<AuditLogEntry>): AuditLogEntry {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.sequence = "0";
+        message.timestamp = "0";
+        message.actionId = "";
+        message.verdict = "";
+        message.enclaveChain = "";
+        message.chainHash = "";
+        message.reason = "";
+        if (value !== undefined)
+            reflectionMergePartial<AuditLogEntry>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: AuditLogEntry): AuditLogEntry {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* uint64 sequence */ 1:
+                    message.sequence = reader.uint64().toString();
+                    break;
+                case /* uint64 timestamp */ 2:
+                    message.timestamp = reader.uint64().toString();
+                    break;
+                case /* string action_id */ 3:
+                    message.actionId = reader.string();
+                    break;
+                case /* string verdict */ 4:
+                    message.verdict = reader.string();
+                    break;
+                case /* string enclave_chain */ 5:
+                    message.enclaveChain = reader.string();
+                    break;
+                case /* string chain_hash */ 6:
+                    message.chainHash = reader.string();
+                    break;
+                case /* string reason */ 7:
+                    message.reason = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: AuditLogEntry, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* uint64 sequence = 1; */
+        if (message.sequence !== "0")
+            writer.tag(1, WireType.Varint).uint64(message.sequence);
+        /* uint64 timestamp = 2; */
+        if (message.timestamp !== "0")
+            writer.tag(2, WireType.Varint).uint64(message.timestamp);
+        /* string action_id = 3; */
+        if (message.actionId !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.actionId);
+        /* string verdict = 4; */
+        if (message.verdict !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.verdict);
+        /* string enclave_chain = 5; */
+        if (message.enclaveChain !== "")
+            writer.tag(5, WireType.LengthDelimited).string(message.enclaveChain);
+        /* string chain_hash = 6; */
+        if (message.chainHash !== "")
+            writer.tag(6, WireType.LengthDelimited).string(message.chainHash);
+        /* string reason = 7; */
+        if (message.reason !== "")
+            writer.tag(7, WireType.LengthDelimited).string(message.reason);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.AuditLogEntry
+ */
+export const AuditLogEntry = new AuditLogEntry$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class ChainVerificationStatus$Type extends MessageType<ChainVerificationStatus> {
+    constructor() {
+        super("guardian_mesh.ChainVerificationStatus", [
+            { no: 1, name: "verified", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 2, name: "entries_checked", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 3, name: "first_break_position", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 4, name: "status_message", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ChainVerificationStatus>): ChainVerificationStatus {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.verified = false;
+        message.entriesChecked = "0";
+        message.firstBreakPosition = "0";
+        message.statusMessage = "";
+        if (value !== undefined)
+            reflectionMergePartial<ChainVerificationStatus>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ChainVerificationStatus): ChainVerificationStatus {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* bool verified */ 1:
+                    message.verified = reader.bool();
+                    break;
+                case /* uint64 entries_checked */ 2:
+                    message.entriesChecked = reader.uint64().toString();
+                    break;
+                case /* uint64 first_break_position */ 3:
+                    message.firstBreakPosition = reader.uint64().toString();
+                    break;
+                case /* string status_message */ 4:
+                    message.statusMessage = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ChainVerificationStatus, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* bool verified = 1; */
+        if (message.verified !== false)
+            writer.tag(1, WireType.Varint).bool(message.verified);
+        /* uint64 entries_checked = 2; */
+        if (message.entriesChecked !== "0")
+            writer.tag(2, WireType.Varint).uint64(message.entriesChecked);
+        /* uint64 first_break_position = 3; */
+        if (message.firstBreakPosition !== "0")
+            writer.tag(3, WireType.Varint).uint64(message.firstBreakPosition);
+        /* string status_message = 4; */
+        if (message.statusMessage !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.statusMessage);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.ChainVerificationStatus
+ */
+export const ChainVerificationStatus = new ChainVerificationStatus$Type();
 /**
  * @generated ServiceType for protobuf service guardian_mesh.GuardianMesh
  */
@@ -1117,5 +1461,6 @@ export const GuardianMesh = new ServiceType("guardian_mesh.GuardianMesh", [
     { name: "Evaluate", options: {}, I: EvaluateRequest, O: EvaluateResponse },
     { name: "VerifyProof", options: {}, I: VerifyProofRequest, O: VerifyProofResponse },
     { name: "Health", options: {}, I: HealthRequest, O: HealthResponse },
-    { name: "Handshake", options: {}, I: HandshakeRequest, O: HandshakeResponse }
+    { name: "Handshake", options: {}, I: HandshakeRequest, O: HandshakeResponse },
+    { name: "ReadAuditLog", options: {}, I: ReadAuditLogRequest, O: ReadAuditLogResponse }
 ]);
