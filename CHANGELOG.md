@@ -29,6 +29,15 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
   read path RPC, what chain verification proves and does not prove, and
   operator actions when verification reports a break.
 
+- Release gate: **PASS WITH FINDINGS** (2026-10-19, pack
+  `release-gate-runs/guardian-mesh-wo4-2026-10-18/`). Wright-verified
+  independently of the build lane: cargo 78/78, webui build + lint
+  green, tamper/legacy/malformed-hash/mixed-chain probes all passing.
+  The gate's fix loop closed F1 (verify panic on a malformed stored
+  hash) and F2 (pre-0.6.0 entries falsely reporting a break) on this
+  branch before merge. NOT RUN: Kali/Arch benches (not yet built),
+  dependency-vuln scan, real-browser panel click-through.
+
 ### Changed
 - Version bumped `0.5.0` → `0.6.0` (`VERSION`, `guardian-meshd/Cargo.toml`).
 - Audit chain verification now accepts both pre-0.6.0 legacy entries (which verify only over action_id, verdict, timestamp) and 0.6.0+ fully-chained entries (which cover all fields including reason and enclave_chain). Mixed logs verify correctly.
