@@ -31,6 +31,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Changed
 - Version bumped `0.5.0` → `0.6.0` (`VERSION`, `guardian-meshd/Cargo.toml`).
+- Audit chain verification now accepts both pre-0.6.0 legacy entries (which verify only over action_id, verdict, timestamp) and 0.6.0+ fully-chained entries (which cover all fields including reason and enclave_chain). Mixed logs verify correctly.
 
 ### Added
 - Portfolio certification rollout: `NOTICE` (attribution); MIT SPDX license

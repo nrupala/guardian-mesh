@@ -395,7 +395,6 @@ function LivePanel() {
                   <p className="status-sub">
                     Entries checked: {auditLog.verification.entriesChecked}
                     {!auditLog.verification.verified &&
-                      Number(auditLog.verification.firstBreakPosition) > 0 &&
                       ` · First break at position ${auditLog.verification.firstBreakPosition}`}
                   </p>
                 </div>

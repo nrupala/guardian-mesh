@@ -161,6 +161,13 @@ wrote it:
 - If any computed hash does not match, verification reports the **first** broken
   position, not a generic failure.
 
+**Note:** Pre-0.6.0 entries verify only over the fields their original digest
+covered (action_id, verdict, timestamp) — their reason and enclave_chain fields
+are not digest-covered. Entries written by 0.6.0+ are fully chain-linked and
+cover all fields (prev_hash || timestamp || action_id || verdict || enclave_chain
+|| reason). Verification accepts both formulas, so logs with a mix of legacy and
+new entries verify correctly.
+
 Chain verification **does not prove**:
 
 - That the daemon itself was not compromised when it wrote the log (a
