@@ -304,5 +304,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-19T01:43:43-06:00",
     "message": "docs(nightly): ledger \u2014 WO-4 shipped as v0.6.0 (#44)"
+  },
+  {
+    "release": 39,
+    "tag": "release/v39",
+    "previous_tag": "release/v38",
+    "sha": "e994d842c0d297d0bb7972be6a3735217f3f4091",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-19T07:27:12-06:00",
+    "message": "feat(daemon): real THROTTLE and ESCALATE verdicts (WO-5) \u2014 v0.7.0 (#45)"
   }
 ]
