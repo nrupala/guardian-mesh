@@ -286,5 +286,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-18T23:20:46-06:00",
     "message": "docs(nightly): pack refresh \u2014 file GMSI-48..52 from the Verdict re-gate 2026-10-17 (#42)"
+  },
+  {
+    "release": 37,
+    "tag": "release/v37",
+    "previous_tag": "release/v36",
+    "sha": "6dc51add43a8575082c7b1caf95fd408fe3a05a1",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-19T01:29:12-06:00",
+    "message": "feat(daemon): audit trail read path with chain verification (WO-4) \u2014 v0.6.0 (#43)"
   }
 ]
