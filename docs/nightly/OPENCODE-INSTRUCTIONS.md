@@ -841,6 +841,43 @@ the laptop checkouts are working copies, never the source of truth.
   stable across a service restart with a pre-restart proof still
   VALID; box E2E 16/16; unauthenticated web check still 302.
   Next: WO-4.
+- 2026-10-19 — WO-4 shipped as v0.6.0 (PRs #42–#44): AuditTrail read
+  path (ReadAuditLog RPC) + live panel audit view; wire-verified
+  against production (316 entries chain-VERIFIED). Gate PASS WITH
+  FINDINGS. (Run detail: the 2026-10-18 nightly run log.)
+- 2026-10-19 — **WO-5 shipped as v0.7.0** (PR #45, merged e994d842):
+  THROTTLE and ESCALATE are real verdicts. PF-18 breaches and a
+  policy-configurable per-session rate (GUARDIAN_MESH_POLICY_THROTTLE_RATE,
+  default 100 msg/s) return verdict THROTTLE with a signed proof —
+  a deliberate behaviour change from WO-2's permission_denied (the
+  box E2E's PF-18 check now asserts THROTTLE verdicts; the old
+  script is kept on the box as box-e2e.mjs.bak-v060).
+  GUARDIAN_MESH_POLICY_ESCALATE_ACTIONS lists action types that
+  require a human (default empty); precedence BLOCK > ESCALATE >
+  ALLOW. Built by the laptop lane (one run, clean); Wright carried
+  by bundle (tree 03c4b91f asserted equal). Wright-verified
+  independently: cargo 85/85; webui build+lint pass; wire proof on
+  the branch build — 115-burst = exactly 100 ALLOW + 15 THROTTLE
+  (proof verifies) under both the policy rate and, with the policy
+  rate raised, PF-18 itself (reason "PF-18 rate limit breach:
+  E_RATE_LIMITED"); policy rate 5 = 5 ALLOW then THROTTLE;
+  ESCALATE for a configured action with a verifying proof, BLOCK
+  precedence intact, unconfigured traffic unchanged. Gate: PASS
+  WITH FINDINGS — F1 scanner tests MUST false-lead (GMSI-6, 4th
+  occurrence; resolved by direct suite evidence); F2 (low) reason
+  attribution at equal defaults shadows PF-18 and the policy reason
+  omits the numeric limit; F3 (low) the lane's THROTTLE test is
+  structural, not a real burst — filed as GMSI-53 (a new verdict
+  path's tests must drive its real trigger in-process); cargo audit
+  NOT RUN (tool absent); Kali/Arch NOT RUN (benches not built).
+  Judgment differential (§7) run: calibration + twins + citation
+  graded PASS with F2 noted. Deployed to guardian.aimlds.org
+  (binary sha256 8e4b9665…, rollback guardian-meshd.bak-v060):
+  production fingerprint unchanged (dd2cf1a3…, the WO-3 identity
+  surviving its second upgrade), production burst served the first
+  15 THROTTLE verdicts with verifying proofs, box E2E 16/16,
+  Access 302 intact. v0.7.0 is a RELEASE CANDIDATE (one-week
+  watched soak). Next: WO-6.
 - 2026-10-18 (nightly) — **Pack refreshed: GMSI-48…52 filed.**
   The only new Guardian Mesh Spec Inputs since the 2026-10-15
   refresh are the five items from the release gate's 2026-10-17
