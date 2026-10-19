@@ -6,6 +6,42 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-19
+
+### Added
+- Audit trail read RPC (`ReadAuditLog`) returns the Vault's hash-chained
+  audit log in append order with chain verification computed at read time.
+  The RPC returns all stored fields (sequence, timestamp, action_id,
+  verdict, enclave_chain, chain_hash, reason) plus a verification status
+  that re-walks the chain from the genesis hash, reports whether the chain
+  is intact, how many entries were checked, and — if broken — the position
+  of the first break. Chain verification is honest: a hand-edited log line
+  causes verification to report the break at that position, never silently
+  repaired or skipped. Empty logs return zero entries with a verified
+  status honestly saying zero entries were checked. Read path is read-only:
+  no mutation of the log or daemon state.
+- Live panel audit view wired to the new RPC. In live mode (builds with
+  `VITE_GUARDIAN_MESH_ENDPOINT` set) the panel fetches and displays audit
+  entries in order plus the chain verification status in plain words (chain
+  verified/broken, entries checked, first break position if any). Demo
+  mode (public site build) keeps working unchanged.
+- Documentation added to `guardian-meshd/README.md` describing the audit
+  read path RPC, what chain verification proves and does not prove, and
+  operator actions when verification reports a break.
+
+- Release gate: **PASS WITH FINDINGS** (2026-10-19, pack
+  `release-gate-runs/guardian-mesh-wo4-2026-10-18/`). Wright-verified
+  independently of the build lane: cargo 78/78, webui build + lint
+  green, tamper/legacy/malformed-hash/mixed-chain probes all passing.
+  The gate's fix loop closed F1 (verify panic on a malformed stored
+  hash) and F2 (pre-0.6.0 entries falsely reporting a break) on this
+  branch before merge. NOT RUN: Kali/Arch benches (not yet built),
+  dependency-vuln scan, real-browser panel click-through.
+
+### Changed
+- Version bumped `0.5.0` → `0.6.0` (`VERSION`, `guardian-meshd/Cargo.toml`).
+- Audit chain verification now accepts both pre-0.6.0 legacy entries (which verify only over action_id, verdict, timestamp) and 0.6.0+ fully-chained entries (which cover all fields including reason and enclave_chain). Mixed logs verify correctly.
+
 ### Added
 - Portfolio certification rollout: `NOTICE` (attribution); MIT SPDX license
   headers on Rust sources, the `.proto` file, and webui sources/config;

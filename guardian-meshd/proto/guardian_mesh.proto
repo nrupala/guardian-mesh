@@ -28,6 +28,10 @@ service GuardianMesh {
   // bearer credential: hold it over an authenticated, encrypted
   // channel only (the daemon is designed to sit behind one).
   rpc Handshake (HandshakeRequest) returns (HandshakeResponse);
+
+  // Read the audit trail and verify its hash chain integrity.
+  // Returns entries in append order plus chain verification status.
+  rpc ReadAuditLog (ReadAuditLogRequest) returns (ReadAuditLogResponse);
 }
 
 // ── Message Types ─────────────────────────
@@ -132,4 +136,30 @@ message AuditProof {
   bytes signature = 4;         // Witness-signed digest
   uint64 timestamp = 5;
   bytes merkle_root = 16;      // Optional — for batch audit verification
+}
+
+// ── ReadAuditLog RPC ──────────────────────
+
+message ReadAuditLogRequest {}
+
+message ReadAuditLogResponse {
+  repeated AuditLogEntry entries = 1;
+  ChainVerificationStatus verification = 2;
+}
+
+message AuditLogEntry {
+  uint64 sequence = 1;       // Position in the log (0-indexed)
+  uint64 timestamp = 2;      // Unix seconds
+  string action_id = 3;      // Hex-encoded action type
+  string verdict = 4;        // ALLOW, BLOCK, etc.
+  string enclave_chain = 5;  // Full chain as stored
+  string chain_hash = 6;     // The stored chain hash for this entry
+  string reason = 7;         // Verdict reason/detail
+}
+
+message ChainVerificationStatus {
+  bool verified = 1;         // true if the chain is intact
+  uint64 entries_checked = 2; // How many entries were verified
+  uint64 first_break_position = 3; // If not verified, position of first break (0-indexed); 0 if verified
+  string status_message = 4; // Human-readable status
 }

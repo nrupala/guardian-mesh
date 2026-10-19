@@ -17,6 +17,7 @@ import type {
   HealthResponse,
   SealedEnvelope,
   VerifyProofResponse,
+  ReadAuditLogResponse,
 } from "../gen/guardian_mesh_pb"
 
 export const DAEMON_ENDPOINT: string | null =
@@ -222,4 +223,10 @@ export async function verifyProofEnvelope(
   proofEnvelope: SealedEnvelope,
 ): Promise<VerifyProofResponse> {
   return client.verifyProof({ proofEnvelope }).response
+}
+
+export async function fetchAuditLog(
+  client: GuardianMeshClient,
+): Promise<ReadAuditLogResponse> {
+  return client.readAuditLog({}).response
 }

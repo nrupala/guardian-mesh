@@ -4,11 +4,13 @@
 // @ts-nocheck
 //
 // Copyright (c) 2026 Nrupal Akolkar
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: AGPL-3.0-or-later
 //
 import type { RpcTransport } from "@protobuf-ts/runtime-rpc";
 import type { ServiceInfo } from "@protobuf-ts/runtime-rpc";
 import { GuardianMesh } from "./guardian_mesh_pb";
+import type { ReadAuditLogResponse } from "./guardian_mesh_pb";
+import type { ReadAuditLogRequest } from "./guardian_mesh_pb";
 import type { HandshakeResponse } from "./guardian_mesh_pb";
 import type { HandshakeRequest } from "./guardian_mesh_pb";
 import type { HealthResponse } from "./guardian_mesh_pb";
@@ -59,6 +61,13 @@ export interface IGuardianMeshClient {
      * @generated from protobuf rpc: Handshake
      */
     handshake(input: HandshakeRequest, options?: RpcOptions): UnaryCall<HandshakeRequest, HandshakeResponse>;
+    /**
+     * Read the audit trail and verify its hash chain integrity.
+     * Returns entries in append order plus chain verification status.
+     *
+     * @generated from protobuf rpc: ReadAuditLog
+     */
+    readAuditLog(input: ReadAuditLogRequest, options?: RpcOptions): UnaryCall<ReadAuditLogRequest, ReadAuditLogResponse>;
 }
 // ──────────────────────────────────────────
 //  Guardian Mesh — gRPC Service Definitions
@@ -115,5 +124,15 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
     handshake(input: HandshakeRequest, options?: RpcOptions): UnaryCall<HandshakeRequest, HandshakeResponse> {
         const method = this.methods[3], opt = this._transport.mergeOptions(options);
         return stackIntercept<HandshakeRequest, HandshakeResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Read the audit trail and verify its hash chain integrity.
+     * Returns entries in append order plus chain verification status.
+     *
+     * @generated from protobuf rpc: ReadAuditLog
+     */
+    readAuditLog(input: ReadAuditLogRequest, options?: RpcOptions): UnaryCall<ReadAuditLogRequest, ReadAuditLogResponse> {
+        const method = this.methods[4], opt = this._transport.mergeOptions(options);
+        return stackIntercept<ReadAuditLogRequest, ReadAuditLogResponse>("unary", this._transport, method, opt, input);
     }
 }
