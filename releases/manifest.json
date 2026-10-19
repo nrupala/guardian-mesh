@@ -313,5 +313,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-19T07:27:12-06:00",
     "message": "feat(daemon): real THROTTLE and ESCALATE verdicts (WO-5) \u2014 v0.7.0 (#45)"
+  },
+  {
+    "release": 40,
+    "tag": "release/v40",
+    "previous_tag": "release/v39",
+    "sha": "738630db66d8ce7032656a6b306b94a35e7a81a5",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-19T07:32:24-06:00",
+    "message": "docs(nightly): ledger \u2014 WO-5 shipped as v0.7.0 (#46)"
   }
 ]
