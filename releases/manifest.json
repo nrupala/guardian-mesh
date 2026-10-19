@@ -277,5 +277,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-17T00:06:54-06:00",
     "message": "docs(nightly): ledger \u2014 WO-3 shipped as v0.5.0 (#41)"
+  },
+  {
+    "release": 36,
+    "tag": "release/v36",
+    "previous_tag": "release/v35",
+    "sha": "2a940a2632c032c98413c7ea4ef37b21a2224e2a",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-18T23:20:46-06:00",
+    "message": "docs(nightly): pack refresh \u2014 file GMSI-48..52 from the Verdict re-gate 2026-10-17 (#42)"
   }
 ]
