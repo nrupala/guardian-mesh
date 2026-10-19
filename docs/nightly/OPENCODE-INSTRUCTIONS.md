@@ -575,6 +575,43 @@ and none becomes a gate MUST until behaviour-proven here.
   tokens stored as lookup keys are hashed at rest by default; GM's
   store inspection flags any table whose key column is itself a
   live capability.
+
+GMSI-48…52 were filed by the release gate's 2026-10-17 independent
+re-gate of Verdict (pack: release-gate-runs/verdict-regate-2026-10-17;
+verdict BLOCKED on F-R1, with the v1.2.2 fix-batch addendum the same
+evening). They queue behind the Part A work orders exactly as
+GMSI-6…47 do, and none becomes a gate MUST until behaviour-proven
+here.
+
+- **GMSI-48 — Served-script parse proof.** (Verdict re-gate F-R1;
+  the verdict.md item 7 there.) GM must be able to prove a served
+  page's scripts PARSE — extract every script from every served
+  page and parse it byte-exact; a green API must never again
+  certify a dead page. (Third fleet occurrence of the dead-page
+  class; also Gate 1's served-script parse + deployed==tree proof.)
+- **GMSI-49 — SSRF literal-spelling + resolution posture.** (Verdict
+  re-gate item 8.) GM's SSRF proof must span the full literal
+  spelling space (IPv6 loopback/ULA/link-local/v4-mapped in both
+  spellings, bracketed forms) and must state each product's
+  resolution-based (DNS→private) posture explicitly:
+  guard-covered, platform-covered, or uncovered.
+- **GMSI-50 — Judgment differential battery.** (Verdict re-gate
+  item 9.) For verdict products, GM must carry a JUDGMENT
+  DIFFERENTIAL battery: direction pairs (payment vs prize, demand
+  vs receipt), brand placement (subdomain label / hyphen label /
+  subdomain-of-brand / path / punycode), cross-surface consistency,
+  and calibration bounds (single weak flag ceiling;
+  canonical-script floor). The fixed owner-case regression set
+  from the Verdict v1.2.1 escape is this battery's first case set.
+- **GMSI-51 — Concurrent fresh-identity rate proof.** (Verdict
+  re-gate item 10.) GM must prove a rate bound from a FRESH
+  identity under CONCURRENCY, not only sequentially from a warm
+  identity.
+- **GMSI-52 — Pattern-coverage canaries.** (Verdict re-gate
+  item 11.) Canonical scam scripts (ransom note, advance-fee,
+  prize lure) in their most common phrasings, including
+  apostrophe/contraction variants — a one-word spelling variant
+  must not flip a verdict class.
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
@@ -804,3 +841,10 @@ the laptop checkouts are working copies, never the source of truth.
   stable across a service restart with a pre-restart proof still
   VALID; box E2E 16/16; unauthenticated web check still 302.
   Next: WO-4.
+- 2026-10-18 (nightly) — **Pack refreshed: GMSI-48…52 filed.**
+  The only new Guardian Mesh Spec Inputs since the 2026-10-15
+  refresh are the five items from the release gate's 2026-10-17
+  independent re-gate of Verdict (served-script parse proof,
+  SSRF spelling/resolution posture, judgment differential
+  battery, concurrent fresh-identity rate proof, pattern-coverage
+  canaries). No work-order order changes: WO-4 remains next.
