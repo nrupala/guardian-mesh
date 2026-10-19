@@ -34,6 +34,13 @@ const RATE_LIMIT_EXTERNAL_MSG_PER_SEC: usize = 100;
 /// Time window for rate limiting (1 second in milliseconds)
 const RATE_LIMIT_WINDOW_MS: u64 = 1_000;
 
+/// Throttle reason for rate limit breaches
+#[derive(Debug, Clone, PartialEq)]
+pub enum ThrottleReason {
+    ProtocolFirewall,
+    PolicyRate,
+}
+
 /// Nonce tracker: sliding window of the last 10,000 nonces per session.
 #[derive(Debug)]
 struct NonceWindow {
@@ -95,14 +102,16 @@ impl RateLimiter {
 #[derive(Debug)]
 struct SessionState {
     nonce_window: NonceWindow,
-    rate_limiter: RateLimiter,
+    rate_limiter_pf18: RateLimiter,
+    rate_limiter_policy: RateLimiter,
 }
 
 impl SessionState {
     fn new() -> Self {
         Self {
             nonce_window: NonceWindow::new(),
-            rate_limiter: RateLimiter::new(),
+            rate_limiter_pf18: RateLimiter::new(),
+            rate_limiter_policy: RateLimiter::new(),
         }
     }
 }
@@ -233,8 +242,11 @@ impl ProtocolFirewall {
         Ok(())
     }
 
-    /// PF-18: Rate limit 100 msg/s per external session.
-    pub fn check_rate_limit(&self, session_id: &str) -> Result<(), String> {
+    /// Check policy-configured per-session rate limit.
+    /// Returns Ok(None) if under limit, Ok(Some(reason)) for THROTTLE verdict.
+    /// WO-5: This is checked BEFORE PF-18, as the design allows the policy rate
+    /// to be lower than PF-18's hard ceiling.
+    pub fn check_policy_rate(&self, session_id: &str, limit: usize) -> Result<Option<ThrottleReason>, String> {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -243,10 +255,27 @@ impl ProtocolFirewall {
         let mut sessions = self.sessions.lock().unwrap();
         let state = sessions.entry(session_id.to_string()).or_insert_with(SessionState::new);
         
-        if !state.rate_limiter.check_rate(now_ms, RATE_LIMIT_EXTERNAL_MSG_PER_SEC) {
-            return Err("PF-18 rate limit rejected: E_RATE_LIMITED".to_string());
+        if !state.rate_limiter_policy.check_rate(now_ms, limit) {
+            return Ok(Some(ThrottleReason::PolicyRate));
         }
-        Ok(())
+        Ok(None)
+    }
+
+    /// PF-18: Rate limit 100 msg/s per external session.
+    /// Returns Ok(None) if under limit, Ok(Some(reason)) for THROTTLE verdict.
+    pub fn check_rate_limit(&self, session_id: &str) -> Result<Option<ThrottleReason>, String> {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        
+        let mut sessions = self.sessions.lock().unwrap();
+        let state = sessions.entry(session_id.to_string()).or_insert_with(SessionState::new);
+        
+        if !state.rate_limiter_pf18.check_rate(now_ms, RATE_LIMIT_EXTERNAL_MSG_PER_SEC) {
+            return Ok(Some(ThrottleReason::ProtocolFirewall));
+        }
+        Ok(None)
     }
 
     /// Clean up expired sessions.
@@ -376,19 +405,19 @@ mod tests {
     fn pf18_rate_limit_accepts_under_limit() {
         let pf = ProtocolFirewall::new();
         for _ in 0..50 {
-            assert!(pf.check_rate_limit("session1").is_ok());
+            let result = pf.check_rate_limit("session1").unwrap();
+            assert_eq!(result, None);
         }
     }
 
     #[test]
-    fn pf18_rate_limit_rejects_over_limit() {
+    fn pf18_rate_limit_returns_throttle_over_limit() {
         let pf = ProtocolFirewall::new();
         for _ in 0..100 {
             pf.check_rate_limit("session1").unwrap();
         }
-        let err = pf.check_rate_limit("session1").unwrap_err();
-        assert!(err.contains("PF-18"));
-        assert!(err.contains("E_RATE_LIMITED"));
+        let result = pf.check_rate_limit("session1").unwrap();
+        assert_eq!(result, Some(ThrottleReason::ProtocolFirewall));
     }
 
     #[test]
@@ -398,7 +427,27 @@ mod tests {
             pf.check_rate_limit("session1").unwrap();
         }
         // session2 should still be able to send
-        assert!(pf.check_rate_limit("session2").is_ok());
+        let result = pf.check_rate_limit("session2").unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn policy_rate_limit_accepts_under_limit() {
+        let pf = ProtocolFirewall::new();
+        for _ in 0..10 {
+            let result = pf.check_policy_rate("session1", 20).unwrap();
+            assert_eq!(result, None);
+        }
+    }
+
+    #[test]
+    fn policy_rate_limit_returns_throttle_over_limit() {
+        let pf = ProtocolFirewall::new();
+        for _ in 0..20 {
+            pf.check_policy_rate("session1", 20).unwrap();
+        }
+        let result = pf.check_policy_rate("session1", 20).unwrap();
+        assert_eq!(result, Some(ThrottleReason::PolicyRate));
     }
 
     #[test]

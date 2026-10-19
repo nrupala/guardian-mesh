@@ -17,15 +17,22 @@ impl ArbiterEnclave {
             .map(|a| a.action_type.as_str())
             .unwrap_or("UNKNOWN");
 
-        match policy.decide(action_type) {
-            true => {
-                ctx.verdict = Some(Verdict::Allow);
-                ctx.reason = Some("Arbiter approved via policy engine".into());
-            }
-            false => {
-                ctx.verdict = Some(Verdict::Block);
-                ctx.reason = Some("Arbiter denied via policy engine".into());
-            }
+        // WO-5: Precedence order — BLOCK takes priority, then ESCALATE, then policy decision
+        let is_blocked = !policy.decide(action_type);
+        let requires_escalation = policy.requires_escalation(action_type);
+
+        if is_blocked {
+            // Blocked actions stay blocked even if on escalate list
+            ctx.verdict = Some(Verdict::Block);
+            ctx.reason = Some("Arbiter denied via policy engine".into());
+        } else if requires_escalation {
+            // Action is allowed by policy but requires human decision
+            ctx.verdict = Some(Verdict::Escalate);
+            ctx.reason = Some(format!("Action type '{}' requires human escalation per policy", action_type));
+        } else {
+            // Action is allowed and does not require escalation
+            ctx.verdict = Some(Verdict::Allow);
+            ctx.reason = Some("Arbiter approved via policy engine".into());
         }
     }
 }
