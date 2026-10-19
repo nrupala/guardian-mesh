@@ -13,6 +13,7 @@ pub struct PolicyRule {
 pub struct PolicyEngine {
     rules: Vec<PolicyRule>,
     overrides: HashMap<String, bool>,
+    escalate_actions: Vec<String>,
 }
 
 impl PolicyEngine {
@@ -20,9 +21,20 @@ impl PolicyEngine {
         let mut engine = Self {
             rules: Vec::new(),
             overrides: HashMap::new(),
+            escalate_actions: Vec::new(),
         };
         engine.load_defaults();
         engine
+    }
+
+    pub fn with_escalate_actions(escalate_actions: Vec<String>) -> Self {
+        let mut engine = Self::new();
+        engine.escalate_actions = escalate_actions;
+        engine
+    }
+
+    pub fn requires_escalation(&self, action_type: &str) -> bool {
+        self.escalate_actions.iter().any(|a| a == action_type)
     }
 
     fn load_defaults(&mut self) {

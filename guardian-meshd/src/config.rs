@@ -14,6 +14,8 @@ pub struct Config {
     pub workspace_dir: String,
     pub output_dir: String,
     pub program_dir: String,
+    pub policy_throttle_rate: usize,
+    pub policy_escalate_actions: Vec<String>,
 }
 
 impl Config {
@@ -97,6 +99,17 @@ impl Default for Config {
             .ok()
             .map(|s| s.into_bytes())
             .unwrap_or_else(|| b"guardian-mesh-handshake-secret-2026".to_vec());
+        
+        let policy_throttle_rate = std::env::var("GUARDIAN_MESH_POLICY_THROTTLE_RATE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(100);
+        
+        let policy_escalate_actions = std::env::var("GUARDIAN_MESH_POLICY_ESCALATE_ACTIONS")
+            .ok()
+            .map(|s| s.split(',').map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect())
+            .unwrap_or_default();
+        
         Self {
             bind_addr: std::env::var("GUARDIAN_MESH_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".into()),
             bind_port: std::env::var("GUARDIAN_MESH_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or_else(find_free_port),
@@ -108,6 +121,8 @@ impl Default for Config {
             workspace_dir: ws,
             output_dir: out,
             program_dir: ".".into(),
+            policy_throttle_rate,
+            policy_escalate_actions,
         }
     }
 }

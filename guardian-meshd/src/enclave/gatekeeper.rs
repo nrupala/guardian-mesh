@@ -3,13 +3,13 @@
 
 use super::{EnclaveContext, Verdict, ContainmentStage};
 use crate::handshake_bus::HandshakeBus;
-use crate::protocol_firewall::ProtocolFirewall;
+use crate::protocol_firewall::{ProtocolFirewall, ThrottleReason};
 use crate::sealed_envelope::{verify_proto_envelope, verifying_key_from_bytes};
 
 pub struct GatekeeperEnclave;
 
 impl GatekeeperEnclave {
-    pub fn evaluate(ctx: &mut EnclaveContext, bus: &HandshakeBus, firewall: &ProtocolFirewall) {
+    pub fn evaluate(ctx: &mut EnclaveContext, bus: &HandshakeBus, firewall: &ProtocolFirewall, policy_throttle_rate: usize) {
         ctx.stage = ContainmentStage::Warn;
 
         let firewalled = match &ctx.request.firewalled {
@@ -100,10 +100,24 @@ impl GatekeeperEnclave {
             return;
         }
 
+        // WO-5: Policy-configured per-session rate limit (checked first)
+        if let Ok(Some(throttle_reason)) = firewall.check_policy_rate(&firewalled.handshake_session, policy_throttle_rate) {
+            ctx.verdict = Some(Verdict::Throttle);
+            ctx.reason = Some(match throttle_reason {
+                ThrottleReason::ProtocolFirewall => "PF-18 rate limit breach: E_RATE_LIMITED".to_string(),
+                ThrottleReason::PolicyRate => "Policy rate limit breach".to_string(),
+            });
+            return;
+        }
+
         // PF-18: Rate limit (100 msg/s per external session)
-        if let Err(reason) = firewall.check_rate_limit(&firewalled.handshake_session) {
-            ctx.verdict = Some(Verdict::Block);
-            ctx.reason = Some(reason);
+        // WO-5: PF-18 breach now returns THROTTLE verdict instead of permission_denied error
+        if let Ok(Some(throttle_reason)) = firewall.check_rate_limit(&firewalled.handshake_session) {
+            ctx.verdict = Some(Verdict::Throttle);
+            ctx.reason = Some(match throttle_reason {
+                ThrottleReason::ProtocolFirewall => "PF-18 rate limit breach: E_RATE_LIMITED".to_string(),
+                ThrottleReason::PolicyRate => "Policy rate limit breach".to_string(),
+            });
             return;
         }
 
@@ -227,7 +241,7 @@ mod tests {
         let sid = session_with_key(&bus, &vk);
         let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
         assert_eq!(ctx.verdict, Some(Verdict::Allow));
     }
 
@@ -243,7 +257,7 @@ mod tests {
         sealed.payload = b"{\"actionType\":\"CODE_EXECUTE\",\"context\":\"x\",\"target\":\"y\",\"metadata\":{}}".to_vec();
         sealed.crc32c_digest = crc32c::crc32c(&sealed.payload);
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
         assert_signature_block(&ctx);
     }
 
@@ -256,7 +270,7 @@ mod tests {
         let sid = session_with_key(&bus, &vk_bound);
         let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_other);
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
         assert_signature_block(&ctx);
     }
 
@@ -269,7 +283,7 @@ mod tests {
         let mut sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         sealed.ml_dsa_65_signature = Vec::new();
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
         assert_signature_block(&ctx);
     }
 
@@ -282,7 +296,7 @@ mod tests {
         let mut sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         sealed.ml_dsa_65_signature = vec![0xAB; 3309];
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
         assert_signature_block(&ctx);
     }
 
@@ -295,7 +309,7 @@ mod tests {
         let sid = bus.create_session("webui");
         let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
         assert_signature_block(&ctx);
     }
 }

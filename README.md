@@ -1,6 +1,6 @@
 # Guardian Mesh
 
-**Status:** Current/active development · **Version:** 0.6.0 · **Updated:** 2026-10-19
+**Status:** Current/active development · **Version:** 0.7.0 · **Updated:** 2026-10-19
 
 See [CHANGELOG.md](CHANGELOG.md).
 
@@ -85,6 +85,8 @@ Configuration is all environment-driven — see `guardian-meshd/src/config.rs`:
 | `GUARDIAN_MESH_WORKSPACE` | `guardian-mesh-data/workspace` | Runtime data |
 | `GUARDIAN_MESH_OUTPUT` | `guardian-mesh-data/output` | Output data |
 | `GUARDIAN_MESH_HANDSHAKE_SECRET` | embedded | HMAC master secret |
+| `GUARDIAN_MESH_POLICY_THROTTLE_RATE` | `100` | Per-session rate limit (msg/s) before THROTTLE verdict |
+| `GUARDIAN_MESH_POLICY_ESCALATE_ACTIONS` | (empty) | Comma-separated action types requiring human escalation |
 
 ### 2. Run the tests
 

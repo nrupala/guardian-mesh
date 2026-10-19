@@ -6,6 +6,27 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-19
+
+### Added
+- **WO-5: Real THROTTLE and ESCALATE verdicts.** Both verdicts now exist as actual code paths in the daemon and are rendered distinctly in the control panel.
+  - **THROTTLE verdict** is emitted on PF-18 rate breaches (100 msg/s per external session) and on a policy-configurable per-session rate (`GUARDIAN_MESH_POLICY_THROTTLE_RATE`, default 100 msg/s). PF-18 breaches now return an `EvaluateResponse` with verdict "THROTTLE", a reason naming PF-18, and a Witness-signed proof envelope, instead of a bare `permission_denied` gRPC error. The Vault audit log records THROTTLE verdicts like any other verdict. This is a **deliberate, documented behaviour change** from WO-2: the firewall still refuses excess traffic, but as a signed judgment the caller can act on (slow down), not a transport error. All other PF rules stay exactly as they are (malformed input stays a `permission_denied` error). The policy rate is configurable via `GUARDIAN_MESH_POLICY_THROTTLE_RATE` environment variable and defaults to 100 msg/s (matching PF-18's ceiling, so PF-18 fires first by default). Breaching the policy rate likewise returns verdict "THROTTLE" with a reason naming the policy rate. The Gatekeeper checks the policy rate first, then PF-18, and both use independent rate limiters per session.
+  - **ESCALATE verdict** is emitted for action types on a policy-configured escalation list (`GUARDIAN_MESH_POLICY_ESCALATE_ACTIONS` environment variable, comma-separated, defaults to empty). Actions on the list (and not blocked by policy) return verdict "ESCALATE" with a reason naming the matched action type. **Precedence is pinned**: an action type the policy blocks still returns BLOCK; an action type on the escalate list (and not blocked) returns ESCALATE; everything else follows the existing policy unchanged. The proof envelope is issued for ESCALATE like any verdict, and the audit log records the escalation.
+  - **Panel changes**: The control panel (`DashboardPage.tsx`) now renders THROTTLE and ESCALATE verdicts distinctly with their own styles (orange/amber, matching the existing CSS classes `verdict-throttle` and `verdict-escalate`) alongside ALLOW (green) and BLOCK (red). Verdict tags in the audit log and the live verdict panel display THROTTLE and ESCALATE with plain-language descriptions: THROTTLE means "the action is slowed down"; ESCALATE means "a human decides". The CSS for these verdict styles was already present in `index.css` from a previous iteration; this release wires them to real verdicts.
+
+### Changed
+- Version bumped `0.6.0` → `0.7.0` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md`).
+- **Behaviour change (WO-5)**: PF-18 rate limit breaches (100 msg/s per external session) now return an `EvaluateResponse` with verdict "THROTTLE" and a signed proof envelope, instead of a `permission_denied` gRPC error. Callers that expected an error for rate limiting must now check for `verdict == "THROTTLE"` in the response. This is a deliberate, documented change: the firewall still refuses excess traffic, but as a signed judgment (with a proof) the caller can act on, not a bare transport error.
+
+### Tests
+- Added integration tests for THROTTLE and ESCALATE verdicts:
+  - `throttle_verdict_has_proof_and_proper_structure`: verifies that the THROTTLE verdict and ThrottleReason enum serialize correctly.
+  - `policy_throttle_rate_is_configurable`: verifies the policy throttle rate config is set correctly.
+  - `escalate_verdict_for_configured_actions`: verifies that actions on the escalate list return ESCALATE with a valid proof.
+  - `blocked_action_stays_blocked_even_if_on_escalate_list`: verifies precedence (BLOCK > ESCALATE).
+  - `unlisted_action_allows_normally`: verifies actions not on the escalate list still ALLOW.
+- All existing tests (68 unit tests, 16 integration tests) remain green. The protocol_firewall unit tests now verify that `check_rate_limit` and `check_policy_rate` return `Ok(Some(ThrottleReason))` instead of `Err` when the rate is exceeded.
+
 ## [0.6.0] - 2026-10-19
 
 ### Added
