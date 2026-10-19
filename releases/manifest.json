@@ -295,5 +295,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-19T01:29:12-06:00",
     "message": "feat(daemon): audit trail read path with chain verification (WO-4) \u2014 v0.6.0 (#43)"
+  },
+  {
+    "release": 38,
+    "tag": "release/v38",
+    "previous_tag": "release/v37",
+    "sha": "8ea7546140687039552abde32e3c7e4f0edc32aa",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-19T01:43:43-06:00",
+    "message": "docs(nightly): ledger \u2014 WO-4 shipped as v0.6.0 (#44)"
   }
 ]
