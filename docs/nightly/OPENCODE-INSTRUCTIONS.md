@@ -848,3 +848,50 @@ the laptop checkouts are working copies, never the source of truth.
   SSRF spelling/resolution posture, judgment differential
   battery, concurrent fresh-identity rate proof, pattern-coverage
   canaries). No work-order order changes: WO-4 remains next.
+- 2026-10-19 — **WO-4 shipped as v0.6.0** (PR #43, merged 6dc51add):
+  the audit trail has a read path — a new additive `ReadAuditLog`
+  RPC returns the Vault's persisted entries in append order with
+  chain verification computed at read time (verified / entries
+  checked / first-break position), and the live panel's audit view
+  is wired to it. One design fact the build surfaced honestly:
+  the pre-0.6.0 audit digest was per-entry, NOT chained — WO-4
+  makes seal() write a true chain (prev-hash linked, all fields
+  covered) and verification is dual-mode, so pre-0.6.0 entries
+  verify against their original legacy formula and seed the
+  chain (their reason/enclave-chain fields were never
+  digest-covered; the daemon README now says so). Built by the
+  laptop lane (OpenCode, Claude) across three runs — the first
+  killed mid-build by a laptop reboot (Windows-update pattern,
+  as WO-3's first run), a continuation finishing it, a third
+  closing the gate fix loop. Wright-verified independently:
+  cargo 78/78 on a fresh checkout of the pushed tree (pushed
+  tree == lane tree, asserted), webui build + lint green, and
+  Wright's own probes — hand-edited file line → break at the
+  exact position; legacy entry verifies; mixed legacy→new log
+  verifies; malformed stored hash returns a break report, never
+  a panic. Release gate: PASS WITH FINDINGS (pack
+  release-gate-runs/guardian-mesh-wo4-2026-10-18) — the fix loop
+  closed F1 (High: verify_chain panicked on a malformed stored
+  hash, byte-slicing log-controlled data) and F2 (High: every
+  pre-0.6.0 entry falsely reported "break at position 0") on the
+  branch before merge; F3 (Low, panel hid a break at position 0)
+  fixed with them; F4 (Low, carried) is lane reporting slips
+  (result-file test counts off by one twice; a result file
+  briefly committed, removed by Wright's amend before push).
+  Scanner "tests" BLOCKED is the GMSI-6 false lead, FOURTH
+  occurrence, resolved by the direct suite evidence — GMSI-6 is
+  re-filed by this run as the scanner's loudest repeat false
+  lead; no other new GMSI. NOT RUN: Kali/Arch benches (not
+  built), dependency-vuln scan, real-browser panel click-through.
+  Deployed the same night: aarch64 daemon binary sha256
+  8e5e994e… live on the box (rollback guardian-meshd.bak-v050
+  kept), live panel dist rebuilt with the endpoint and deployed
+  (webui-dist.bak-v050 kept), Pages demo deployment at the merge
+  commit (asset hash == Wright's local demo build). Production
+  proof on the wire: signing fingerprint unchanged
+  (dd2cf1a3…); production ReadAuditLog returned the real log —
+  213 pre-0.6.0 entries, chain VERIFIED — then the box E2E
+  battery (16/16) sealed 103 new chained entries on top and the
+  mixed 316-entry log still verifies. guardian.aimlds.org
+  unauthenticated still 302. v0.6.0 is a release candidate under
+  the standing one-week soak (to 2026-10-26). Next: WO-5.
