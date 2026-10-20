@@ -1,6 +1,6 @@
 # Guardian Mesh
 
-**Status:** Current/active development · **Version:** 0.7.0 · **Updated:** 2026-10-19
+**Status:** Current/active development · **Version:** 0.8.0 · **Updated:** 2026-10-19
 
 See [CHANGELOG.md](CHANGELOG.md).
 
@@ -128,13 +128,47 @@ cd android && ./gradlew assembleDebug
 The daemon exposes a single gRPC service (`proto/guardian_mesh.proto`):
 
 ```proto
-rpc Evaluate   (EvaluateRequest)   returns (EvaluateResponse)   // run the pipeline
-rpc VerifyProof(VerifyProofRequest)returns (VerifyProofResponse) // validate an audit proof
-rpc Health     (HealthRequest)     returns (HealthResponse)     // readiness
+rpc Evaluate         (EvaluateRequest)          returns (EvaluateResponse)          // run the pipeline
+rpc VerifyProof      (VerifyProofRequest)       returns (VerifyProofResponse)       // validate an audit proof
+rpc Health           (HealthRequest)            returns (HealthResponse)            // readiness
+rpc Handshake        (HandshakeRequest)         returns (HandshakeResponse)         // open a session
+rpc ReadAuditLog     (ReadAuditLogRequest)      returns (ReadAuditLogResponse)      // read the audit trail
+rpc IssueCertificate (IssueCertificateRequest)  returns (IssueCertificateResponse)  // issue a release certificate
+rpc RevokeCertificate(RevokeCertificateRequest) returns (RevokeCertificateResponse) // revoke a certificate
+rpc CertificateStatus(CertificateStatusRequest) returns (CertificateStatusResponse) // query certificate status
 ```
 
 See `guardian-meshd/README.md` for the full protocol, the 18 protocol-firewall
 rules, and the enclave contract.
+
+### Certificate Issuance (v0.8.0+)
+
+Guardian Mesh can issue **release-evidence certificates** that bind a gate verdict to an evidence pack under the daemon's cryptographic signature. A certificate attests to:
+
+- A specific release artifact (identified by its SHA-256 evidence hash)
+- The gate verdict issued over that evidence (`PASS` or `PASS WITH FINDINGS`)
+- Test results and policy version declared by the presenter
+- The issuing daemon's identity (its signing-key fingerprint)
+- The issuance timestamp
+
+**How to verify a certificate:**
+
+1. **Re-verify the signature**: Present the sealed certificate envelope to the `VerifyProof` RPC of any Guardian Mesh daemon. The daemon verifies the ML-DSA-65 signature.
+2. **Recompute the fingerprint**: Compute SHA-256 over the exact payload bytes of the presented certificate envelope and verify it matches the fingerprint presented alongside the envelope (from the `IssueCertificate` response or the `CertificateStatus` response; the fingerprint is not a field inside the sealed payload). This proves the copy presented is byte-identical to the copy issued (GMSI-2).
+3. **Check lifecycle status**: Query the issuer's `CertificateStatus(serial)` RPC to verify the certificate is ACTIVE (not SUPERSEDED or REVOKED).
+
+A certificate that passes all three checks is valid.
+
+**Certificate lifecycle:**
+
+- **ACTIVE**: The current, valid certificate for the product+version.
+- **SUPERSEDED**: A newer certificate was issued for the product, and this one is no longer current.
+- **REVOKED**: The certificate was explicitly revoked or automatically revoked due to a `BLOCKED` gate verdict.
+- **UNKNOWN**: The serial is not found (never issued, or registry lost).
+
+**Trust posture (v1):** Issuance is a daemon-local operation. The daemon binds to localhost (or sits behind access control). There is no public issuance endpoint in v1. The issued certificate can be presented to **any** Guardian Mesh daemon for verification via `VerifyProof`.
+
+See `specs/CERTIFICATE_SCHEMA.md` for the complete certificate schema and lifecycle specification.
 
 ---
 

@@ -18,6 +18,7 @@ use guardian_meshd::policy::PolicyEngine;
 use guardian_meshd::protocol_firewall::ProtocolFirewall;
 use guardian_meshd::sealed_envelope::{generate_keypair, SealedEnvelope, ML_DSA_65_VERIFYING_KEY_LEN};
 use guardian_meshd::sealed_envelope::{verify_proto_envelope, load_or_generate_signing_key, compute_fingerprint};
+use guardian_meshd::certificate::{CertificateRegistry, Tests, IssuanceResult, CertificateStatus as CertStatus};
 use guardian_meshd::proto::{
     guardian_mesh_server::{GuardianMesh, GuardianMeshServer},
     EvaluateRequest, EvaluateResponse, AuditProof,
@@ -26,6 +27,10 @@ use guardian_meshd::proto::{
     HandshakeRequest, HandshakeResponse,
     ReadAuditLogRequest, ReadAuditLogResponse,
     AuditLogEntry, ChainVerificationStatus,
+    IssueCertificateRequest, IssueCertificateResponse,
+    RevokeCertificateRequest, RevokeCertificateResponse,
+    CertificateStatusRequest, CertificateStatusResponse,
+    certificate_status_response::Status as ProtoStatus,
     SealedEnvelope as ProtoSealedEnvelope,
     health_response::ServingStatus,
 };
@@ -35,25 +40,32 @@ use ml_dsa::{MlDsa65, SigningKey, VerifyingKey};
 pub struct GuardianMeshService {
     config: Config,
     bus: Arc<RwLock<HandshakeBus>>,
-    vault: Arc<RwLock<VaultEnclave>>,
+    vault: Arc<VaultEnclave>,
     policy: Arc<RwLock<PolicyEngine>>,
     firewall: Arc<ProtocolFirewall>,
     signing_key: SigningKey<MlDsa65>,
     verifying_key: VerifyingKey<MlDsa65>,
+    certificates: Arc<CertificateRegistry>,
 }
 
 impl GuardianMeshService {
     pub fn new(config: Config) -> Result<Self, String> {
         let (sk, vk) = load_or_generate_signing_key(config.keys_dir())?;
-        let vault = VaultEnclave::new(10_000, config.audit_dir());
+        let vault = Arc::new(VaultEnclave::new(10_000, config.audit_dir()));
         let policy = PolicyEngine::with_escalate_actions(config.policy_escalate_actions.clone());
+        let certificates = CertificateRegistry::new(
+            config.workspace_dir.as_str(),
+            vault.clone(),
+            &vk,
+        )?;
         Ok(Self {
             bus: Arc::new(RwLock::new(HandshakeBus::new(&config.handshake_secret))),
-            vault: Arc::new(RwLock::new(vault)),
+            vault,
             policy: Arc::new(RwLock::new(policy)),
             firewall: Arc::new(ProtocolFirewall::new()),
             signing_key: sk,
             verifying_key: vk,
+            certificates: Arc::new(certificates),
             config,
         })
     }
@@ -84,10 +96,7 @@ impl GuardianMesh for GuardianMeshService {
             let final_verdict = Verdict::Throttle;
             let final_reason = ctx.reason.clone().unwrap_or_default();
 
-            {
-                let vault = self.vault.write().await;
-                vault.seal(&ctx);
-            }
+            self.vault.seal(&ctx);
 
             let proof = AuditProof {
                 action_id: ctx.request.action.as_ref().map(|a| a.action_type.clone()).unwrap_or_default(),
@@ -148,10 +157,7 @@ impl GuardianMesh for GuardianMeshService {
         let final_verdict = ctx.verdict.as_ref().cloned().unwrap_or(Verdict::Block);
         let final_reason = ctx.reason.clone().unwrap_or_default();
 
-        {
-            let vault = self.vault.write().await;
-            vault.seal(&ctx);
-        }
+        self.vault.seal(&ctx);
 
         let proof = AuditProof {
             action_id: ctx.request.action.as_ref().map(|a| a.action_type.clone()).unwrap_or_default(),
@@ -292,14 +298,12 @@ impl GuardianMesh for GuardianMeshService {
         &self,
         _request: Request<ReadAuditLogRequest>,
     ) -> Result<Response<ReadAuditLogResponse>, Status> {
-        let vault = self.vault.read().await;
-        
         // Read all entries from the audit log files
-        let entries = vault.read_audit_log()
+        let entries = self.vault.read_audit_log()
             .map_err(|e| Status::internal(format!("Failed to read audit log: {}", e)))?;
         
         // Verify the chain
-        let verification = vault.verify_chain(&entries);
+        let verification = self.vault.verify_chain(&entries);
         
         // Convert to proto format
         let proto_entries: Vec<AuditLogEntry> = entries
@@ -326,6 +330,106 @@ impl GuardianMesh for GuardianMeshService {
         Ok(Response::new(ReadAuditLogResponse {
             entries: proto_entries,
             verification: Some(proto_verification),
+        }))
+    }
+
+    async fn issue_certificate(
+        &self,
+        request: Request<IssueCertificateRequest>,
+    ) -> Result<Response<IssueCertificateResponse>, Status> {
+        let req = request.into_inner();
+
+        let tests = req.tests.ok_or_else(|| {
+            Status::invalid_argument("tests field is required")
+        })?;
+
+        let result = self.certificates.issue_certificate(
+            req.product,
+            req.version,
+            req.verdict,
+            &req.evidence,
+            &req.evidence_hash,
+            req.evidence_scope,
+            Tests {
+                passed: tests.passed,
+                failed: tests.failed,
+                total: tests.total,
+            },
+            req.policy,
+            &self.signing_key,
+        );
+
+        match result {
+            Ok(IssuanceResult::Issued {
+                serial,
+                fingerprint,
+                certificate,
+            }) => {
+                let proto_envelope = ProtoSealedEnvelope {
+                    payload: certificate.payload,
+                    payload_type: certificate.payload_type,
+                    crc32c: certificate.crc32c_digest,
+                    ml_dsa_65_signature: certificate.ml_dsa_65_signature,
+                    timestamp: certificate.timestamp,
+                    nonce: certificate.nonce.to_vec(),
+                };
+
+                Ok(Response::new(IssueCertificateResponse {
+                    issued: true,
+                    serial,
+                    fingerprint,
+                    certificate: Some(proto_envelope),
+                    refusal_reason: String::new(),
+                }))
+            }
+            Ok(IssuanceResult::Refused(reason)) => {
+                Ok(Response::new(IssueCertificateResponse {
+                    issued: false,
+                    serial: String::new(),
+                    fingerprint: String::new(),
+                    certificate: None,
+                    refusal_reason: reason,
+                }))
+            }
+            Err(e) => Err(Status::internal(e)),
+        }
+    }
+
+    async fn revoke_certificate(
+        &self,
+        request: Request<RevokeCertificateRequest>,
+    ) -> Result<Response<RevokeCertificateResponse>, Status> {
+        let req = request.into_inner();
+
+        match self.certificates.revoke_certificate(&req.serial, &req.reason) {
+            Ok(msg) => Ok(Response::new(RevokeCertificateResponse {
+                revoked: true,
+                message: msg,
+            })),
+            Err(e) => Err(Status::not_found(e)),
+        }
+    }
+
+    async fn certificate_status(
+        &self,
+        request: Request<CertificateStatusRequest>,
+    ) -> Result<Response<CertificateStatusResponse>, Status> {
+        let req = request.into_inner();
+
+        let (status, body_opt) = self.certificates.get_status(&req.serial);
+
+        let proto_status = match status {
+            CertStatus::Active => ProtoStatus::Active,
+            CertStatus::Superseded => ProtoStatus::Superseded,
+            CertStatus::Revoked => ProtoStatus::Revoked,
+            CertStatus::Unknown => ProtoStatus::Unknown,
+        };
+
+        let proto_body = body_opt.map(|b| b.to_proto_body());
+
+        Ok(Response::new(CertificateStatusResponse {
+            status: proto_status.into(),
+            body: proto_body,
         }))
     }
 }
@@ -827,5 +931,69 @@ mod tests {
         
         // TOOL_CALL not on escalate list, should ALLOW
         assert_eq!(resp.verdict, "ALLOW");
+    }
+
+    // WO-6 round 2 regression: Mixed Evaluate+Certificate traffic must chain properly
+    #[tokio::test]
+    async fn mixed_evaluate_and_certificate_audit_log_verifies() {
+        use guardian_meshd::proto::TestCounts;
+        use sha2::{Sha256, Digest};
+
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        
+        // First Evaluate
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        let resp1 = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp1.verdict, "ALLOW");
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        
+        // Issue certificate
+        let evidence = b"test evidence".to_vec();
+        let evidence_hash = hex::encode(Sha256::digest(&evidence));
+        let cert_req = IssueCertificateRequest {
+            product: "TestProduct".into(),
+            version: "1.0.0".into(),
+            verdict: "PASS".into(),
+            evidence: evidence.clone(),
+            evidence_hash,
+            evidence_scope: "unit".into(),
+            tests: Some(TestCounts {
+                passed: 10,
+                failed: 0,
+                total: 10,
+            }),
+            policy: "default".into(),
+        };
+        let cert_resp = service.issue_certificate(Request::new(cert_req)).await.unwrap().into_inner();
+        assert!(cert_resp.issued, "Certificate issuance failed: {}", cert_resp.refusal_reason);
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        
+        // Second Evaluate
+        let sealed2 = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req2 = evaluate_request(&service, &session.session_id, &sealed2).await;
+        let resp2 = service.evaluate(Request::new(req2)).await.unwrap().into_inner();
+        assert_eq!(resp2.verdict, "ALLOW");
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        
+        // Read audit log and verify chain
+        let audit_resp = service
+            .read_audit_log(Request::new(ReadAuditLogRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        
+        // Should have 3 entries: ALLOW, CERTIFICATE_ISSUED, ALLOW
+        assert_eq!(audit_resp.entries.len(), 3, "Expected 3 audit entries");
+        assert_eq!(audit_resp.entries[0].verdict, "ALLOW");
+        assert_eq!(audit_resp.entries[1].verdict, "CERTIFICATE_ISSUED");
+        assert_eq!(audit_resp.entries[2].verdict, "ALLOW");
+        
+        // Chain must verify
+        let verification = audit_resp.verification.unwrap();
+        assert!(verification.verified, "Chain verification failed: {}", verification.status_message);
+        assert_eq!(verification.entries_checked, 3);
     }
 }

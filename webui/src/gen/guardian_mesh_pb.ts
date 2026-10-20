@@ -368,6 +368,221 @@ export interface ChainVerificationStatus {
      */
     statusMessage: string; // Human-readable status
 }
+// ── Certificate RPCs (WO-6) ───────────────
+
+/**
+ * @generated from protobuf message guardian_mesh.IssueCertificateRequest
+ */
+export interface IssueCertificateRequest {
+    /**
+     * @generated from protobuf field: string product = 1
+     */
+    product: string; // Product name
+    /**
+     * @generated from protobuf field: string version = 2
+     */
+    version: string; // Product version
+    /**
+     * @generated from protobuf field: string verdict = 3
+     */
+    verdict: string; // Gate verdict (PASS, PASS WITH FINDINGS, BLOCKED)
+    /**
+     * @generated from protobuf field: bytes evidence = 4
+     */
+    evidence: Uint8Array; // Evidence pack bytes (raw document, not sealed)
+    /**
+     * @generated from protobuf field: string evidence_hash = 5
+     */
+    evidenceHash: string; // Claimed SHA-256 hex of evidence (lowercase)
+    /**
+     * @generated from protobuf field: string evidence_scope = 6
+     */
+    evidenceScope: string; // "working-tree" or "full-history"
+    /**
+     * @generated from protobuf field: guardian_mesh.TestCounts tests = 7
+     */
+    tests?: TestCounts; // Test counts
+    /**
+     * @generated from protobuf field: string policy = 8
+     */
+    policy: string; // Gate version string
+}
+/**
+ * @generated from protobuf message guardian_mesh.TestCounts
+ */
+export interface TestCounts {
+    /**
+     * @generated from protobuf field: uint32 passed = 1
+     */
+    passed: number;
+    /**
+     * @generated from protobuf field: uint32 failed = 2
+     */
+    failed: number;
+    /**
+     * @generated from protobuf field: uint32 total = 3
+     */
+    total: number;
+}
+/**
+ * @generated from protobuf message guardian_mesh.IssueCertificateResponse
+ */
+export interface IssueCertificateResponse {
+    /**
+     * @generated from protobuf field: bool issued = 1
+     */
+    issued: boolean; // true if certificate was issued; false if refused
+    /**
+     * @generated from protobuf field: string serial = 2
+     */
+    serial: string; // Certificate serial (if issued)
+    /**
+     * @generated from protobuf field: string fingerprint = 3
+     */
+    fingerprint: string; // SHA-256 fingerprint of the payload (if issued)
+    /**
+     * @generated from protobuf field: guardian_mesh.SealedEnvelope certificate = 4
+     */
+    certificate?: SealedEnvelope; // The sealed certificate envelope (if issued)
+    /**
+     * @generated from protobuf field: string refusal_reason = 5
+     */
+    refusalReason: string; // Reason for refusal (if not issued)
+}
+/**
+ * @generated from protobuf message guardian_mesh.RevokeCertificateRequest
+ */
+export interface RevokeCertificateRequest {
+    /**
+     * @generated from protobuf field: string serial = 1
+     */
+    serial: string;
+    /**
+     * @generated from protobuf field: string reason = 2
+     */
+    reason: string;
+}
+/**
+ * @generated from protobuf message guardian_mesh.RevokeCertificateResponse
+ */
+export interface RevokeCertificateResponse {
+    /**
+     * @generated from protobuf field: bool revoked = 1
+     */
+    revoked: boolean;
+    /**
+     * @generated from protobuf field: string message = 2
+     */
+    message: string;
+}
+/**
+ * @generated from protobuf message guardian_mesh.CertificateStatusRequest
+ */
+export interface CertificateStatusRequest {
+    /**
+     * @generated from protobuf field: string serial = 1
+     */
+    serial: string;
+}
+/**
+ * @generated from protobuf message guardian_mesh.CertificateStatusResponse
+ */
+export interface CertificateStatusResponse {
+    /**
+     * @generated from protobuf field: guardian_mesh.CertificateStatusResponse.Status status = 1
+     */
+    status: CertificateStatusResponse_Status;
+    /**
+     * @generated from protobuf field: guardian_mesh.CertificateBody body = 2
+     */
+    body?: CertificateBody; // Stored body fields (if known)
+}
+/**
+ * @generated from protobuf enum guardian_mesh.CertificateStatusResponse.Status
+ */
+export enum CertificateStatusResponse_Status {
+    /**
+     * @generated from protobuf enum value: UNKNOWN = 0;
+     */
+    UNKNOWN = 0,
+    /**
+     * @generated from protobuf enum value: ACTIVE = 1;
+     */
+    ACTIVE = 1,
+    /**
+     * @generated from protobuf enum value: SUPERSEDED = 2;
+     */
+    SUPERSEDED = 2,
+    /**
+     * @generated from protobuf enum value: REVOKED = 3;
+     */
+    REVOKED = 3
+}
+/**
+ * @generated from protobuf message guardian_mesh.CertificateBody
+ */
+export interface CertificateBody {
+    /**
+     * @generated from protobuf field: string schema = 1
+     */
+    schema: string;
+    /**
+     * @generated from protobuf field: uint32 schema_version = 2
+     */
+    schemaVersion: number;
+    /**
+     * @generated from protobuf field: string serial = 3
+     */
+    serial: string;
+    /**
+     * @generated from protobuf field: string issuer = 4
+     */
+    issuer: string;
+    /**
+     * @generated from protobuf field: string product = 5
+     */
+    product: string;
+    /**
+     * @generated from protobuf field: string version = 6
+     */
+    version: string;
+    /**
+     * @generated from protobuf field: string verdict = 7
+     */
+    verdict: string;
+    /**
+     * @generated from protobuf field: string evidence_hash = 8
+     */
+    evidenceHash: string;
+    /**
+     * @generated from protobuf field: string evidence_scope = 9
+     */
+    evidenceScope: string;
+    /**
+     * @generated from protobuf field: guardian_mesh.TestCounts tests = 10
+     */
+    tests?: TestCounts;
+    /**
+     * @generated from protobuf field: string policy = 11
+     */
+    policy: string;
+    /**
+     * @generated from protobuf field: string pf_outcomes = 12
+     */
+    pfOutcomes: string; // null in v1 (reserved for GMSI-7)
+    /**
+     * @generated from protobuf field: uint64 issued_at = 13
+     */
+    issuedAt: string;
+    /**
+     * @generated from protobuf field: string supersedes = 14
+     */
+    supersedes: string; // serial or empty string (null)
+    /**
+     * @generated from protobuf field: string fingerprint = 15
+     */
+    fingerprint: string;
+}
 // @generated message type with reflection information, may provide speed optimized methods
 class SealedEnvelope$Type extends MessageType<SealedEnvelope> {
     constructor() {
@@ -1454,6 +1669,618 @@ class ChainVerificationStatus$Type extends MessageType<ChainVerificationStatus> 
  * @generated MessageType for protobuf message guardian_mesh.ChainVerificationStatus
  */
 export const ChainVerificationStatus = new ChainVerificationStatus$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class IssueCertificateRequest$Type extends MessageType<IssueCertificateRequest> {
+    constructor() {
+        super("guardian_mesh.IssueCertificateRequest", [
+            { no: 1, name: "product", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "version", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "verdict", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 4, name: "evidence", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
+            { no: 5, name: "evidence_hash", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 6, name: "evidence_scope", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 7, name: "tests", kind: "message", T: () => TestCounts },
+            { no: 8, name: "policy", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<IssueCertificateRequest>): IssueCertificateRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.product = "";
+        message.version = "";
+        message.verdict = "";
+        message.evidence = new Uint8Array(0);
+        message.evidenceHash = "";
+        message.evidenceScope = "";
+        message.policy = "";
+        if (value !== undefined)
+            reflectionMergePartial<IssueCertificateRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: IssueCertificateRequest): IssueCertificateRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string product */ 1:
+                    message.product = reader.string();
+                    break;
+                case /* string version */ 2:
+                    message.version = reader.string();
+                    break;
+                case /* string verdict */ 3:
+                    message.verdict = reader.string();
+                    break;
+                case /* bytes evidence */ 4:
+                    message.evidence = reader.bytes();
+                    break;
+                case /* string evidence_hash */ 5:
+                    message.evidenceHash = reader.string();
+                    break;
+                case /* string evidence_scope */ 6:
+                    message.evidenceScope = reader.string();
+                    break;
+                case /* guardian_mesh.TestCounts tests */ 7:
+                    message.tests = TestCounts.internalBinaryRead(reader, reader.uint32(), options, message.tests);
+                    break;
+                case /* string policy */ 8:
+                    message.policy = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: IssueCertificateRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string product = 1; */
+        if (message.product !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.product);
+        /* string version = 2; */
+        if (message.version !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.version);
+        /* string verdict = 3; */
+        if (message.verdict !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.verdict);
+        /* bytes evidence = 4; */
+        if (message.evidence.length)
+            writer.tag(4, WireType.LengthDelimited).bytes(message.evidence);
+        /* string evidence_hash = 5; */
+        if (message.evidenceHash !== "")
+            writer.tag(5, WireType.LengthDelimited).string(message.evidenceHash);
+        /* string evidence_scope = 6; */
+        if (message.evidenceScope !== "")
+            writer.tag(6, WireType.LengthDelimited).string(message.evidenceScope);
+        /* guardian_mesh.TestCounts tests = 7; */
+        if (message.tests)
+            TestCounts.internalBinaryWrite(message.tests, writer.tag(7, WireType.LengthDelimited).fork(), options).join();
+        /* string policy = 8; */
+        if (message.policy !== "")
+            writer.tag(8, WireType.LengthDelimited).string(message.policy);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.IssueCertificateRequest
+ */
+export const IssueCertificateRequest = new IssueCertificateRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class TestCounts$Type extends MessageType<TestCounts> {
+    constructor() {
+        super("guardian_mesh.TestCounts", [
+            { no: 1, name: "passed", kind: "scalar", T: 13 /*ScalarType.UINT32*/ },
+            { no: 2, name: "failed", kind: "scalar", T: 13 /*ScalarType.UINT32*/ },
+            { no: 3, name: "total", kind: "scalar", T: 13 /*ScalarType.UINT32*/ }
+        ]);
+    }
+    create(value?: PartialMessage<TestCounts>): TestCounts {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.passed = 0;
+        message.failed = 0;
+        message.total = 0;
+        if (value !== undefined)
+            reflectionMergePartial<TestCounts>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: TestCounts): TestCounts {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* uint32 passed */ 1:
+                    message.passed = reader.uint32();
+                    break;
+                case /* uint32 failed */ 2:
+                    message.failed = reader.uint32();
+                    break;
+                case /* uint32 total */ 3:
+                    message.total = reader.uint32();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: TestCounts, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* uint32 passed = 1; */
+        if (message.passed !== 0)
+            writer.tag(1, WireType.Varint).uint32(message.passed);
+        /* uint32 failed = 2; */
+        if (message.failed !== 0)
+            writer.tag(2, WireType.Varint).uint32(message.failed);
+        /* uint32 total = 3; */
+        if (message.total !== 0)
+            writer.tag(3, WireType.Varint).uint32(message.total);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.TestCounts
+ */
+export const TestCounts = new TestCounts$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class IssueCertificateResponse$Type extends MessageType<IssueCertificateResponse> {
+    constructor() {
+        super("guardian_mesh.IssueCertificateResponse", [
+            { no: 1, name: "issued", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 2, name: "serial", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "fingerprint", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 4, name: "certificate", kind: "message", T: () => SealedEnvelope },
+            { no: 5, name: "refusal_reason", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<IssueCertificateResponse>): IssueCertificateResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.issued = false;
+        message.serial = "";
+        message.fingerprint = "";
+        message.refusalReason = "";
+        if (value !== undefined)
+            reflectionMergePartial<IssueCertificateResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: IssueCertificateResponse): IssueCertificateResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* bool issued */ 1:
+                    message.issued = reader.bool();
+                    break;
+                case /* string serial */ 2:
+                    message.serial = reader.string();
+                    break;
+                case /* string fingerprint */ 3:
+                    message.fingerprint = reader.string();
+                    break;
+                case /* guardian_mesh.SealedEnvelope certificate */ 4:
+                    message.certificate = SealedEnvelope.internalBinaryRead(reader, reader.uint32(), options, message.certificate);
+                    break;
+                case /* string refusal_reason */ 5:
+                    message.refusalReason = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: IssueCertificateResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* bool issued = 1; */
+        if (message.issued !== false)
+            writer.tag(1, WireType.Varint).bool(message.issued);
+        /* string serial = 2; */
+        if (message.serial !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.serial);
+        /* string fingerprint = 3; */
+        if (message.fingerprint !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.fingerprint);
+        /* guardian_mesh.SealedEnvelope certificate = 4; */
+        if (message.certificate)
+            SealedEnvelope.internalBinaryWrite(message.certificate, writer.tag(4, WireType.LengthDelimited).fork(), options).join();
+        /* string refusal_reason = 5; */
+        if (message.refusalReason !== "")
+            writer.tag(5, WireType.LengthDelimited).string(message.refusalReason);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.IssueCertificateResponse
+ */
+export const IssueCertificateResponse = new IssueCertificateResponse$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class RevokeCertificateRequest$Type extends MessageType<RevokeCertificateRequest> {
+    constructor() {
+        super("guardian_mesh.RevokeCertificateRequest", [
+            { no: 1, name: "serial", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "reason", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<RevokeCertificateRequest>): RevokeCertificateRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.serial = "";
+        message.reason = "";
+        if (value !== undefined)
+            reflectionMergePartial<RevokeCertificateRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: RevokeCertificateRequest): RevokeCertificateRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string serial */ 1:
+                    message.serial = reader.string();
+                    break;
+                case /* string reason */ 2:
+                    message.reason = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: RevokeCertificateRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string serial = 1; */
+        if (message.serial !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.serial);
+        /* string reason = 2; */
+        if (message.reason !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.reason);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.RevokeCertificateRequest
+ */
+export const RevokeCertificateRequest = new RevokeCertificateRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class RevokeCertificateResponse$Type extends MessageType<RevokeCertificateResponse> {
+    constructor() {
+        super("guardian_mesh.RevokeCertificateResponse", [
+            { no: 1, name: "revoked", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 2, name: "message", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<RevokeCertificateResponse>): RevokeCertificateResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.revoked = false;
+        message.message = "";
+        if (value !== undefined)
+            reflectionMergePartial<RevokeCertificateResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: RevokeCertificateResponse): RevokeCertificateResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* bool revoked */ 1:
+                    message.revoked = reader.bool();
+                    break;
+                case /* string message */ 2:
+                    message.message = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: RevokeCertificateResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* bool revoked = 1; */
+        if (message.revoked !== false)
+            writer.tag(1, WireType.Varint).bool(message.revoked);
+        /* string message = 2; */
+        if (message.message !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.message);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.RevokeCertificateResponse
+ */
+export const RevokeCertificateResponse = new RevokeCertificateResponse$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class CertificateStatusRequest$Type extends MessageType<CertificateStatusRequest> {
+    constructor() {
+        super("guardian_mesh.CertificateStatusRequest", [
+            { no: 1, name: "serial", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<CertificateStatusRequest>): CertificateStatusRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.serial = "";
+        if (value !== undefined)
+            reflectionMergePartial<CertificateStatusRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: CertificateStatusRequest): CertificateStatusRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string serial */ 1:
+                    message.serial = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: CertificateStatusRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string serial = 1; */
+        if (message.serial !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.serial);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.CertificateStatusRequest
+ */
+export const CertificateStatusRequest = new CertificateStatusRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class CertificateStatusResponse$Type extends MessageType<CertificateStatusResponse> {
+    constructor() {
+        super("guardian_mesh.CertificateStatusResponse", [
+            { no: 1, name: "status", kind: "enum", T: () => ["guardian_mesh.CertificateStatusResponse.Status", CertificateStatusResponse_Status] },
+            { no: 2, name: "body", kind: "message", T: () => CertificateBody }
+        ]);
+    }
+    create(value?: PartialMessage<CertificateStatusResponse>): CertificateStatusResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.status = 0;
+        if (value !== undefined)
+            reflectionMergePartial<CertificateStatusResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: CertificateStatusResponse): CertificateStatusResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* guardian_mesh.CertificateStatusResponse.Status status */ 1:
+                    message.status = reader.int32();
+                    break;
+                case /* guardian_mesh.CertificateBody body */ 2:
+                    message.body = CertificateBody.internalBinaryRead(reader, reader.uint32(), options, message.body);
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: CertificateStatusResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* guardian_mesh.CertificateStatusResponse.Status status = 1; */
+        if (message.status !== 0)
+            writer.tag(1, WireType.Varint).int32(message.status);
+        /* guardian_mesh.CertificateBody body = 2; */
+        if (message.body)
+            CertificateBody.internalBinaryWrite(message.body, writer.tag(2, WireType.LengthDelimited).fork(), options).join();
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.CertificateStatusResponse
+ */
+export const CertificateStatusResponse = new CertificateStatusResponse$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class CertificateBody$Type extends MessageType<CertificateBody> {
+    constructor() {
+        super("guardian_mesh.CertificateBody", [
+            { no: 1, name: "schema", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "schema_version", kind: "scalar", T: 13 /*ScalarType.UINT32*/ },
+            { no: 3, name: "serial", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 4, name: "issuer", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 5, name: "product", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 6, name: "version", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 7, name: "verdict", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 8, name: "evidence_hash", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 9, name: "evidence_scope", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 10, name: "tests", kind: "message", T: () => TestCounts },
+            { no: 11, name: "policy", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 12, name: "pf_outcomes", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 13, name: "issued_at", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 14, name: "supersedes", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 15, name: "fingerprint", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<CertificateBody>): CertificateBody {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.schema = "";
+        message.schemaVersion = 0;
+        message.serial = "";
+        message.issuer = "";
+        message.product = "";
+        message.version = "";
+        message.verdict = "";
+        message.evidenceHash = "";
+        message.evidenceScope = "";
+        message.policy = "";
+        message.pfOutcomes = "";
+        message.issuedAt = "0";
+        message.supersedes = "";
+        message.fingerprint = "";
+        if (value !== undefined)
+            reflectionMergePartial<CertificateBody>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: CertificateBody): CertificateBody {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string schema */ 1:
+                    message.schema = reader.string();
+                    break;
+                case /* uint32 schema_version */ 2:
+                    message.schemaVersion = reader.uint32();
+                    break;
+                case /* string serial */ 3:
+                    message.serial = reader.string();
+                    break;
+                case /* string issuer */ 4:
+                    message.issuer = reader.string();
+                    break;
+                case /* string product */ 5:
+                    message.product = reader.string();
+                    break;
+                case /* string version */ 6:
+                    message.version = reader.string();
+                    break;
+                case /* string verdict */ 7:
+                    message.verdict = reader.string();
+                    break;
+                case /* string evidence_hash */ 8:
+                    message.evidenceHash = reader.string();
+                    break;
+                case /* string evidence_scope */ 9:
+                    message.evidenceScope = reader.string();
+                    break;
+                case /* guardian_mesh.TestCounts tests */ 10:
+                    message.tests = TestCounts.internalBinaryRead(reader, reader.uint32(), options, message.tests);
+                    break;
+                case /* string policy */ 11:
+                    message.policy = reader.string();
+                    break;
+                case /* string pf_outcomes */ 12:
+                    message.pfOutcomes = reader.string();
+                    break;
+                case /* uint64 issued_at */ 13:
+                    message.issuedAt = reader.uint64().toString();
+                    break;
+                case /* string supersedes */ 14:
+                    message.supersedes = reader.string();
+                    break;
+                case /* string fingerprint */ 15:
+                    message.fingerprint = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: CertificateBody, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string schema = 1; */
+        if (message.schema !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.schema);
+        /* uint32 schema_version = 2; */
+        if (message.schemaVersion !== 0)
+            writer.tag(2, WireType.Varint).uint32(message.schemaVersion);
+        /* string serial = 3; */
+        if (message.serial !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.serial);
+        /* string issuer = 4; */
+        if (message.issuer !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.issuer);
+        /* string product = 5; */
+        if (message.product !== "")
+            writer.tag(5, WireType.LengthDelimited).string(message.product);
+        /* string version = 6; */
+        if (message.version !== "")
+            writer.tag(6, WireType.LengthDelimited).string(message.version);
+        /* string verdict = 7; */
+        if (message.verdict !== "")
+            writer.tag(7, WireType.LengthDelimited).string(message.verdict);
+        /* string evidence_hash = 8; */
+        if (message.evidenceHash !== "")
+            writer.tag(8, WireType.LengthDelimited).string(message.evidenceHash);
+        /* string evidence_scope = 9; */
+        if (message.evidenceScope !== "")
+            writer.tag(9, WireType.LengthDelimited).string(message.evidenceScope);
+        /* guardian_mesh.TestCounts tests = 10; */
+        if (message.tests)
+            TestCounts.internalBinaryWrite(message.tests, writer.tag(10, WireType.LengthDelimited).fork(), options).join();
+        /* string policy = 11; */
+        if (message.policy !== "")
+            writer.tag(11, WireType.LengthDelimited).string(message.policy);
+        /* string pf_outcomes = 12; */
+        if (message.pfOutcomes !== "")
+            writer.tag(12, WireType.LengthDelimited).string(message.pfOutcomes);
+        /* uint64 issued_at = 13; */
+        if (message.issuedAt !== "0")
+            writer.tag(13, WireType.Varint).uint64(message.issuedAt);
+        /* string supersedes = 14; */
+        if (message.supersedes !== "")
+            writer.tag(14, WireType.LengthDelimited).string(message.supersedes);
+        /* string fingerprint = 15; */
+        if (message.fingerprint !== "")
+            writer.tag(15, WireType.LengthDelimited).string(message.fingerprint);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.CertificateBody
+ */
+export const CertificateBody = new CertificateBody$Type();
 /**
  * @generated ServiceType for protobuf service guardian_mesh.GuardianMesh
  */
@@ -1462,5 +2289,8 @@ export const GuardianMesh = new ServiceType("guardian_mesh.GuardianMesh", [
     { name: "VerifyProof", options: {}, I: VerifyProofRequest, O: VerifyProofResponse },
     { name: "Health", options: {}, I: HealthRequest, O: HealthResponse },
     { name: "Handshake", options: {}, I: HandshakeRequest, O: HandshakeResponse },
-    { name: "ReadAuditLog", options: {}, I: ReadAuditLogRequest, O: ReadAuditLogResponse }
+    { name: "ReadAuditLog", options: {}, I: ReadAuditLogRequest, O: ReadAuditLogResponse },
+    { name: "IssueCertificate", options: {}, I: IssueCertificateRequest, O: IssueCertificateResponse },
+    { name: "RevokeCertificate", options: {}, I: RevokeCertificateRequest, O: RevokeCertificateResponse },
+    { name: "CertificateStatus", options: {}, I: CertificateStatusRequest, O: CertificateStatusResponse }
 ]);

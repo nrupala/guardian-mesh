@@ -128,6 +128,58 @@ impl VaultEnclave {
         *self.last_chain_hash.lock().unwrap() = digest;
     }
 
+    /// Record a certificate lifecycle event in the hash-chained audit log
+    pub fn record_certificate_event(&self, serial: &str, event: &str, reason: &str) -> Result<(), String> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // action_id = hex of the serial bytes
+        let action_id = hex::encode(serial.as_bytes());
+        
+        // verdict = the event string (CERTIFICATE_ISSUED, CERTIFICATE_SUPERSEDED, CERTIFICATE_REVOKED)
+        let verdict = event.to_string();
+        
+        let chain_str = "Sentinel→Gatekeeper→Witness→Arbiter→Vault";
+        
+        // Hash chain: hash(prev_hash || timestamp || action_id || verdict || enclave_chain || reason)
+        let prev_hash = self.last_chain_hash.lock().unwrap().clone();
+        let mut hasher = Sha256::new();
+        hasher.update(prev_hash.as_bytes());
+        hasher.update(now.to_le_bytes());
+        hasher.update(action_id.as_bytes());
+        hasher.update(verdict.as_bytes());
+        hasher.update(chain_str.as_bytes());
+        hasher.update(reason.as_bytes());
+        let digest = hex::encode(hasher.finalize());
+
+        let entry = AuditEntry {
+            action_id: action_id.clone(),
+            verdict: verdict.clone(),
+            reason: reason.to_string(),
+            enclave_chain: chain_str.into(),
+            timestamp: now,
+            digest: digest.clone(),
+        };
+
+        {
+            let mut trail = self.audit_trail.lock().unwrap();
+            if trail.len() >= self.max_entries {
+                trail.pop_front();
+            }
+            trail.push_back(entry.clone());
+        }
+
+        self.persist_entry(&entry, action_id, verdict, reason.to_string())
+            .map_err(|e| format!("Failed to persist certificate event: {}", e))?;
+        
+        // Update the last chain hash
+        *self.last_chain_hash.lock().unwrap() = digest;
+        
+        Ok(())
+    }
+
     fn persist_entry(&self, entry: &AuditEntry, action_id: String, verdict: String, reason: String) -> std::io::Result<()> {
         let today = chrono_now_date();
         let file_path = self.audit_path.join(format!("audit_{}.jsonl", today));

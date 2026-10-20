@@ -32,6 +32,16 @@ service GuardianMesh {
   // Read the audit trail and verify its hash chain integrity.
   // Returns entries in append order plus chain verification status.
   rpc ReadAuditLog (ReadAuditLogRequest) returns (ReadAuditLogResponse);
+
+  // Issue a release-evidence certificate (WO-6 / GMSI-1).
+  // Binds a gate verdict to an evidence pack under the daemon's signature.
+  rpc IssueCertificate (IssueCertificateRequest) returns (IssueCertificateResponse);
+
+  // Revoke a certificate by serial.
+  rpc RevokeCertificate (RevokeCertificateRequest) returns (RevokeCertificateResponse);
+
+  // Query the lifecycle status of a certificate by serial.
+  rpc CertificateStatus (CertificateStatusRequest) returns (CertificateStatusResponse);
 }
 
 // ── Message Types ─────────────────────────
@@ -162,4 +172,74 @@ message ChainVerificationStatus {
   uint64 entries_checked = 2; // How many entries were verified
   uint64 first_break_position = 3; // If not verified, position of first break (0-indexed); 0 if verified
   string status_message = 4; // Human-readable status
+}
+
+// ── Certificate RPCs (WO-6) ───────────────
+
+message IssueCertificateRequest {
+  string product = 1;              // Product name
+  string version = 2;              // Product version
+  string verdict = 3;              // Gate verdict (PASS, PASS WITH FINDINGS, BLOCKED)
+  bytes evidence = 4;              // Evidence pack bytes (raw document, not sealed)
+  string evidence_hash = 5;        // Claimed SHA-256 hex of evidence (lowercase)
+  string evidence_scope = 6;       // "working-tree" or "full-history"
+  TestCounts tests = 7;            // Test counts
+  string policy = 8;               // Gate version string
+}
+
+message TestCounts {
+  uint32 passed = 1;
+  uint32 failed = 2;
+  uint32 total = 3;
+}
+
+message IssueCertificateResponse {
+  bool issued = 1;                 // true if certificate was issued; false if refused
+  string serial = 2;               // Certificate serial (if issued)
+  string fingerprint = 3;          // SHA-256 fingerprint of the payload (if issued)
+  SealedEnvelope certificate = 4;  // The sealed certificate envelope (if issued)
+  string refusal_reason = 5;       // Reason for refusal (if not issued)
+}
+
+message RevokeCertificateRequest {
+  string serial = 1;
+  string reason = 2;
+}
+
+message RevokeCertificateResponse {
+  bool revoked = 1;
+  string message = 2;
+}
+
+message CertificateStatusRequest {
+  string serial = 1;
+}
+
+message CertificateStatusResponse {
+  enum Status {
+    UNKNOWN = 0;
+    ACTIVE = 1;
+    SUPERSEDED = 2;
+    REVOKED = 3;
+  }
+  Status status = 1;
+  CertificateBody body = 2;  // Stored body fields (if known)
+}
+
+message CertificateBody {
+  string schema = 1;
+  uint32 schema_version = 2;
+  string serial = 3;
+  string issuer = 4;
+  string product = 5;
+  string version = 6;
+  string verdict = 7;
+  string evidence_hash = 8;
+  string evidence_scope = 9;
+  TestCounts tests = 10;
+  string policy = 11;
+  string pf_outcomes = 12;         // null in v1 (reserved for GMSI-7)
+  uint64 issued_at = 13;
+  string supersedes = 14;          // serial or empty string (null)
+  string fingerprint = 15;
 }
