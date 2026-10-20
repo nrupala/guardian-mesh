@@ -322,5 +322,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-19T07:32:24-06:00",
     "message": "docs(nightly): ledger \u2014 WO-5 shipped as v0.7.0 (#46)"
+  },
+  {
+    "release": 41,
+    "tag": "release/v41",
+    "previous_tag": "release/v40",
+    "sha": "369d404da8f4f5ff3ec3f07d04fe3379e06af082",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-19T23:30:54-06:00",
+    "message": "docs(nightly): pack refresh \u2014 file GMSI-54..67 from the 2026-10-19 billing sweep (#47)"
   }
 ]
