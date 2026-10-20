@@ -331,5 +331,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-19T23:30:54-06:00",
     "message": "docs(nightly): pack refresh \u2014 file GMSI-54..67 from the 2026-10-19 billing sweep (#47)"
+  },
+  {
+    "release": 42,
+    "tag": "release/v42",
+    "previous_tag": "release/v41",
+    "sha": "0d963b7c23d8d7ba27a0da351afafff8234b10e0",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-20T07:40:28-06:00",
+    "message": "feat(daemon): release-evidence certification \u2014 certificates (WO-6) \u2014 v0.8.0 (#48)"
   }
 ]
