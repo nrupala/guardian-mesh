@@ -9,6 +9,12 @@
 import type { RpcTransport } from "@protobuf-ts/runtime-rpc";
 import type { ServiceInfo } from "@protobuf-ts/runtime-rpc";
 import { GuardianMesh } from "./guardian_mesh_pb";
+import type { CertificateStatusResponse } from "./guardian_mesh_pb";
+import type { CertificateStatusRequest } from "./guardian_mesh_pb";
+import type { RevokeCertificateResponse } from "./guardian_mesh_pb";
+import type { RevokeCertificateRequest } from "./guardian_mesh_pb";
+import type { IssueCertificateResponse } from "./guardian_mesh_pb";
+import type { IssueCertificateRequest } from "./guardian_mesh_pb";
 import type { ReadAuditLogResponse } from "./guardian_mesh_pb";
 import type { ReadAuditLogRequest } from "./guardian_mesh_pb";
 import type { HandshakeResponse } from "./guardian_mesh_pb";
@@ -68,6 +74,25 @@ export interface IGuardianMeshClient {
      * @generated from protobuf rpc: ReadAuditLog
      */
     readAuditLog(input: ReadAuditLogRequest, options?: RpcOptions): UnaryCall<ReadAuditLogRequest, ReadAuditLogResponse>;
+    /**
+     * Issue a release-evidence certificate (WO-6 / GMSI-1).
+     * Binds a gate verdict to an evidence pack under the daemon's signature.
+     *
+     * @generated from protobuf rpc: IssueCertificate
+     */
+    issueCertificate(input: IssueCertificateRequest, options?: RpcOptions): UnaryCall<IssueCertificateRequest, IssueCertificateResponse>;
+    /**
+     * Revoke a certificate by serial.
+     *
+     * @generated from protobuf rpc: RevokeCertificate
+     */
+    revokeCertificate(input: RevokeCertificateRequest, options?: RpcOptions): UnaryCall<RevokeCertificateRequest, RevokeCertificateResponse>;
+    /**
+     * Query the lifecycle status of a certificate by serial.
+     *
+     * @generated from protobuf rpc: CertificateStatus
+     */
+    certificateStatus(input: CertificateStatusRequest, options?: RpcOptions): UnaryCall<CertificateStatusRequest, CertificateStatusResponse>;
 }
 // ──────────────────────────────────────────
 //  Guardian Mesh — gRPC Service Definitions
@@ -134,5 +159,33 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
     readAuditLog(input: ReadAuditLogRequest, options?: RpcOptions): UnaryCall<ReadAuditLogRequest, ReadAuditLogResponse> {
         const method = this.methods[4], opt = this._transport.mergeOptions(options);
         return stackIntercept<ReadAuditLogRequest, ReadAuditLogResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Issue a release-evidence certificate (WO-6 / GMSI-1).
+     * Binds a gate verdict to an evidence pack under the daemon's signature.
+     *
+     * @generated from protobuf rpc: IssueCertificate
+     */
+    issueCertificate(input: IssueCertificateRequest, options?: RpcOptions): UnaryCall<IssueCertificateRequest, IssueCertificateResponse> {
+        const method = this.methods[5], opt = this._transport.mergeOptions(options);
+        return stackIntercept<IssueCertificateRequest, IssueCertificateResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Revoke a certificate by serial.
+     *
+     * @generated from protobuf rpc: RevokeCertificate
+     */
+    revokeCertificate(input: RevokeCertificateRequest, options?: RpcOptions): UnaryCall<RevokeCertificateRequest, RevokeCertificateResponse> {
+        const method = this.methods[6], opt = this._transport.mergeOptions(options);
+        return stackIntercept<RevokeCertificateRequest, RevokeCertificateResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Query the lifecycle status of a certificate by serial.
+     *
+     * @generated from protobuf rpc: CertificateStatus
+     */
+    certificateStatus(input: CertificateStatusRequest, options?: RpcOptions): UnaryCall<CertificateStatusRequest, CertificateStatusResponse> {
+        const method = this.methods[7], opt = this._transport.mergeOptions(options);
+        return stackIntercept<CertificateStatusRequest, CertificateStatusResponse>("unary", this._transport, method, opt, input);
     }
 }

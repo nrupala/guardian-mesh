@@ -6,6 +6,44 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-19
+
+### Added
+- **WO-6: Release-evidence certification (GMSI-1).** Guardian Mesh can now issue certificates that bind a gate verdict to an evidence pack under the daemon's cryptographic signature. This is Guardian Mesh's first certificate issuance capability.
+  - **Certificate schema v1** (`specs/CERTIFICATE_SCHEMA.md`): A certificate is a sealed envelope (the existing `SealedEnvelope` wire format) carrying a structured JSON body. The certificate attests to the binding between a specific release artifact (identified by its SHA-256 evidence hash), the gate verdict issued over that evidence, test results and policy declared by the presenter, the issuing daemon's identity (its signing-key fingerprint from WO-3), and the issuance timestamp. All fields needed to verify a certificate travel inside the sealed envelope (GMSI-3: self-contained; verifiable by a second lane through the existing `VerifyProof` RPC).
+  - **Three new RPCs**: `IssueCertificate`, `RevokeCertificate`, `CertificateStatus`. Issuance enforces all rules in the specification:
+    - The daemon computes SHA-256 over the presented evidence bytes and refuses issuance if it does not match the claimed hash (GMSI-2: hash-verifiable handoff).
+    - Evidence size cap: **10 MB**. Evidence packs larger than this are refused with a clear error. (This is separate from the 64 KiB `SealedEnvelope` cap, which applies to envelopes, not evidence documents.)
+    - `verdict == "BLOCKED"` → NO issuance. If an ACTIVE certificate exists for that product+version, it is REVOKED (registry + audit log), and the refusal message states that revocation occurred.
+    - `verdict == "PASS"` or `verdict == "PASS WITH FINDINGS"` → issue the certificate. Assign a unique serial (persistent across restarts), build the body, seal it with the daemon's persistent signing key (WO-3), persist the registry record as ACTIVE, append the issuance event to the audit log. Any previously ACTIVE certificate for the product (any version) becomes SUPERSEDED, and the new certificate's `supersedes` field names the old serial.
+    - Any other verdict string → refusal (clear error, nothing recorded).
+  - **Lifecycle management**: Certificates have four states (ACTIVE, SUPERSEDED, REVOKED, UNKNOWN). Issuance, supersession, and revocation events are appended to the daemon's hash-chained audit log (the WO-4/WO-6 audit trail). The certificate registry persists under the daemon's workspace directory (following the WO-3 persistence pattern) and survives restarts.
+  - **Verification**: A certificate holder verifies a certificate by (1) presenting the sealed envelope to `VerifyProof` (any Guardian Mesh daemon can verify the ML-DSA-65 signature), (2) recomputing the fingerprint (SHA-256 of the exact payload bytes) and verifying it matches the fingerprint presented alongside the envelope in the `IssueCertificate`/`CertificateStatus` responses — the fingerprint is not a field inside the sealed payload (GMSI-2: the copy presented, not the copy at mint), and (3) querying `CertificateStatus(serial)` to verify the certificate is ACTIVE (not SUPERSEDED or REVOKED).
+  - **Trust posture (v1)**: Issuance is a daemon-local operation. The daemon binds to localhost (or sits behind access control, as the production deployment does). There is no public issuance endpoint in v1. The issued certificate can be presented to **any** Guardian Mesh daemon for verification via `VerifyProof`.
+  - **Honesty clauses**: The certificate certifies the **binding** (this evidence, this verdict, this issuer, this time), not the truth of the declarations. The daemon vouches for: the evidence hash match at issuance, the signature, the lifecycle state transitions it performed, and the issuer identity. The daemon does NOT vouch for: the truth of the `scope`, `tests`, or `policy` declarations (these are the presenter's claims, bound under the daemon's signature), or deployment choices / runtime behavior / operational posture. A certificate warrants only the exact artifact tested (identified by `evidence_hash`), against the policy named (`policy`), on the date stamped (`issued_at`).
+  - **GMSI-5: History scope**. The certificate schema includes an `evidence_scope` field: `"working-tree"` (only the working tree was scanned) or `"full-history"` (the full git history was scanned). A secret ever committed stays in git history; certification of a repository must state whether history was scanned, not only the working tree.
+  - **GMSI-7 (reserved)**: The certificate schema reserves a `pf_outcomes` field for future use. In v1, this field is `null` and MUST NOT carry placeholder or constant values. Future versions (after WO-19 lands) will populate this field with the daemon's measured per-rule Protocol Firewall pass/fail counts at issuance time.
+
+### Changed
+- Version bumped `0.7.0` → `0.8.0` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md`).
+- README now documents the certificate RPCs, lifecycle, and how a holder verifies a certificate.
+
+### Tests
+- Added comprehensive certificate tests (11 test cases on the certificate path):
+  - `issue_certificate_happy_path`: verifies issuance with PASS verdict, body fields, and seal.
+  - `hash_mismatch_refuses_issuance`: verifies that evidence hash mismatch refuses issuance (nothing recorded).
+  - `blocked_verdict_refuses_and_revokes`: verifies that a BLOCKED verdict refuses issuance and revokes any ACTIVE certificate for the product+version.
+  - `supersession_across_versions`: verifies that issuing a new certificate for a product supersedes the old ACTIVE certificate (across different versions).
+  - `explicit_revocation`: verifies that `RevokeCertificate` transitions a certificate from ACTIVE to REVOKED.
+  - `status_of_unknown_serial`: verifies that querying an unknown serial returns UNKNOWN status.
+  - `certificate_verifies_after_restart`: verifies that a certificate issued by one service instance can be queried from a second instance over the same workspace (registry persistence).
+  - `evidence_size_cap_enforced`: verifies that evidence larger than 10 MB is refused with a clear error.
+  - `fingerprint_recomputable_from_sealed_payload`: verifies the fingerprint recomputes from the sealed payload bytes and matches the status body (gate fix round 1).
+  - `lifecycle_events_in_vault_audit_log`: verifies lifecycle events land in the hash-chained Vault audit log (gate fix round 1).
+  - `mixed_evaluate_and_certificate_audit_log_verifies`: service-level regression — Evaluate → IssueCertificate → Evaluate on one daemon, then ReadAuditLog verifies the chain (gate fix round 2).
+- Full suite: 96 tests green (79 lib + 17 bin), independently re-run by Wright from the pushed branch.
+- **Release gate: PASS WITH FINDINGS** (2026-10-19 nightly run). Two gate fix rounds: round 1 — the lane's first commit did not compile and its fingerprint was not recomputable from the sealed payload; lifecycle events moved into the hash-chained Vault log. Round 2 — two VaultEnclave instances over one audit directory broke chain verification under mixed Evaluate+certificate traffic (wire-proven); fixed to one shared instance with the regression test above. Carried: the checked-in Python client (`guardian_mesh_pb2.py`) was not regenerated (protoc version mismatch, 29.3 vs the file's 6.31.1 gencode); the TypeScript client was regenerated. Machine pass BLOCKED only on the known GMSI-6 scanner false lead for Rust inline tests, resolved by the direct suite evidence. Guardian Mesh Spec Input filed: GMSI-68 (mixed-traffic chain proof).
+
 ## [0.7.0] - 2026-10-19
 
 ### Added
