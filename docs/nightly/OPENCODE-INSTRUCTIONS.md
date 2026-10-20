@@ -689,6 +689,28 @@ do, and none becomes a gate MUST until behaviour-proven here.
   (Verdict v1.3.0 adjudication, F-V130-1.) Declared-method
   inventories treat health endpoints' methods as declared
   surface in every product contract.
+- **GMSI-68 — Mixed-traffic chain proof.** (WO-6 gate, this
+  run.) Any work order that adds a new audit-log writer or
+  event type must prove the chain under MIXED traffic (existing
+  writers + the new writer interleaved on one daemon, verified
+  through ReadAuditLog). Single-writer chain state is an
+  invariant: two chain-writer instances over one log is a
+  defect class of its own (WO-6 F4, fixed in round 2).
+- **GMSI-69 — Chain integrity under concurrency.** (WO-6
+  post-deploy production proof, this run.) The hash chain must
+  verify after CONCURRENT verdict traffic: one 115-request
+  burst against v0.8.0 produced 32 consecutive duplicate chain
+  hashes and a verification break at position 2, because
+  seal() reads and updates the last chain hash under separate
+  short locks and concurrent writers interleave on the same
+  predecessor. The chain append must be atomic per entry
+  (the predecessor read, digest, persist, and predecessor
+  update as one critical section) for every writer, verdicts
+  and certificate events alike. Production history carries
+  burst-race breaks from position 557 (first sealed by
+  v0.7.0's THROTTLE bursts). Filed as WO-6.1 (P1, next run,
+  ahead of WO-7); a concurrent-burst chain proof is its
+  acceptance test.
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
@@ -922,6 +944,42 @@ the laptop checkouts are working copies, never the source of truth.
   path (ReadAuditLog RPC) + live panel audit view; wire-verified
   against production (316 entries chain-VERIFIED). Gate PASS WITH
   FINDINGS. (Run detail: the 2026-10-18 nightly run log.)
+- 2026-10-20 — **WO-6 shipped as v0.8.0** (PR #48, merged 0d963b7c):
+  release-evidence certification — IssueCertificate /
+  RevokeCertificate / CertificateStatus RPCs; certificate =
+  sealed envelope over a canonical body (specs/
+  CERTIFICATE_SCHEMA.md); fingerprint = SHA-256 of the exact
+  payload bytes, carried alongside the envelope, never inside
+  it; lifecycle (issue / supersede / BLOCKED-revokes) recorded
+  in the hash-chained Vault audit log; registry persists
+  across restarts on the WO-3 persistent key. Built by the
+  laptop lane in three runs (initial + two gate fix rounds).
+  Wright-verified independently: cargo 96/96; webui build+lint
+  pass; wire proof 20/20 (issue, recompute, verify, mismatch
+  refusal, supersession, BLOCKED revocation, restart
+  persistence) + mixed-traffic chain proof. Gate: PASS WITH
+  FINDINGS — F1 (High) first commit did not compile, committed
+  without a test run; F2 (High) fingerprint not recomputable
+  from the sealed payload; F3 lifecycle events initially in a
+  separate file, not the chain; F4 (High) two VaultEnclave
+  instances broke the chain under mixed traffic — all fixed
+  in the loop and re-proven. Carried: Python checked-in client
+  not regenerated (protoc 29.3 vs 6.31.1 gencode). Deployed
+  to guardian.aimlds.org (binary sha256 86161727…, rollback
+  guardian-meshd.bak-v070): production fingerprint unchanged
+  (dd2cf1a3…, third upgrade), box E2E 16/16, Access 302, and
+  the release certified ITSELF on production — certificate
+  cert-20261020-000001 for guardian-mesh 0.8.0, evidence =
+  this gate's verdict, fingerprint recomputes, VerifyProof
+  valid, status ACTIVE. **F7 (High, carried, post-deploy):**
+  the production audit chain FAILS verification at position
+  557 — concurrent-burst chain race (GMSI-69), reproduced
+  locally on v0.8.0 (one 115-burst → break at position 2, 32
+  duplicate hashes). Pre-existing since bursts began sealing
+  verdicts (v0.7.0); not a WO-6 regression, but v0.8.0's RC
+  graduation weighs its fix. v0.8.0 is a RELEASE CANDIDATE
+  (one-week watched soak). Next: WO-6.1 (chain-concurrency
+  fix, P1), then WO-7.
 - 2026-10-19 — **WO-5 shipped as v0.7.0** (PR #45, merged e994d842):
   THROTTLE and ESCALATE are real verdicts. PF-18 breaches and a
   policy-configurable per-session rate (GUARDIAN_MESH_POLICY_THROTTLE_RATE,
