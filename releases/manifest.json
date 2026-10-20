@@ -340,5 +340,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-20T07:40:28-06:00",
     "message": "feat(daemon): release-evidence certification \u2014 certificates (WO-6) \u2014 v0.8.0 (#48)"
+  },
+  {
+    "release": 43,
+    "tag": "release/v43",
+    "previous_tag": "release/v42",
+    "sha": "71bae12b47166f4eee28968caa10a9b44d51b967",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-20T08:25:07-06:00",
+    "message": "docs(nightly): ledger \u2014 WO-6 shipped as v0.8.0; file GMSI-68/69 (#49)"
   }
 ]
