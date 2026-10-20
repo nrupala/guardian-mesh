@@ -612,6 +612,83 @@ here.
   prize lure) in their most common phrasings, including
   apostrophe/contraction variants — a one-word spelling variant
   must not flip a verdict class.
+
+GMSI-54…67 were filed by the release gate's 2026-10-19 billing
+sweep and adjudication runs (packs: release-gate-runs/
+linktary-billing-2026-10-19, mykey-billing-2026-10-19,
+sovereign-billing-2026-10-19, twf-pro-2026-10-19,
+codetopo-2026-10-19, codetopo-2026-10-19-delta-email, and
+verdict-v130-adjudication-2026-10-19). GMSI-53 was filed by the
+WO-5 gate the same day and is recorded in that ledger entry.
+They queue behind the Part A work orders exactly as GMSI-6…52
+do, and none becomes a gate MUST until behaviour-proven here.
+
+- **GMSI-54 — Money-path config-layer proof.** (Linktary billing
+  gate; confirmed by the TWF Pro gate and the Sovereign Core
+  inventory MUST.) Money-path operability is proven at the
+  CONFIG layer, not inferred from unauthenticated probes: every
+  money batch's probe set includes (a) a secret-name inventory
+  of the production worker (names only) against the code's
+  required/accepted secret list, and (b) an authenticated
+  negative-shape probe (bogus session → provider-shaped error,
+  never a config 503). An armed-but-unprovisioned code path is
+  a defect class of its own.
+- **GMSI-55 — Duplicate-delivery / replay-safety probe.**
+  (MyKey billing gate.) Every webhook consumer carries a spec'd
+  duplicate-delivery probe: the same verified event delivered
+  twice must change state at most once.
+- **GMSI-56 — Test/live credential separation invariant.**
+  (Sovereign Core billing gate, CRITICAL F-SC-1.) A production
+  verifier's accepted-secret set is exactly {its own live
+  secret}; test proofs run on separate test deployments, never
+  production. GM must be able to prove that separation.
+- **GMSI-57 — Cross-product mint probe.** (Sovereign Core
+  billing gate.) Issuance handlers must bind the event to the
+  product's own price/product (and to completed payment) before
+  minting; a spec'd cross-product mint probe belongs in the
+  money-batch battery wherever one payment account serves many
+  products.
+- **GMSI-58 — Buy-entry smoke first.** (TWF Pro billing gate.)
+  The Subscribe/checkout route must reach the provider; this
+  smoke runs FIRST in every money batch — a dead front door
+  makes the deeper battery moot.
+- **GMSI-59 — Ack-on-error check.** (TWF Pro billing gate.)
+  Every webhook handler is probed so a post-signature failure
+  must not ack 2xx.
+- **GMSI-60 — Claim-prefill escaped-reflection proof.**
+  (codetopo gate.) Any buyer-facing form rendering a
+  redirect-carried value must prove escaped-only reflection by
+  a live probe, not only by unit test.
+- **GMSI-61 — Stale-timestamp webhook delivery probe.**
+  (codetopo gate.) A stale-timestamp delivery probe (outside
+  the bridge's freshness tolerance) belongs in the standard
+  webhook battery for every billing bridge.
+- **GMSI-62 — Concurrent-distinct-events send-once probe.**
+  (codetopo delta-email gate.) "Sent exactly once" proofs in
+  the fleet are sequential; GM should issue a
+  concurrent-distinct-events probe for any send-once side
+  channel, so the race window is measured, not reasoned about.
+- **GMSI-63 — Config-family lint.** (codetopo delta-email
+  gate.) Half-configured integration families must fail loudly
+  at startup; the residual shape (encryption-off plus
+  credentials present) is a mechanical config-lint case for
+  every env-configured integration.
+- **GMSI-64 — Assertion-message hygiene.** (codetopo
+  delta-email gate.) No format-interpolation of
+  credential-bearing content in test failure messages, fixtures
+  included — a greppable scanner class.
+- **GMSI-65 — Stable-egress vantage for rate-bound probes.**
+  (Verdict v1.3.0 adjudication.) Rate-bound probes require a
+  stable-egress vantage; spec a fixed-egress probe node so
+  per-IP counters can be falsified honestly.
+- **GMSI-66 — Fleet-controlled redirector.** (Verdict v1.3.0
+  adjudication.) A fleet-controlled redirector is recurring
+  gate infrastructure (the SRF-REDIRECT battery), not a
+  per-product improvisation.
+- **GMSI-67 — Health-endpoint methods as declared surface.**
+  (Verdict v1.3.0 adjudication, F-V130-1.) Declared-method
+  inventories treat health endpoints' methods as declared
+  surface in every product contract.
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
