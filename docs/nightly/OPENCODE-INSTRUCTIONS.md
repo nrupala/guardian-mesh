@@ -739,6 +739,17 @@ do, and none becomes a gate MUST until behaviour-proven here.
   obligation (the routes and the probe set) attached to the
   release record, discharged by a delta gate at deploy — never
   as an unowned NOT RUN line.
+- **GMSI-74 — Concurrency proofs must be synchronised or
+  graded.** (WO-6.1 gate, 2026-10-20.) An un-synchronized small
+  burst passes probabilistically on racy code: Wright's
+  16-thread × 8 in-process repro against the pre-fix vault
+  failed once (126/128 entries persisted) and passed once
+  against the same binary, while the barrier-synchronized
+  32-thread version failed deterministically. Any concurrency
+  acceptance proof (chain integrity, send-once, rate limits)
+  must release its writers simultaneously (barrier or
+  equivalent) or be run N times with every run reported — one
+  green run of an un-synchronized burst is not evidence.
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
@@ -1095,3 +1106,38 @@ the laptop checkouts are working copies, never the source of truth.
   mixed 316-entry log still verifies. guardian.aimlds.org
   unauthenticated still 302. v0.6.0 is a release candidate under
   the standing one-week soak (to 2026-10-26). Next: WO-5.
+- 2026-10-20 (nightly) — **WO-6.1 shipped as v0.8.1** (PR #53,
+  merged e87a18b5): the chain-concurrency fix closing issue #50
+  and GMSI-69 — both audit-chain writers (seal +
+  record_certificate_event) now hold the last_chain_hash mutex
+  across the whole append (predecessor read + digest + persist
+  + predecessor update as one critical section); sequential
+  behaviour, digest formula, and on-disk format unchanged.
+  Built by OpenCode on the laptop lane (fresh clone at the
+  GMSI-70..73-refreshed main, PR #52); Wright carried the tree
+  with two edits (trail push inside the critical section; the
+  lane's stale test counts corrected). Gate: PASS WITH
+  FINDINGS — F1/F2 (Low) fixed in the loop; scanner BLOCKED
+  only on the GMSI-6 "tests" false lead (sixth occurrence).
+  Wright's independent verification: cargo 97/97 (80 lib + 17
+  bin), webui build+lint green; barrier-synchronized burst
+  FAILED pre-fix / PASSED post-fix; wire proof pair (identical
+  150-append concurrent burst): v0.8.0 control = 7 duplicate
+  hashes + break at position 1; v0.8.1 = 0 duplicates, chain
+  VERIFIED. Filed GMSI-74 (above). Deployed to
+  guardian.aimlds.org (aarch64 binary sha256 a2535e66…,
+  rollback guardian-meshd.bak-v080): production fingerprint
+  unchanged (dd2cf1a3…, fourth upgrade), box E2E 16/16,
+  post-deploy segment of 268 entries (E2E PF-18 burst + a
+  150-append burst) verifies with 0 breaks / 0 duplicates —
+  while the whole-log verification still reports the
+  historical burst-race break at position 557, which stands
+  as recorded (pre-fix history; F3). The release certified
+  itself on production: certificate cert-20261021-000032
+  (guardian-mesh 0.8.1, PASS WITH FINDINGS, evidence = the
+  gate verdict), fingerprint recomputes, VerifyProof valid,
+  supersedes cert-20261020-000001, status ACTIVE.
+  guardian.aimlds.org unauthenticated still 302. v0.8.1 is a
+  RELEASE CANDIDATE (one-week watched soak, RC register row
+  28; graduates 2026-10-27). v0.8.0's own graduation (row 26)
+  weighed this fix landing — it has. Next: WO-7.
