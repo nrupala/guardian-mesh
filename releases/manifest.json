@@ -349,5 +349,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-20T08:25:07-06:00",
     "message": "docs(nightly): ledger \u2014 WO-6 shipped as v0.8.0; file GMSI-68/69 (#49)"
+  },
+  {
+    "release": 44,
+    "tag": "release/v44",
+    "previous_tag": "release/v43",
+    "sha": "aa2efaa80ccfcb0fa420b89d9ec57031ba7ad62e",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-20T23:23:06-06:00",
+    "message": "docs(nightly): pack refresh \u2014 file GMSI-70..73 from the codetopo 0.6.0 gate (#52)"
   }
 ]
