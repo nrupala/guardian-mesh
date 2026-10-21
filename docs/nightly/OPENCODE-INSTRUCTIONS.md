@@ -711,6 +711,34 @@ do, and none becomes a gate MUST until behaviour-proven here.
   v0.7.0's THROTTLE bursts). Filed as WO-6.1 (P1, next run,
   ahead of WO-7); a concurrent-burst chain proof is its
   acceptance test.
+- **GMSI-70 — Parity differential for fact-products.** (codetopo
+  0.6.0 gate, 2026-10-20.) Playbook §7's consistency leg,
+  generalised: for products whose output is measurements rather
+  than verdicts, Guardian Mesh must be able to prove a standing
+  cross-surface equality corpus — the same input presented to
+  every surface the product exposes (CLI / HTTP / MCP), with
+  byte-equal structured answers — as the analogue of the
+  judgment-differential corpus.
+- **GMSI-71 — Test-context resolution before a secret can
+  block.** (codetopo 0.6.0 gate, 2026-10-20; the gate scanner's
+  sixth context miss of this class.) A certification input that
+  reports a secret in code must state whether the hit's module
+  context was resolved (e.g. inside a `#[cfg(test)]` fixture
+  module) before the hit can block issuance; a pattern hit whose
+  context was never read is a lead, not a finding.
+- **GMSI-72 — Vulnerability-data freshness.** (codetopo 0.6.0
+  gate, 2026-10-20.) Both RUSTSEC advisories in that gate
+  postdated the product's previous gate by days. Dependency-
+  vulnerability data presented at certification must be pulled
+  fresh at that gate — never inherited from a prior run's pack —
+  and the evidence must state the pull date.
+- **GMSI-73 — Owed-probe obligations ride the certificate
+  record.** (codetopo 0.6.0 gate, 2026-10-20.) Where a gate
+  defers attacker-view probes because the surface is not yet
+  deployed, the deferral must be carried as a named owed-probe
+  obligation (the routes and the probe set) attached to the
+  release record, discharged by a delta gate at deploy — never
+  as an unowned NOT RUN line.
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
