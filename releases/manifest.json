@@ -358,5 +358,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-20T23:23:06-06:00",
     "message": "docs(nightly): pack refresh \u2014 file GMSI-70..73 from the codetopo 0.6.0 gate (#52)"
+  },
+  {
+    "release": 45,
+    "tag": "release/v45",
+    "previous_tag": "release/v44",
+    "sha": "e87a18b5370137e4063f56b71cb51475549c275c",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-21T00:08:03-06:00",
+    "message": "feat(daemon): chain-concurrency fix \u2014 one critical section per audit append (WO-6.1) \u2014 v0.8.1 (#53)"
   }
 ]
