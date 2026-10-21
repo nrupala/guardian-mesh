@@ -367,5 +367,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-21T00:08:03-06:00",
     "message": "feat(daemon): chain-concurrency fix \u2014 one critical section per audit append (WO-6.1) \u2014 v0.8.1 (#53)"
+  },
+  {
+    "release": 46,
+    "tag": "release/v46",
+    "previous_tag": "release/v45",
+    "sha": "252fec9db7e64f98c1e1616e4e3d3b647b328f37",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-21T00:15:16-06:00",
+    "message": "docs(nightly): ledger \u2014 WO-6.1 shipped as v0.8.1; file GMSI-74 (#54)"
   }
 ]
