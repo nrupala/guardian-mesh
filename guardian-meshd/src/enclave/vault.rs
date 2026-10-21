@@ -94,8 +94,13 @@ impl VaultEnclave {
 
         let chain_str = "Sentinel→Gatekeeper→Witness→Arbiter→Vault";
         
+        // CRITICAL SECTION: Hold lock for entire chain append to prevent concurrent writers
+        // from interleaving on the same predecessor hash (fixes GMSI-69 / issue #50).
+        // Predecessor read + digest computation + persist + predecessor update must be atomic.
+        let mut chain_lock = self.last_chain_hash.lock().unwrap();
+        
         // Hash chain: hash(prev_hash || timestamp || action_id || verdict || enclave_chain || reason)
-        let prev_hash = self.last_chain_hash.lock().unwrap().clone();
+        let prev_hash = chain_lock.clone();
         let mut hasher = Sha256::new();
         hasher.update(prev_hash.as_bytes());
         hasher.update(now.to_le_bytes());
@@ -114,18 +119,23 @@ impl VaultEnclave {
             digest: digest.clone(),
         };
 
+        // Persist to disk while holding the chain lock
+        let _ = self.persist_entry(&entry, action_id, verdict, reason);
+
+        // Update the last chain hash before releasing the lock
+        *chain_lock = digest.clone();
+
+        // Update the in-memory audit trail inside the same critical
+        // section, so trail order always matches file/chain order.
+        // (Wright carry edit, WO-6.1 gate: the lane pushed the trail
+        // after dropping the chain lock.)
         {
             let mut trail = self.audit_trail.lock().unwrap();
             if trail.len() >= self.max_entries {
                 trail.pop_front();
             }
-            trail.push_back(entry.clone());
+            trail.push_back(entry);
         }
-
-        let _ = self.persist_entry(&entry, action_id, verdict, reason);
-        
-        // Update the last chain hash
-        *self.last_chain_hash.lock().unwrap() = digest;
     }
 
     /// Record a certificate lifecycle event in the hash-chained audit log
@@ -143,8 +153,13 @@ impl VaultEnclave {
         
         let chain_str = "Sentinel→Gatekeeper→Witness→Arbiter→Vault";
         
+        // CRITICAL SECTION: Hold lock for entire chain append to prevent concurrent writers
+        // from interleaving on the same predecessor hash (fixes GMSI-69 / issue #50).
+        // Predecessor read + digest computation + persist + predecessor update must be atomic.
+        let mut chain_lock = self.last_chain_hash.lock().unwrap();
+        
         // Hash chain: hash(prev_hash || timestamp || action_id || verdict || enclave_chain || reason)
-        let prev_hash = self.last_chain_hash.lock().unwrap().clone();
+        let prev_hash = chain_lock.clone();
         let mut hasher = Sha256::new();
         hasher.update(prev_hash.as_bytes());
         hasher.update(now.to_le_bytes());
@@ -163,20 +178,25 @@ impl VaultEnclave {
             digest: digest.clone(),
         };
 
+        // Persist to disk while holding the chain lock. On failure
+        // the chain hash is NOT advanced and no trail entry is added:
+        // the append simply did not happen.
+        self.persist_entry(&entry, action_id, verdict, reason.to_string())
+            .map_err(|e| format!("Failed to persist certificate event: {}", e))?;
+
+        // Update the last chain hash before releasing the lock
+        *chain_lock = digest.clone();
+
+        // Update the in-memory audit trail inside the same critical
+        // section, so trail order always matches file/chain order.
         {
             let mut trail = self.audit_trail.lock().unwrap();
             if trail.len() >= self.max_entries {
                 trail.pop_front();
             }
-            trail.push_back(entry.clone());
+            trail.push_back(entry);
         }
 
-        self.persist_entry(&entry, action_id, verdict, reason.to_string())
-            .map_err(|e| format!("Failed to persist certificate event: {}", e))?;
-        
-        // Update the last chain hash
-        *self.last_chain_hash.lock().unwrap() = digest;
-        
         Ok(())
     }
 
@@ -679,5 +699,88 @@ mod tests {
         assert!(verification.verified, "Mixed log should verify: {}", verification.status_message);
         assert_eq!(verification.entries_checked, 2);
         assert!(verification.first_break_position.is_none());
+    }
+
+    #[test]
+    fn concurrent_seal_and_certificate_events_chain_verifies() {
+        // Regression test for GMSI-69 / issue #50: concurrent writers must not
+        // interleave on the same predecessor hash. This test drives the REAL vault
+        // handlers (seal + record_certificate_event) from many threads concurrently
+        // and verifies the chain afterward.
+        use std::sync::Arc;
+        use std::thread;
+        
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Arc::new(VaultEnclave::new(1000, dir.path().to_path_buf()));
+        
+        const NUM_SEAL_THREADS: usize = 16;
+        const SEALS_PER_THREAD: usize = 8;
+        const NUM_CERT_THREADS: usize = 4;
+        const CERTS_PER_THREAD: usize = 8;
+        
+        let mut handles = vec![];
+        
+        // Spawn threads that seal verdicts
+        for thread_id in 0..NUM_SEAL_THREADS {
+            let vault_clone = Arc::clone(&vault);
+            let handle = thread::spawn(move || {
+                for i in 0..SEALS_PER_THREAD {
+                    let mut ctx = make_test_ctx();
+                    ctx.reason = Some(format!("seal_thread_{}_entry_{}", thread_id, i));
+                    vault_clone.seal(&ctx);
+                    // Small sleep to increase interleaving likelihood
+                    std::thread::sleep(std::time::Duration::from_micros(10));
+                }
+            });
+            handles.push(handle);
+        }
+        
+        // Spawn threads that record certificate events
+        for thread_id in 0..NUM_CERT_THREADS {
+            let vault_clone = Arc::clone(&vault);
+            let handle = thread::spawn(move || {
+                for i in 0..CERTS_PER_THREAD {
+                    let serial = format!("cert-thread-{}-{}", thread_id, i);
+                    let _ = vault_clone.record_certificate_event(
+                        &serial,
+                        "CERTIFICATE_ISSUED",
+                        &format!("cert_thread_{}_entry_{}", thread_id, i),
+                    );
+                    // Small sleep to increase interleaving likelihood
+                    std::thread::sleep(std::time::Duration::from_micros(10));
+                }
+            });
+            handles.push(handle);
+        }
+        
+        // Wait for all threads to complete
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        
+        // Read the audit log
+        let entries = vault.read_audit_log().unwrap();
+        
+        // Verify we got the expected number of entries
+        let expected_entries = (NUM_SEAL_THREADS * SEALS_PER_THREAD) + (NUM_CERT_THREADS * CERTS_PER_THREAD);
+        assert_eq!(entries.len(), expected_entries,
+            "Expected {} entries, got {}", expected_entries, entries.len());
+        
+        // Verify the chain
+        let verification = vault.verify_chain(&entries);
+        assert!(verification.verified,
+            "Chain must verify after concurrent writes: {}", verification.status_message);
+        assert_eq!(verification.entries_checked, expected_entries as u64);
+        assert!(verification.first_break_position.is_none(),
+            "Chain must have no breaks, but found break at position {:?}", verification.first_break_position);
+        
+        // Verify no duplicate chain hashes (the smoking gun of issue #50)
+        let mut seen_hashes = std::collections::HashSet::new();
+        for (idx, entry) in entries.iter().enumerate() {
+            if !seen_hashes.insert(entry.chain_hash.clone()) {
+                panic!("Duplicate chain hash found at position {}: {}",
+                    idx, entry.chain_hash);
+            }
+        }
     }
 }
