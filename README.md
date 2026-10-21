@@ -1,6 +1,6 @@
 # Guardian Mesh
 
-**Status:** Current/active development · **Version:** 0.8.0 · **Updated:** 2026-10-19
+**Status:** Current/active development · **Version:** 0.8.1 · **Updated:** 2026-10-20
 
 See [CHANGELOG.md](CHANGELOG.md).
 
@@ -93,7 +93,7 @@ Configuration is all environment-driven — see `guardian-meshd/src/config.rs`:
 ```bash
 cd guardian-meshd
 cargo clippy --all-targets -- -D warnings   # must be clean
-cargo test                                   # 31 unit tests
+cargo test                                   # 97 tests (80 lib + 17 bin)
 ```
 
 ### 3. Run the WebUI

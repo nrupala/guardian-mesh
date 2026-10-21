@@ -6,6 +6,24 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-20
+
+### Fixed
+- **WO-6.1: Chain-concurrency fix (GMSI-69 / issue #50).** Fixed a race condition in `VaultEnclave` where concurrent writers to the audit chain (`seal()` and `record_certificate_event()`) could interleave on the same predecessor hash, producing duplicate chain hashes and breaking chain verification. The defect was observed in production at position 557 and reproduced locally with a 115-request burst that produced 32 consecutive duplicate chain hashes and a chain break at position 2.
+  - **Root cause**: Both `seal()` and `record_certificate_event()` read `last_chain_hash` under a short lock, computed the digest, persisted the entry to disk outside any lock, and only then re-locked to update `last_chain_hash`. Concurrent callers could read the same predecessor hash, compute different digests, and persist entries out of chain order.
+  - **Fix**: Each chain append now holds the `last_chain_hash` lock for the entire critical section: predecessor read + digest computation + disk persistence + predecessor update. This fully serializes chain appends across both writers, ensuring that on-disk entry order always matches chain order and no two entries share a chain hash. The in-memory audit-trail push happens inside the same critical section, so trail order matches file order.
+  - **Sequential behaviour unchanged**: The digest formula, on-disk line format, genesis hash, and entry fields remain identical. A log written sequentially before this fix verifies after it, and vice versa. No new runtime dependencies. No changes to Evaluate, the firewall, handshake, certificates, or proof format.
+
+### Tests
+- Added `concurrent_seal_and_certificate_events_chain_verifies`: a concurrency regression test that drives the real vault handlers (16 threads × 8 seals + 4 threads × 8 certificate events = 160 total appends) through one shared `VaultEnclave`, then verifies the chain reports VERIFIED, the entry count equals the exact number of appends, and no two entries share a chain hash. This test would FAIL on the pre-fix code due to the race.
+- Full test suite: **97 tests green** (80 lib + 17 bin) after Wright's independent verification (see the PR gate record).
+- **Gate verdict: PASS WITH FINDINGS** (release gate, 2026-10-20; pack `~/workspace/release-gate-runs/guardian-mesh-wo61-2026-10-20/`). Wire proof pair: identical 150-append burst — v0.8.0 control: 7 duplicate hashes, chain break at position 1; v0.8.1: 0 duplicates, chain VERIFIED. v0.8.1 is a RELEASE CANDIDATE under the one-week soak.
+- WebUI build + lint: pass.
+
+### Changed
+- Version bumped `0.8.0` → `0.8.1` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md`).
+- README test count updated to reflect the new total (97 tests).
+
 ## [0.8.0] - 2026-10-19
 
 ### Added
