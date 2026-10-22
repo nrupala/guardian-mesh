@@ -385,5 +385,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-21T23:38:56-06:00",
     "message": "Merge pull request #55 from nrupala/wright/wo7-scope-docs"
+  },
+  {
+    "release": 48,
+    "tag": "release/v48",
+    "previous_tag": "release/v47",
+    "sha": "c526887baf928e8633ebd755270aa125de985fff",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-21T23:50:23-06:00",
+    "message": "Merge pull request #56 from nrupala/wright/ledger-wo7-20261021"
   }
 ]
