@@ -376,5 +376,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-21T00:15:16-06:00",
     "message": "docs(nightly): ledger \u2014 WO-6.1 shipped as v0.8.1; file GMSI-74 (#54)"
+  },
+  {
+    "release": 47,
+    "tag": "release/v47",
+    "previous_tag": "release/v46",
+    "sha": "2b77429465da034f2f4016790041ce2dea059ee3",
+    "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-21T23:38:56-06:00",
+    "message": "Merge pull request #55 from nrupala/wright/wo7-scope-docs"
   }
 ]
