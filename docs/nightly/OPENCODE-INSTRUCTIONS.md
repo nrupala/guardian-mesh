@@ -750,6 +750,17 @@ do, and none becomes a gate MUST until behaviour-proven here.
   must release its writers simultaneously (barrier or
   equivalent) or be run N times with every run reported — one
   green run of an un-synchronized burst is not evidence.
+- **GMSI-75 — Test counts must name their invocation root.**
+  (WO-7 gate, 2026-10-21.) A suite run from a crate subdirectory
+  and from the workspace root can legitimately differ (the WO-7
+  lane ran `cargo test` inside `guardian-meshd/` and got 79 lib
+  tests; the workspace-root invocation — CI's, and Wright's
+  verification — runs 80). A release record's counts are evidence
+  only when they name the invocation; the canonical invocation
+  is the one CI uses (workspace root). A lane reporting counts
+  from any other root — and especially "correcting" previously
+  verified counts from one — is a finding, not an update. Third
+  lane count slip of the class (WO-6, WO-6.1 F1, WO-7 F1).
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
@@ -1141,3 +1152,43 @@ the laptop checkouts are working copies, never the source of truth.
   RELEASE CANDIDATE (one-week watched soak, RC register row
   28; graduates 2026-10-27). v0.8.0's own graduation (row 26)
   weighed this fix landing — it has. Next: WO-7.
+- 2026-10-21 (nightly) — **WO-7 shipped as v0.8.2** (PR #55,
+  merged 2b774294): `revised_project_scope.md` rewritten to
+  shipped reality — Sentinel/Gatekeeper/Witness/Arbiter/Vault
+  pipeline (not the pre-implementation Auth/Compute/Storage/
+  Network/Policy set), Apache License 2.0 + Payment Rider (not
+  MIT), audit logging + ReadAuditLog and the 97-test suite as
+  shipped (not "not implemented"/"not started"), the real
+  specs/ table, TEE/BFT/mTLS/anchoring/Lean 4/OPA as design
+  only, npm tooling, GitHub as home of record — and the
+  byte-identical duplicate `specs/GUARDIAN_MESH_GAP_ANALYSIS
+  (1).md` removed (both blobs f396e2ef, verified before
+  deletion). No new GMSI arrived since GMSI-74 (the three
+  2026-10-21 gate packs filed none), so no pack refresh was
+  needed before the build. Built by OpenCode on the laptop
+  (fresh clone D:\guardian-mesh-work\wo7, commit 31afd4f4);
+  Wright carried by Git-data API with tree equality asserted
+  (lane tree 94e66bbd, final tree 15b1a824). Wright-verified
+  independently: cargo 97/97 (80 lib + 17 bin) from the
+  workspace root; webui build+lint green; full read of the
+  rewrite against README/CHANGELOG/daemon README/specs.
+  Gate: PASS WITH FINDINGS — scanner BLOCKED only on the
+  GMSI-6 "tests" false lead (seventh occurrence); F1 (Low)
+  the lane ran cargo test inside guardian-meshd/ (96 = 79+17)
+  and "corrected" the verified counts down — fixed by Wright
+  carry edits and filed as GMSI-75 (above). Deployed to
+  guardian.aimlds.org (aarch64 binary sha256 dcd0f79c…,
+  rollback guardian-meshd.bak-v081): production fingerprint
+  unchanged (dd2cf1a3…, fifth upgrade), box E2E 16/16, Pages
+  asset == Wright's build, Access 302 intact, and the release
+  certified itself on production — certificate
+  cert-20261022-000033 (guardian-mesh 0.8.2, PASS WITH
+  FINDINGS, evidence = the gate verdict), fingerprint
+  recomputes, VerifyProof valid, supersedes
+  cert-20261021-000032, status ACTIVE. Whole-log verification
+  still reports the historical break at position 557 (pre-fix
+  history, stands as recorded). v0.8.2 is a RELEASE
+  CANDIDATE (one-week watched soak, RC register row 29;
+  graduates 2026-10-28). Next: WO-8 (P2, fuzz the
+  boundaries). Standing: dependabot PR #51 (vite bump) still
+  open, outside the work orders.
