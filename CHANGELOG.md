@@ -6,6 +6,18 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-21
+
+### Changed
+- **WO-7: Scope documentation reconciliation.** Rewrote `revised_project_scope.md` to accurately reflect the shipped v0.8.1 system. The document now correctly describes the Sentinel → Gatekeeper → Witness → Arbiter → Vault pipeline (not the pre-implementation Auth/Compute/Storage/Network/Policy design), the Apache License 2.0 + Payment Rider licensing (not MIT), the shipped audit logging with ReadAuditLog RPC, the real THROTTLE/ESCALATE verdicts, the certificate issuance capability (IssueCertificate/RevokeCertificate/CertificateStatus RPCs), the GitHub repository location (nrupala/guardian-mesh), and the actual development tooling (npm for WebUI, not pnpm). The gaps section is now honest: TEE attestation, BFT consensus, and other designed-but-not-built capabilities are labeled as design only, not as shipped features.
+- Removed duplicate file `specs/GUARDIAN_MESH_GAP_ANALYSIS (1).md` (byte-identical copy of the canonical `specs/GUARDIAN_MESH_GAP_ANALYSIS.md`).
+- Version bumped `0.8.1` → `0.8.2` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md`).
+
+### Tests
+- Full test suite: **97 tests green** (80 lib + 17 bin) on Wright's independent verification from the workspace root (CI's invocation) — no code changes, docs-only release. (The lane's 96 count came from running inside `guardian-meshd/`; see GMSI-75.)
+- WebUI build + lint: pass.
+- **Gate verdict: PASS WITH FINDINGS** (release gate, 2026-10-21; pack `~/workspace/release-gate-runs/guardian-mesh-wo7-2026-10-21/`). F1 (Low): lane test-count slip, fixed by Wright carry edits. v0.8.2 is a RELEASE CANDIDATE under the one-week soak.
+
 ## [0.8.1] - 2026-10-20
 
 ### Fixed
