@@ -1,0 +1,55 @@
+name: Nightly Fuzz
+
+on:
+  schedule:
+    # Run nightly at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    name: Fuzz targets (brief nightly run)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Run fuzz_envelope_decode
+        run: |
+          cd fuzz
+          cargo fuzz run fuzz_envelope_decode -- -max_total_time=60 -rss_limit_mb=2048
+        continue-on-error: true
+
+      - name: Run fuzz_payload_parse
+        run: |
+          cd fuzz
+          cargo fuzz run fuzz_payload_parse -- -max_total_time=60 -rss_limit_mb=2048
+        continue-on-error: true
+
+      - name: Run fuzz_proof_verify
+        run: |
+          cd fuzz
+          cargo fuzz run fuzz_proof_verify -- -max_total_time=60 -rss_limit_mb=2048
+        continue-on-error: true
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts/
+          if-no-files-found: ignore

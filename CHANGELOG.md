@@ -6,6 +6,25 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-10-22
+
+### Added
+- **WO-8: Fuzz the boundaries (hardening rule H6).** Added three libFuzzer-based fuzz targets for Guardian Mesh's boundary-facing APIs, exercising the daemon's input-handling surfaces without reimplementing verdict logic. Each target is thin — it only feeds attacker bytes into the daemon's existing public APIs; decode errors and validation failures are expected; panics are bugs.
+  - **`fuzz_envelope_decode`**: Protobuf decoding of `EvaluateRequest` messages (the envelope-bearing request type) and envelope size validation via `ProtocolFirewall::check_envelope_size`. Fuzzes the daemon's ability to handle malformed protobuf input and payload size bounds.
+  - **`fuzz_payload_parse`**: JSON payload parsing and Protocol Firewall validation: `check_envelope_size`, `check_unknown_fields` (PF-12), and `check_nesting_depth` (PF-13). Fuzzes the WebUI's action descriptor JSON shape and the firewall's field/depth validation.
+  - **`fuzz_proof_verify`**: ML-DSA-65 signature verification via `verify_proto_envelope`. The fuzzer splits input as: first 4 bytes = CRC32C digest (little-endian), next up to 3500 bytes = signature, remainder = payload. Verification runs against a fixed verifying key (generated from a fixed 32-byte seed, using the daemon's own `SigningKey::from_seed`) and also attempts to decode the whole input as a verifying key to test attacker-controlled key handling via `verifying_key_from_bytes`.
+- **Fuzz package (`fuzz/`)**: A new detached Rust package named `guardian-mesh-fuzz` with its own `[workspace]` table, so the root workspace (`members = ["guardian-meshd"]`) never tries to build it with the stable toolchain. Root `cargo test` and `cargo build` stay green. Dependencies: `libfuzzer-sys` and `guardian-meshd` by path, plus `prost` at the same version the daemon uses (0.14.3).
+- **Seed corpora**: Each target has at least two small seed files under `fuzz/corpus/<target_name>/`, real inputs (not random noise): envelope target has a minimal protobuf structure and a truncated variant; payload target has valid JSON matching the WebUI's action descriptor shape (`actionType`, `context`, `target`, `metadata` within nesting depth 4) and a deeply-nested JSON value (depth 5, exceeds limit); proof target has basic input split as crc||sig||payload and a zero-signature variant. Seed corpora are committed; crash files (`crash-*`, `leak-*`, `timeout-*`) are gitignored.
+- **Nightly CI workflow (`.github/workflows/fuzz.yml`)**: Runs each of the three targets for 60 seconds nightly at 02:00 UTC (and on `workflow_dispatch`). The workflow installs protoc (same action as Rust CI), Rust nightly, and cargo-fuzz, then runs each target with `-max_total_time=60 -rss_limit_mb=2048`. On failure, `fuzz/artifacts/` uploads as a workflow artifact. NOT on push/PR — the main CI must stay fast and stable-only.
+- **Documentation (`fuzz/README.md`)**: What the targets cover, how to run them locally (nightly + cargo-fuzz, Linux is the proven surface; Windows runs are unproven), and the rule that any crash found becomes a P0 work order with the crashing input minimized and added as a regression seed/test. Honest about Windows: if libFuzzer/sanitizers do not work on Windows, the targets' home run surface is Linux CI and the Arch isolation bench (when it exists).
+- Version bumped `0.8.2` → `0.8.3` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md`).
+
+### Tests
+- No daemon source changes (WO-8 adds fuzz targets only, not daemon code). Full test suite: **97 tests green** (80 lib + 17 bin) from the workspace root (CI's invocation).
+
+### Changed
+- `fuzz/.gitignore` ignores `target/`, `artifacts/`, and corpus crash files (`corpus/**/crash-*`, `corpus/**/leak-*`, `corpus/**/timeout-*`). Seed corpora (non-crash files in `corpus/<target>/`) are committed.
+
 ## [0.8.2] - 2026-10-21
 
 ### Changed
