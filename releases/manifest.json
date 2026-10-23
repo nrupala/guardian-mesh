@@ -394,5 +394,14 @@
     "author": "Nrupal Akolkar <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-21T23:50:23-06:00",
     "message": "Merge pull request #56 from nrupala/wright/ledger-wo7-20261021"
+  },
+  {
+    "release": 49,
+    "tag": "release/v49",
+    "previous_tag": "release/v48",
+    "sha": "dfcdb1b18d7f087f985248f1388029da6db5eb62",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-22T23:21:23-06:00",
+    "message": "Merge pull request #57 from nrupala/wright/ledger-refresh-20261022"
   }
 ]
