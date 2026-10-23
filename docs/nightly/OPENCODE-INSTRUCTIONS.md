@@ -761,6 +761,42 @@ do, and none becomes a gate MUST until behaviour-proven here.
   from any other root — and especially "correcting" previously
   verified counts from one — is a finding, not an update. Third
   lane count slip of the class (WO-6, WO-6.1 F1, WO-7 F1).
+- **GMSI-76 — Pack drift watch.** (DogEar v1.2.0 gate,
+  2026-10-22.) Content served from an operator bucket must be
+  provably equal to its pinned manifest on a schedule, not only
+  at upload: Guardian Mesh must be able to prove per-file hash
+  equality between the served bucket objects and the pin of
+  record (the pack-hosting route class).
+- **GMSI-77 — Price-totality probe.** (DogEar v1.2.0 gate,
+  2026-10-22.) A price change must be provably total across
+  served bytes: Guardian Mesh must be able to prove that every
+  served page's price text equals the configuration constant
+  of record, with zero occurrences of a superseded price.
+- **GMSI-78 — Seam-activation watch.** (DogEar v1.2.0 gate,
+  2026-10-22.) A verification seam that honestly answers
+  not-verified while a credential is absent must alert if it
+  still answers not-verified after that credential is
+  provisioned: Guardian Mesh must be able to prove a seam's
+  activation state against its provisioning state.
+- **GMSI-79 — Pairing integrity.** (DogEar v1.2.0 gate,
+  2026-10-22.) Where a native shell depends on a served
+  companion asset, Guardian Mesh must be able to prove the
+  served asset's bytes equal the gated bytes of record — the
+  pair staying in sync is a standing proof, not a deploy-time
+  check.
+- **GMSI-80 — Certified-shell identity.** (DogEar v1.4.0
+  beta.4 gate, 2026-10-22.) A client-side cache name that
+  nothing mechanically bumps is a silent stale-shell channel:
+  Guardian Mesh must be able to prove the shell a client runs
+  is the shell that was certified (served cache string vs
+  certified bundle) as a standing probe, not a release-time
+  grep.
+- **GMSI-81 — Capability-tier proof.** (DogEar v1.4.0 beta.4
+  gate, 2026-10-22.) A capability offered at a tier must be
+  provable loadable/runnable on a reference device class for
+  that tier: Guardian Mesh must carry the tier matrix as a
+  re-runnable proof — offered implies proven, never merely
+  listed.
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
@@ -1192,3 +1228,13 @@ the laptop checkouts are working copies, never the source of truth.
   graduates 2026-10-28). Next: WO-8 (P2, fuzz the
   boundaries). Standing: dependabot PR #51 (vite bump) still
   open, outside the work orders.
+- 2026-10-22 (nightly) — **Pack refreshed: GMSI-76..81 filed.**
+  The DogEar gate runs of 2026-10-22 filed six new spec inputs:
+  v1.2.0 — pack drift watch (GMSI-76), price-totality probe
+  (GMSI-77), seam-activation watch (GMSI-78), pairing integrity
+  (GMSI-79); v1.4.0 beta.4 — certified-shell identity (GMSI-80),
+  capability-tier proof (GMSI-81). The v1.3.0 picker verdict
+  filed none explicitly. These queue behind Part A like prior
+  inputs and land through WO-6's certificate schema and the
+  gate's standing probe sets, each becoming a MUST only once
+  behaviour-proven here. Next: WO-8.
