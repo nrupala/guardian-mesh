@@ -403,5 +403,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-22T23:21:23-06:00",
     "message": "Merge pull request #57 from nrupala/wright/ledger-refresh-20261022"
+  },
+  {
+    "release": 50,
+    "tag": "release/v50",
+    "previous_tag": "release/v49",
+    "sha": "c8e4bb3bd44f8c51f7c2aaa44913a715e0b80a69",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-23T00:05:06-06:00",
+    "message": "Merge pull request #58 from nrupala/wright/wo8-fuzz-boundaries"
   }
 ]
