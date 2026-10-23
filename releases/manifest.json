@@ -412,5 +412,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-23T00:05:06-06:00",
     "message": "Merge pull request #58 from nrupala/wright/wo8-fuzz-boundaries"
+  },
+  {
+    "release": 51,
+    "tag": "release/v51",
+    "previous_tag": "release/v50",
+    "sha": "401b74519b3c71e550a1308e3e9e316cd423674b",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-23T00:19:38-06:00",
+    "message": "Merge pull request #59 from nrupala/wright/ledger-wo8-20261022"
   }
 ]
