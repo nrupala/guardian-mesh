@@ -4,6 +4,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
+use ml_dsa::Keypair as _;
 use std::sync::OnceLock;
 
 // Fixed verifying key for this fuzzer, generated once per process from a fixed seed
@@ -27,7 +28,10 @@ fn get_verifying_key() -> &'static ml_dsa::VerifyingKey<ml_dsa::MlDsa65> {
 
 // Fuzz target: proof verification
 // Splits the input as: first 4 bytes = CRC32C digest (little-endian),
-// next up to 3500 bytes = signature, remainder = payload.
+// next 3309 bytes = signature (the exact encoded ML-DSA-65 signature
+// length, as used by the daemon's own tests), remainder = payload.
+// A shorter input yields a shorter signature slice and an empty
+// payload — a healthy failure path, never a panic.
 // Calls verify_proto_envelope with the fixed key.
 // Also attempts to decode the whole input as a verifying key, and if successful,
 // retries verification against that attacker-controlled key.
@@ -42,8 +46,9 @@ fuzz_target!(|data: &[u8]| {
     let crc_bytes = &data[0..4];
     let crc = u32::from_le_bytes([crc_bytes[0], crc_bytes[1], crc_bytes[2], crc_bytes[3]]);
     
-    // Next up to 3500 bytes = signature
-    let sig_end = std::cmp::min(4 + 3500, data.len());
+    // Next 3309 bytes = signature (exact ML-DSA-65 encoded length)
+    const ML_DSA_65_SIGNATURE_LEN: usize = 3309;
+    let sig_end = std::cmp::min(4 + ML_DSA_65_SIGNATURE_LEN, data.len());
     let signature = &data[4..sig_end];
     
     // Remainder = payload

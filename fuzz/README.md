@@ -2,6 +2,17 @@
 
 This directory contains libFuzzer-based fuzz targets for Guardian Mesh's boundary-facing APIs.
 
+## Seed corpora
+
+Seeds are real inputs, generated with the daemon's own types: the
+envelope seed is a prost-encoded `EvaluateRequest` carrying a real
+signed envelope (plus a truncated variant); the proof seed
+`valid_signed` is a genuine signed payload in the target's
+crc||sig||payload layout that verifies under the target's
+fixed-seed key (plus an all-zero-signature variant with the correct
+CRC); the payload seeds are the WebUI's JSON shape and a depth-5
+nested value.
+
 ## What's covered
 
 Three targets exercise the daemon's input-handling surfaces:
@@ -10,7 +21,7 @@ Three targets exercise the daemon's input-handling surfaces:
 
 2. **`fuzz_payload_parse`** — JSON payload parsing and Protocol Firewall validation: `check_envelope_size`, `check_unknown_fields` (PF-12), and `check_nesting_depth` (PF-13). Fuzzes the WebUI's action descriptor JSON shape and the firewall's field/depth validation.
 
-3. **`fuzz_proof_verify`** — ML-DSA-65 signature verification via `verify_proto_envelope`. The fuzzer splits input as: first 4 bytes = CRC32C digest (little-endian), next up to 3500 bytes = signature, remainder = payload. Verification runs against a fixed verifying key (generated from a fixed 32-byte seed) and also attempts to decode the whole input as a verifying key to test attacker-controlled key handling.
+3. **`fuzz_proof_verify`** — ML-DSA-65 signature verification via `verify_proto_envelope`. The fuzzer splits input as: first 4 bytes = CRC32C digest (little-endian), next 3309 bytes = signature (the exact encoded ML-DSA-65 length), remainder = payload. Verification runs against a fixed verifying key (generated from a fixed 32-byte seed) and also attempts to decode the whole input as a verifying key to test attacker-controlled key handling.
 
 Each target exercises the daemon's **public APIs** only — no verdict logic, no LLM, no reimplementation. Decode errors and validation failures are expected; panics are bugs.
 

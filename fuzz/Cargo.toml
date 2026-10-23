@@ -4,6 +4,9 @@ version = "0.8.3"
 edition = "2024"
 publish = false
 
+[package.metadata]
+cargo-fuzz = true
+
 # DETACHED workspace: this fuzz package carries its own [workspace] table
 # so the root workspace (members = ["guardian-meshd"]) never tries to build
 # it with the stable toolchain. Root `cargo test` / `cargo build` stay green.
@@ -13,6 +16,7 @@ publish = false
 libfuzzer-sys = "0.4"
 guardian-meshd = { path = "../guardian-meshd" }
 prost = "0.14.3"
+ml-dsa = "0.1.0"
 
 [[bin]]
 name = "fuzz_envelope_decode"

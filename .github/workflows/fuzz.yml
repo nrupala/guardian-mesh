@@ -29,22 +29,26 @@ jobs:
         run: cargo install cargo-fuzz
 
       - name: Run fuzz_envelope_decode
-        run: |
-          cd fuzz
-          cargo fuzz run fuzz_envelope_decode -- -max_total_time=60 -rss_limit_mb=2048
+        run: cargo fuzz run fuzz_envelope_decode -- -max_total_time=60 -rss_limit_mb=2048
         continue-on-error: true
 
       - name: Run fuzz_payload_parse
-        run: |
-          cd fuzz
-          cargo fuzz run fuzz_payload_parse -- -max_total_time=60 -rss_limit_mb=2048
+        run: cargo fuzz run fuzz_payload_parse -- -max_total_time=60 -rss_limit_mb=2048
         continue-on-error: true
 
       - name: Run fuzz_proof_verify
-        run: |
-          cd fuzz
-          cargo fuzz run fuzz_proof_verify -- -max_total_time=60 -rss_limit_mb=2048
+        run: cargo fuzz run fuzz_proof_verify -- -max_total_time=60 -rss_limit_mb=2048
         continue-on-error: true
+
+      - name: Fail the job if any target crashed
+        if: always()
+        run: |
+          if find fuzz/artifacts -type f -name 'crash-*' 2>/dev/null | grep -q .; then
+            echo "Fuzz crash artifacts found — this crash becomes a P0 work order."
+            find fuzz/artifacts -type f
+            exit 1
+          fi
+          echo "No crash artifacts."
 
       - name: Upload artifacts on failure
         if: failure()
