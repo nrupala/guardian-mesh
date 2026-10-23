@@ -797,6 +797,18 @@ do, and none becomes a gate MUST until behaviour-proven here.
   that tier: Guardian Mesh must carry the tier matrix as a
   re-runnable proof — offered implies proven, never merely
   listed.
+- **GMSI-82 — Unbuilt test infrastructure is not a
+  capability.** (WO-8 gate, 2026-10-22.) A fuzz (or any
+  test-harness) work order closes only with a build + brief-run
+  proof of the harness itself on its home surface, executed by
+  the verifying lane: the WO-8 lane's package could not build in
+  three independent ways (missing cargo-fuzz package metadata,
+  an undeclared crate dependency, a missing trait import), its
+  nightly workflow invoked cargo-fuzz from a directory where it
+  cannot run, and its proof target's input layout made the real
+  verification path unreachable — while reporting the targets as
+  delivered. A lane's claim that targets exist is not evidence
+  they compile or run.
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
@@ -1238,3 +1250,54 @@ the laptop checkouts are working copies, never the source of truth.
   inputs and land through WO-6's certificate schema and the
   gate's standing probe sets, each becoming a MUST only once
   behaviour-proven here. Next: WO-8.
+- 2026-10-22 (nightly) — **WO-8 shipped as v0.8.3** (PR #58,
+  merged c8e4bb3b): three cargo-fuzz/libFuzzer targets in a
+  detached `fuzz/` package — fuzz_envelope_decode (prost
+  EvaluateRequest decode + PF size), fuzz_payload_parse
+  (PF-1/12/13), fuzz_proof_verify (verify_proto_envelope +
+  verifying_key_from_bytes) — with real seed corpora, a
+  fuzz/README, and a nightly fuzz workflow (02:00 UTC +
+  dispatch, 60 s per target, crash-artifact gate). Pack was
+  refreshed first (PR #57, merged dfcdb1b1: GMSI-76..81 from
+  the DogEar 2026-10-22 gates). Built by OpenCode on the
+  laptop (fresh clone D:\guardian-mesh-work\wo8, lane commit
+  f9acde7; carried by Git-data API with tree equality asserted
+  at each commit — lane tree ceae6325, final tree 47220a86).
+  Wright-verified independently: cargo 97/97 (80 lib + 17 bin)
+  from the workspace root on Linux (the lane's Windows root
+  run: 96 = 79+17; one lib test is #[cfg(unix)] — GMSI-75
+  naming applied); webui build+lint green; and the fuzz
+  behaviour proof the lane could not run (its cargo-fuzz
+  install OOM'd on Windows): Wright built all three targets
+  on Linux (nightly, cargo-fuzz 0.13.2) and ran each 30 s —
+  envelope 1,570,318 execs, payload 922,892, proof 354,323 —
+  zero crashes, zero crash artifacts. Gate: PASS WITH
+  FINDINGS — scanner BLOCKED only on the GMSI-6 "tests" false
+  lead (eighth occurrence); F1 (High) the lane's fuzz package
+  had never been built and could not build (cargo-fuzz
+  metadata, undeclared ml-dsa, Keypair import); F2 (High) the
+  proof target's up-to-3500-byte signature slice could never
+  verify a real 3309-byte ML-DSA-65 proof — fixed to the
+  exact length, seeds regenerated real (valid_signed verifies
+  under the target's fixed-seed key; valid_request prost-
+  decodes and round-trips); F3 workflow continue-on-error
+  would have swallowed crashes — crash-artifact gate added;
+  F5 workflow ran cargo-fuzz from inside fuzz/ (cannot run
+  there) — moved to the repo root; F4 lane's WO8-RESULT.md
+  removed from the tree. All fixed in the carry. Filed
+  GMSI-82 (above). Deployed to guardian.aimlds.org (aarch64
+  binary sha256 8407e6c5…, rollback guardian-meshd.bak-v082):
+  production fingerprint dd2cf1a3… unchanged (sixth upgrade),
+  box E2E 16/16, Pages asset == Wright's build (webui
+  unchanged), Access 302 intact, audit log at 1,179 entries
+  with whole-log verification still reporting the historical
+  break at position 557 (pre-fix history, stands as
+  recorded), and the release certified itself on production —
+  certificate cert-20261023-000034 (guardian-mesh 0.8.3, PASS
+  WITH FINDINGS, evidence = the gate verdict sha256
+  2b4df95c…), fingerprint recomputes, VerifyProof valid,
+  supersedes cert-20261022-000033, status ACTIVE. v0.8.3 is
+  a RELEASE CANDIDATE (one-week watched soak, RC register
+  row 30; graduates 2026-10-29). Next: WO-9 (P1, public
+  release log on the site). Standing: dependabot PR #51
+  (vite bump) still open, outside the work orders.
