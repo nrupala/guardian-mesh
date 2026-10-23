@@ -1,0 +1,1 @@
+{"actionType":"TOOL_CALL","context":"test context","target":"panel","metadata":{"source":"webui"}}
