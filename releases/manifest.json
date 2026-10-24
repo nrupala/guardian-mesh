@@ -421,5 +421,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-23T00:19:38-06:00",
     "message": "Merge pull request #59 from nrupala/wright/ledger-wo8-20261022"
+  },
+  {
+    "release": 52,
+    "tag": "release/v52",
+    "previous_tag": "release/v51",
+    "sha": "0d5787aae437e5c97ca693186d6b91f4611f191d",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-23T23:39:54-06:00",
+    "message": "Merge pull request #60 from nrupala/wright/wo9-release-log"
   }
 ]
