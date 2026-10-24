@@ -809,6 +809,20 @@ do, and none becomes a gate MUST until behaviour-proven here.
   verification path unreachable — while reporting the targets as
   delivered. A lane's claim that targets exist is not evidence
   they compile or run.
+- **GMSI-83 — A published release-status claim must name
+  its status artifact.** (WO-9 gate, 2026-10-23.) The
+  release log's per-release status (Released vs Release
+  candidate) was inferred from CHANGELOG narrative and was
+  wrong for four releases (v0.8.0–v0.8.3 marked "Released"
+  while still RELEASE CANDIDATES in soak); the status of
+  record lived in the RC register. Guardian Mesh
+  certificates and public status surfaces must bind every
+  lifecycle/status field to the artifact that is its
+  source of truth (register/ledger), name that artifact
+  in the record, and treat a status published without a
+  named source as a finding — the GMSI-2 discipline (the
+  copy presented, not the copy at mint) applied to status
+  claims.
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
@@ -1301,3 +1315,57 @@ the laptop checkouts are working copies, never the source of truth.
   row 30; graduates 2026-10-29). Next: WO-9 (P1, public
   release log on the site). Standing: dependabot PR #51
   (vite bump) still open, outside the work orders.
+- 2026-10-23 (nightly) — **WO-9 shipped as v0.8.4** (PR #60,
+  merged 0d5787aa): public release log on the site — a
+  `/releases` page in the WebUI rendering a typed data file
+  (`webui/src/data/releases.ts`) with one entry per
+  CHANGELOG version section (0.8.4 … 0.1.0: summary,
+  highlights, gate verdict or "Not recorded", test record,
+  status), plus a drift guard
+  (`webui/scripts/check-releases.mjs`) wired into the webui
+  build — a release that forgets the log now fails the
+  build. No pack refresh was needed (no new GMSI had
+  arrived since GMSI-82; the Sanity Check gate of
+  2026-10-23 filed none). Built by OpenCode on the laptop
+  (fresh clone D:\guardian-mesh-work\wo9, lane commit
+  d42fda1; carried by Git-data API with tree equality
+  asserted at each commit — lane tree df2dc100, final tree
+  42b3810a). Wright-verified independently: cargo 97/97
+  (80 lib + 17 bin) from the workspace root on Linux (the
+  lane's Windows root run: 96 = 79+17; one #[cfg(unix)]
+  test — GMSI-75 naming applied); webui npm ci + build +
+  lint + check:releases green; drift-guard negative case
+  proven by Wright on a scratch copy (exit 1, position-
+  specific message). Gate: PASS WITH FINDINGS — scanner
+  BLOCKED only on the GMSI-6 "tests" false lead (ninth
+  occurrence); 0 secrets, 0 vulns (159 deps). F1 (Medium)
+  the lane marked v0.8.0–v0.8.3 as "Released" — all four
+  are RELEASE CANDIDATES in soak per the RC register —
+  fixed in the carry (statuses sourced from the register,
+  the status artifact); F2 (Low) the lane's draft
+  CHANGELOG claimed the Linux 97 count before Wright ran
+  it — corrected to name platform + verifier per count.
+  Filed GMSI-83 (above). Deployed to guardian.aimlds.org
+  (aarch64 binary sha256 7e5afacc…, rollback
+  guardian-meshd.bak-v083; webui-dist.bak-v083 kept):
+  production fingerprint dd2cf1a3… unchanged (seventh
+  upgrade), both services active, Pages serving the gated
+  asset index-D5AkpYQg.js, Access 302 intact, audit log
+  at 1,181 entries with whole-log verification still
+  reporting the historical break at position 557 (pre-fix
+  history, stands as recorded), and the release certified
+  itself on production — certificate cert-20261024-000035
+  (guardian-mesh 0.8.4, PASS WITH FINDINGS, evidence =
+  the gate verdict sha256 9441325f…), fingerprint
+  recomputes, VerifyProof valid, supersedes
+  cert-20261023-000034, status ACTIVE. Real-browser
+  click-through of /releases NOT RUN (three browser-task
+  windows closed without results tonight; live asset
+  identity + bundle content inspection are the served-
+  state evidence). v0.8.4 is a RELEASE CANDIDATE
+  (one-week watched soak, RC register row 32; graduates
+  2026-10-30). Part A is now complete (WO-1…WO-9).
+  Next: WO-19 (P1, Part C first in order — firewall
+  session eviction + measured Health counters).
+  Standing: dependabot PR #51 (vite bump) still open,
+  outside the work orders.
