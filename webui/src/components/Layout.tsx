@@ -20,6 +20,7 @@ export function Layout() {
           <NavLink to="/architecture">Architecture</NavLink>
           <NavLink to="/guide">Guide & Help</NavLink>
           <NavLink to="/agents">For Agents</NavLink>
+          <NavLink to="/releases">Releases</NavLink>
         </nav>
         {LIVE_MODE ? (
           <Link to="/panel" className="btn-primary nav-cta">Control Panel</Link>
