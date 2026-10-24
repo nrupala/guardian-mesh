@@ -21,8 +21,8 @@ export const RELEASES: Release[] = [
       "Drift guard script (check-releases.mjs) wired into the build to detect when the release log falls out of sync with the CHANGELOG",
       "Release data file (releases.ts) containing structured release information for all versions"
     ],
-    gateVerdict: "Gate verdict: recorded by Wright after the independent release-gate run.",
-    tests: "cargo test: 97 (80 lib + 17 bin) from workspace root; webui build + lint + check:releases all passing",
+    gateVerdict: "PASS WITH FINDINGS",
+    tests: "97/97 (80 lib + 17 bin) from the workspace root, Wright-verified on Linux (lane Windows run 96 — one #[cfg(unix)] test); webui build + lint + check:releases passing; drift-guard negative case proven (exit 1 on a mismatched version)",
     status: "Release candidate"
   },
   {
@@ -36,7 +36,7 @@ export const RELEASES: Release[] = [
     ],
     gateVerdict: "PASS WITH FINDINGS",
     tests: "97/97 tests (80 lib + 17 bin) Wright-verified from workspace root on Linux; fuzz targets built and ran against seed corpus with zero crashes",
-    status: "Released"
+    status: "Release candidate"
   },
   {
     version: "0.8.2",
@@ -50,7 +50,7 @@ export const RELEASES: Release[] = [
     ],
     gateVerdict: "PASS WITH FINDINGS",
     tests: "97 tests green (80 lib + 17 bin) Wright-verified from workspace root; WebUI build + lint passing",
-    status: "Released"
+    status: "Release candidate"
   },
   {
     version: "0.8.1",
@@ -63,7 +63,7 @@ export const RELEASES: Release[] = [
     ],
     gateVerdict: "PASS WITH FINDINGS",
     tests: "97 tests green (80 lib + 17 bin) after Wright's independent verification; wire proof showed v0.8.0 produced 7 duplicate hashes while v0.8.1 produced 0 duplicates with chain VERIFIED",
-    status: "Released"
+    status: "Release candidate"
   },
   {
     version: "0.8.0",
@@ -78,7 +78,7 @@ export const RELEASES: Release[] = [
     ],
     gateVerdict: "PASS WITH FINDINGS",
     tests: "96 tests green (79 lib + 17 bin) independently re-run by Wright; 11 certificate-path test cases including lifecycle, tamper proofs, and mixed audit traffic",
-    status: "Released"
+    status: "Release candidate"
   },
   {
     version: "0.7.0",
