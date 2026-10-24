@@ -6,6 +6,23 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-10-23
+
+### Added
+- **WO-9: Public release log on the site.** Added a `/releases` page to the WebUI fed from the CHANGELOG and gate records. The page displays every release with its version, date, summary, highlights, gate verdict, and testing record — updated as part of each release, not after.
+  - **Release data file (`webui/src/data/releases.ts`)**: A typed, exported array with one entry for every version section in CHANGELOG.md (0.8.4, 0.8.3, 0.8.2, 0.8.1, 0.8.0, 0.7.0, 0.6.0, 0.1.0). Each entry carries: version, date, summary (1–2 plain sentences distilled from the CHANGELOG section), highlights (array of short plain-language strings), gateVerdict (the verdict string the CHANGELOG records, or "Not recorded" where none exists), tests (test counts and what ran, condensed to one short string, or "Not recorded"), status ("Release candidate" for 0.8.4 under soak; "Released" for all others).
+  - **Drift guard (`webui/scripts/check-releases.mjs`)**: A dependency-free Node script that reads CHANGELOG.md and releases.ts, extracts the version lists from both, and exits non-zero with a clear message if the two lists differ in content or order. Wired into `webui/package.json`: new script `check:releases` runs the guard explicitly; the `build` script now runs `node scripts/check-releases.mjs && ...` before the TypeScript and Vite steps, so a forgotten release-log update is a build failure, not a hope.
+  - **The page (`webui/src/pages/ReleasesPage.tsx`)**: Renders RELEASES data: for each release, version + date, status badge (green for Released, blue for Release candidate), summary, highlights list, and a clearly labelled testing record section (gate verdict + tests). Intro paragraph states what the page is: the public release log fed from CHANGELOG and gate records, updated as part of each release, and correctly states the licensing as "Apache License 2.0 + Payment Rider". Follows existing page structure and CSS conventions (section/card/plain-list classes; new release-prefixed classes in index.css).
+  - **Routing + navigation**: App.tsx adds public route `releases` → ReleasesPage inside the Layout route group (NOT behind ProtectedRoute); Layout.tsx adds "Releases" NavLink to the main nav after "For Agents".
+  - **llms.txt and guardian-mesh.json**: Neither enumerates the site's pages/routes (they describe the gRPC interface, not website pages), so both left untouched per task instructions.
+- Version bumped `0.8.3` → `0.8.4` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md`).
+
+### Tests
+- No daemon source changes (WO-9 is WebUI-only). Full suite from workspace root: **97/97 (80 lib + 17 bin)** — reported WITH invocation root per GMSI-75.
+- WebUI: `npm install` (from webui/), `npm run build` (now includes drift guard), `npm run lint`, and `npm run check:releases` explicitly — all passing. Built asset: `dist/index.html` + `dist/404.html` + bundled assets in `dist/assets/`.
+- Drift guard verified: temporarily removed 0.8.3 from releases.ts; check:releases exited 1 with clear message ("DRIFT DETECTED: Version mismatch at position 1"). Guard restored and passing.
+- Gate verdict: recorded by Wright after the independent release-gate run.
+
 ## [0.8.3] - 2026-10-22
 
 ### Added
