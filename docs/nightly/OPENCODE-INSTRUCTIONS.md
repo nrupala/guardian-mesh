@@ -1389,3 +1389,59 @@ the laptop checkouts are working copies, never the source of truth.
   session eviction + measured Health counters).
   Standing: dependabot PR #51 (vite bump) still open,
   outside the work orders.
+- 2026-10-24 (nightly) — **WO-19 shipped as v0.8.5** (PR #63,
+  merged 608649f5; pack refresh PR #62, merged 863395a1,
+  filed GMSI-84/GMSI-85 from the 2026-10-24 DogEar gates):
+  firewall session eviction + measured Health counters,
+  closing v0.4.0 gate findings F1/F2 (EV-5 groundwork).
+  HandshakeBus eviction now returns the evicted session IDs
+  (evict_expired / evict_expired_at); the service sweeps them
+  into ProtocolFirewall::evict_session on Handshake and on
+  Evaluate, and the Gatekeeper evicts a dead session's
+  firewall state before blocking. The firewall records
+  measured per-rule outcomes (Gatekeeper records the static
+  PF-1/12/13/15/16/17; the instance checks record PF-14,
+  POLICY_RATE, PF-18); Health reports the measured totals
+  and a per-rule map in the new proto field 6
+  (protocol_firewall_rule_counters, "passed=<n>,failed=<n>")
+  — the 18/18 constants are deleted, a fresh daemon reports
+  0/0 with an empty map. Built by OpenCode on the laptop
+  (fresh clone D:\guardian-mesh-work\wo19, lane commit
+  e048a40; carried by Git-data API with tree equality
+  asserted at each commit — lane tree aa88997e, final tree
+  78035aa5). Wright-verified independently: cargo 107/107
+  (87 lib + 20 bin) from the workspace root on Linux (lane
+  Windows run 106 = 86+20; one #[cfg(unix)] test); webui
+  npm ci + build + lint + check:releases green (9 versions);
+  wire proof on a local daemon AND on production over
+  gRPC-Web through the shipped TS client: fresh Health 0/0
+  empty map → one valid Evaluate = 9 passed / 9 total across
+  exactly 9 rules → one PF-12 block = PF-12 failed=1 with
+  later rules unrecorded. Gate: PASS WITH FINDINGS —
+  scanner BLOCKED only on the GMSI-6 "tests" false lead
+  (tenth occurrence); 0 secrets, 0 vulns (159 deps). F1
+  (Low) the lane's shipped test counts were arithmetically
+  wrong (Windows total vs Linux baseline; "9 added" for 10
+  tests) — fixed in the carry. No new GMSI from this run;
+  the WO-6 schema's reserved pf_outcomes wiring is the
+  standing follow-up now that the counters exist.
+  Deployed to guardian.aimlds.org (aarch64 binary sha256
+  4e74382b…, rollback guardian-meshd.bak-v084;
+  webui-dist.bak-v084 kept): production fingerprint
+  dd2cf1a3… unchanged (eighth upgrade), both services
+  active, Pages serving the gated asset index-CCim350_.js,
+  Access 302 intact, audit log at 1,182 entries with
+  whole-log verification still reporting the historical
+  break at position 557 (pre-fix history, stands as
+  recorded), and the release certified itself on
+  production — certificate cert-20261025-000036
+  (guardian-mesh 0.8.5, PASS WITH FINDINGS, evidence =
+  the gate verdict sha256 38426175…), fingerprint
+  recomputes, VerifyProof valid, supersedes
+  cert-20261024-000035, status ACTIVE. v0.8.5 is a
+  RELEASE CANDIDATE (one-week watched soak, RC register
+  row 33; graduates 2026-10-31). Part C is underway
+  (WO-19 done). Next: WO-10 (P1, Part C second in order —
+  Simulate call + structured verdict reasons). Standing:
+  dependabot PR #51 (vite bump) still open, outside the
+  work orders.
