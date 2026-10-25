@@ -4,7 +4,7 @@
 //! Protocol Firewall — enforces PF-1..PF-18 from the formal spec §1.4
 //! on the Evaluate path for client envelopes.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -98,6 +98,13 @@ impl RateLimiter {
     }
 }
 
+/// Per-rule counter for measured outcomes.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RuleCounter {
+    pub passed: u64,
+    pub failed: u64,
+}
+
 /// Per-session state for Protocol Firewall checks.
 #[derive(Debug)]
 struct SessionState {
@@ -119,6 +126,7 @@ impl SessionState {
 /// Global state for the Protocol Firewall.
 pub struct ProtocolFirewall {
     sessions: Arc<Mutex<HashMap<String, SessionState>>>,
+    rule_counters: Arc<Mutex<BTreeMap<String, RuleCounter>>>,
 }
 
 impl Default for ProtocolFirewall {
@@ -131,7 +139,39 @@ impl ProtocolFirewall {
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            rule_counters: Arc::new(Mutex::new(BTreeMap::new())),
         }
+    }
+
+    /// Record one measured outcome for a rule.
+    pub fn record_rule(&self, rule: &str, passed: bool) {
+        let mut counters = self.rule_counters.lock().unwrap();
+        let counter = counters.entry(rule.to_string()).or_insert(RuleCounter::default());
+        if passed {
+            counter.passed += 1;
+        } else {
+            counter.failed += 1;
+        }
+    }
+
+    /// Snapshot of per-rule counters, sorted by rule name (BTreeMap order).
+    pub fn rule_counters(&self) -> Vec<(String, RuleCounter)> {
+        let counters = self.rule_counters.lock().unwrap();
+        counters.iter().map(|(k, v)| (k.clone(), *v)).collect()
+    }
+
+    /// Totals: (passed, failed) summed over all recorded rules.
+    pub fn totals(&self) -> (u64, u64) {
+        let counters = self.rule_counters.lock().unwrap();
+        counters.values().fold((0, 0), |(p, f), counter| {
+            (p + counter.passed, f + counter.failed)
+        })
+    }
+
+    /// Number of live per-session firewall states (for eviction proofs).
+    pub fn session_count(&self) -> usize {
+        let sessions = self.sessions.lock().unwrap();
+        sessions.len()
     }
 
     /// PF-1/PF-5: Envelope/payload size bounds (64 KiB envelope budget per spec).
@@ -196,7 +236,12 @@ impl ProtocolFirewall {
         let mut sessions = self.sessions.lock().unwrap();
         let state = sessions.entry(session_id.to_string()).or_insert_with(SessionState::new);
         
-        if !state.nonce_window.check_and_insert(nonce) {
+        let result = state.nonce_window.check_and_insert(nonce);
+        drop(sessions); // Release lock before recording
+        
+        self.record_rule("PF-14", result);
+        
+        if !result {
             return Err("PF-14 nonce reuse rejected".to_string());
         }
         Ok(())
@@ -255,7 +300,13 @@ impl ProtocolFirewall {
         let mut sessions = self.sessions.lock().unwrap();
         let state = sessions.entry(session_id.to_string()).or_insert_with(SessionState::new);
         
-        if !state.rate_limiter_policy.check_rate(now_ms, limit) {
+        let under_limit = state.rate_limiter_policy.check_rate(now_ms, limit);
+        drop(sessions); // Release lock before recording
+        
+        // Record: pass when Ok(None), fail when Ok(Some(throttle))
+        self.record_rule("POLICY_RATE", under_limit);
+        
+        if !under_limit {
             return Ok(Some(ThrottleReason::PolicyRate));
         }
         Ok(None)
@@ -272,7 +323,13 @@ impl ProtocolFirewall {
         let mut sessions = self.sessions.lock().unwrap();
         let state = sessions.entry(session_id.to_string()).or_insert_with(SessionState::new);
         
-        if !state.rate_limiter_pf18.check_rate(now_ms, RATE_LIMIT_EXTERNAL_MSG_PER_SEC) {
+        let under_limit = state.rate_limiter_pf18.check_rate(now_ms, RATE_LIMIT_EXTERNAL_MSG_PER_SEC);
+        drop(sessions); // Release lock before recording
+        
+        // Record: pass when Ok(None), fail when Ok(Some(throttle))
+        self.record_rule("PF-18", under_limit);
+        
+        if !under_limit {
             return Ok(Some(ThrottleReason::ProtocolFirewall));
         }
         Ok(None)
@@ -460,5 +517,92 @@ mod tests {
         }
         // The first nonce (nonce0) should have been evicted, so we can reuse it
         assert!(pf.check_nonce_uniqueness("session1", b"nonce0").is_ok());
+    }
+
+    // WO-19: Recording and eviction tests
+
+    #[test]
+    fn fresh_firewall_has_empty_counters() {
+        let pf = ProtocolFirewall::new();
+        assert_eq!(pf.rule_counters().len(), 0);
+        assert_eq!(pf.totals(), (0, 0));
+    }
+
+    #[test]
+    fn recording_updates_counters() {
+        let pf = ProtocolFirewall::new();
+        pf.record_rule("PF-1", true);
+        pf.record_rule("PF-1", true);
+        pf.record_rule("PF-12", false);
+        pf.record_rule("PF-14", true);
+        
+        let counters = pf.rule_counters();
+        assert_eq!(counters.len(), 3);
+        
+        let pf1 = counters.iter().find(|(k, _)| k == "PF-1").unwrap();
+        assert_eq!(pf1.1.passed, 2);
+        assert_eq!(pf1.1.failed, 0);
+        
+        let pf12 = counters.iter().find(|(k, _)| k == "PF-12").unwrap();
+        assert_eq!(pf12.1.passed, 0);
+        assert_eq!(pf12.1.failed, 1);
+        
+        let (total_passed, total_failed) = pf.totals();
+        assert_eq!(total_passed, 3);
+        assert_eq!(total_failed, 1);
+    }
+
+    #[test]
+    fn nonce_check_records_pf14() {
+        let pf = ProtocolFirewall::new();
+        // First use: pass
+        pf.check_nonce_uniqueness("session1", b"nonce1").unwrap();
+        // Reuse: fail
+        let _ = pf.check_nonce_uniqueness("session1", b"nonce1");
+        
+        let counters = pf.rule_counters();
+        let pf14 = counters.iter().find(|(k, _)| k == "PF-14").unwrap();
+        assert_eq!(pf14.1.passed, 1);
+        assert_eq!(pf14.1.failed, 1);
+    }
+
+    #[test]
+    fn rate_check_records_pf18() {
+        let pf = ProtocolFirewall::new();
+        // Drive a session over the PF-18 limit (100 msg/s)
+        let mut passed_count = 0;
+        let mut failed_count = 0;
+        
+        for _ in 0..105 {
+            match pf.check_rate_limit("session1") {
+                Ok(None) => passed_count += 1,
+                Ok(Some(_)) => failed_count += 1,
+                Err(_) => panic!("unexpected error"),
+            }
+        }
+        
+        assert_eq!(passed_count, 100);
+        assert!(failed_count >= 5);
+        
+        let counters = pf.rule_counters();
+        let pf18 = counters.iter().find(|(k, _)| k == "PF-18").unwrap();
+        assert_eq!(pf18.1.passed, 100);
+        assert_eq!(pf18.1.failed as usize, failed_count);
+    }
+
+    #[test]
+    fn eviction_clears_session_state() {
+        let pf = ProtocolFirewall::new();
+        
+        // Use a nonce on a session
+        pf.check_nonce_uniqueness("session1", b"nonce1").unwrap();
+        assert_eq!(pf.session_count(), 1);
+        
+        // Evict the session
+        pf.evict_session("session1");
+        assert_eq!(pf.session_count(), 0);
+        
+        // The same nonce should be accepted again (nonce window is gone)
+        assert!(pf.check_nonce_uniqueness("session1", b"nonce1").is_ok());
     }
 }

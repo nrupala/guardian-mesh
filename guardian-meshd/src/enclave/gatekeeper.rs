@@ -22,6 +22,8 @@ impl GatekeeperEnclave {
         };
 
         if !bus.session_exists(&firewalled.handshake_session) {
+            // WO-19: evict firewall state for expired/unknown sessions before blocking
+            firewall.evict_session(&firewalled.handshake_session);
             ctx.verdict = Some(Verdict::Block);
             ctx.reason = Some("Invalid or expired handshake session".into());
             return;
@@ -58,21 +60,27 @@ impl GatekeeperEnclave {
         };
 
         // PF-1/PF-5: Envelope/payload size bounds (64 KiB)
-        if let Err(reason) = ProtocolFirewall::check_envelope_size(&envelope.payload) {
+        let size_result = ProtocolFirewall::check_envelope_size(&envelope.payload);
+        firewall.record_rule("PF-1", size_result.is_ok());
+        if let Err(reason) = size_result {
             ctx.verdict = Some(Verdict::Block);
             ctx.reason = Some(reason);
             return;
         }
 
         // PF-12: Reject unknown fields in ActionDescriptor JSON
-        if let Err(reason) = ProtocolFirewall::check_unknown_fields(&envelope.payload) {
+        let unknown_fields_result = ProtocolFirewall::check_unknown_fields(&envelope.payload);
+        firewall.record_rule("PF-12", unknown_fields_result.is_ok());
+        if let Err(reason) = unknown_fields_result {
             ctx.verdict = Some(Verdict::Block);
             ctx.reason = Some(reason);
             return;
         }
 
         // PF-13: Nesting depth max 4
-        if let Err(reason) = ProtocolFirewall::check_nesting_depth(&envelope.payload) {
+        let nesting_result = ProtocolFirewall::check_nesting_depth(&envelope.payload);
+        firewall.record_rule("PF-13", nesting_result.is_ok());
+        if let Err(reason) = nesting_result {
             ctx.verdict = Some(Verdict::Block);
             ctx.reason = Some(reason);
             return;
@@ -87,14 +95,35 @@ impl GatekeeperEnclave {
 
         // PF-15/PF-16: Timestamp windows (stale > 5s, future > 1s)
         // The client sends timestamp as unix NANOSECONDS (u64)
-        if let Err(reason) = ProtocolFirewall::check_timestamp_windows(envelope.timestamp) {
+        let timestamp_result = ProtocolFirewall::check_timestamp_windows(envelope.timestamp);
+        // Record: on Ok record pass for BOTH PF-15 and PF-16; on Err record fail for the rule named in the error
+        match &timestamp_result {
+            Ok(()) => {
+                firewall.record_rule("PF-15", true);
+                firewall.record_rule("PF-16", true);
+            }
+            Err(reason) => {
+                // Parse the prefix before the first space to identify the rule
+                let rule = if reason.starts_with("PF-15") {
+                    "PF-15"
+                } else if reason.starts_with("PF-16") {
+                    "PF-16"
+                } else {
+                    "PF-15" // fallback if neither
+                };
+                firewall.record_rule(rule, false);
+            }
+        }
+        if let Err(reason) = timestamp_result {
             ctx.verdict = Some(Verdict::Block);
             ctx.reason = Some(reason);
             return;
         }
 
         // PF-17: Signature format budget
-        if let Err(reason) = ProtocolFirewall::check_signature_format(&envelope.ml_dsa_65_signature) {
+        let sig_format_result = ProtocolFirewall::check_signature_format(&envelope.ml_dsa_65_signature);
+        firewall.record_rule("PF-17", sig_format_result.is_ok());
+        if let Err(reason) = sig_format_result {
             ctx.verdict = Some(Verdict::Block);
             ctx.reason = Some(reason);
             return;
@@ -311,5 +340,53 @@ mod tests {
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
         GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
         assert_signature_block(&ctx);
+    }
+
+    // WO-19: Dead-session eviction test
+    #[test]
+    fn dead_session_evicts_firewall_state() {
+        let (sk, _vk) = generate_keypair();
+        let bus = HandshakeBus::new(b"test-secret");
+        let firewall = ProtocolFirewall::new();
+        
+        let session_id = "dead_session_id";
+        
+        // Seed the firewall with nonce state for this session
+        firewall.check_nonce_uniqueness(session_id, b"test_nonce").unwrap();
+        assert_eq!(firewall.session_count(), 1);
+        
+        // Create a request with NO bus session (dead/expired)
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let envelope = proto_envelope(&sealed);
+        
+        // Build request manually without computing HMAC (dead session)
+        let req = EvaluateRequest {
+            firewalled: Some(FirewalledRequest {
+                envelope: Some(envelope),
+                source_enclave: "webui".into(),
+                handshake_session: session_id.to_string(),
+                hmac_tag: vec![0u8; 32], // Dummy HMAC
+            }),
+            action: Some(ActionDescriptor {
+                action_type: "TOOL_CALL".into(),
+                context: "test".into(),
+                target: "panel".into(),
+                metadata: Default::default(),
+            }),
+        };
+        let mut ctx = EnclaveContext::new(req);
+        
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
+        
+        // Verdict should be Block with invalid session reason
+        assert_eq!(ctx.verdict, Some(Verdict::Block));
+        let reason = ctx.reason.clone().unwrap_or_default();
+        assert!(reason.contains("Invalid") || reason.contains("expired"));
+        
+        // The firewall's session_count for that ID should be gone
+        assert_eq!(firewall.session_count(), 0);
+        
+        // The same nonce should be accepted again on a fresh check
+        assert!(firewall.check_nonce_uniqueness(session_id, b"test_nonce").is_ok());
     }
 }

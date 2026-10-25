@@ -135,6 +135,7 @@ message HealthResponse {
   uint32 protocol_firewall_rules_passed = 3;
   uint32 protocol_firewall_rules_total = 4;
   string signing_key_fingerprint = 5; // SHA-256 of the daemon's ML-DSA-65 public key (lowercase hex)
+  map<string, string> protocol_firewall_rule_counters = 6; // Per-rule measured counts: "passed=<n>,failed=<n>"
 }
 
 // ── Shared Types ──────────────────────────

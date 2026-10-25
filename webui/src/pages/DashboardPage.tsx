@@ -301,9 +301,20 @@ function LivePanel() {
             </p>
             <p className="status-sub">
               {health
-                ? `of ${health.protocolFirewallRulesTotal} named rules, since the daemon started`
+                ? `of ${health.protocolFirewallRulesTotal} firewall checks run since the daemon started`
                 : ""}
             </p>
+            {health && health.protocolFirewallRuleCounters && Object.keys(health.protocolFirewallRuleCounters).length > 0 && (
+              <div className="status-sub" style={{ marginTop: "0.5rem" }}>
+                {Object.entries(health.protocolFirewallRuleCounters)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([rule, counts]) => (
+                    <div key={rule}>
+                      {rule}: {counts}
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
           <div className="card">
             <h3>Session</h3>
