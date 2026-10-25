@@ -6,6 +6,27 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-10-24
+
+### Added
+- **WO-19: Firewall session eviction + measured Health counters.** Closes v0.4.0 gate findings F1/F2: call ProtocolFirewall::evict_session on bus session expiry, and make Health report measured per-rule pass/fail counts instead of constants (spec EV-5 groundwork).
+  - **Measured counters in Protocol Firewall**: Added per-rule counter store (`BTreeMap<String, RuleCounter>`) inside `ProtocolFirewall`. Rules enter the map on their first recorded outcome (never pre-populated). New public methods: `record_rule(&self, rule: &str, passed: bool)` records one measured outcome; `rule_counters(&self) -> Vec<(String, RuleCounter)>` returns snapshot sorted by rule name; `totals(&self) -> (u64, u64)` returns (passed, failed) summed over all recorded rules; `session_count(&self) -> usize` returns number of live per-session firewall states for eviction proofs.
+  - **Recording inside instance checks**: `check_nonce_uniqueness` records "PF-14" pass/fail; `check_policy_rate` records "POLICY_RATE" pass when Ok(None), fail when Ok(Some(throttle)); `check_rate_limit` records "PF-18" the same way. Static checks (check_envelope_size, check_unknown_fields, check_nesting_depth, check_timestamp_windows, check_signature_format) remain pure and unchanged in signature (fuzz targets call them statically).
+  - **Gatekeeper records static checks + evicts dead sessions**: When `bus.session_exists(&firewalled.handshake_session)` is false, calls `firewall.evict_session(&firewalled.handshake_session)` before setting the Block verdict. Records each static check's outcome via `firewall.record_rule(...)` at its call site: envelope size → "PF-1"; unknown fields → "PF-12"; nesting depth → "PF-13"; timestamp windows → on Ok record pass for BOTH "PF-15" and "PF-16", on Err record fail for the rule named in the error's prefix; signature format → "PF-17". Verdicts/reasons unchanged.
+  - **Bus eviction returns evicted IDs**: `HandshakeBus::evict_expired_at(&self, now_secs: u64) -> Vec<String>` removes every session with `now_secs.saturating_sub(created_at) >= SESSION_TTL_SECS` and returns their session IDs. `evict_expired(&self) -> Vec<String>` delegates to `evict_expired_at` with real current time. Existing callers compile (ignored return).
+  - **TTL sweep reaches the firewall**: Added private helper `GuardianMeshService::sweep_expired_sessions(&self, bus: &HandshakeBus)` that calls `bus.evict_expired()` and `self.firewall.evict_session(id)` for every returned ID. Called in `handshake()` (replacing bare `bus.evict_expired();`) and at the start of `evaluate()` (inside existing bus read scope before Gatekeeper).
+  - **Health reports measured counters (wire change, backward compatible)**: Added proto field 6: `map<string, string> protocol_firewall_rule_counters = 6`. Keys are rule names ("PF-1", "PF-12", ..., "PF-18", "POLICY_RATE"); each value is exactly `passed=<n>,failed=<n>` with measured counts. Only rules with at least one recorded outcome appear. Rust Health handler fills: field 6 from `self.firewall.rule_counters()`, `protocol_firewall_rules_passed` from measured passed total, `protocol_firewall_rules_total` from passed+failed. Fresh daemon reports 0 passed / 0 total / empty map. Constants 18/18 deleted. WO-2 fingerprint behaviour unchanged.
+  - **WebUI updates**: Hand-updated `webui/src/gen/guardian_mesh_pb.ts` HealthResponse type to match proto (interface field `protocolFirewallRuleCounters: { [key: string]: string }`, field list entry `{ no: 6, name: "protocol_firewall_rule_counters", kind: "map", K: 9, V: { kind: "scalar", T: 9 } }`, create() default `{}`, binary read case 6 using binaryReadMap6, binary write block for field 6). `webui/src/pages/DashboardPage.tsx` Protocol Firewall card: changed total label from "of <total> named rules" to "of <total> firewall checks run since the daemon started"; renders per-rule counters when `health.protocolFirewallRuleCounters` is present and non-empty (one line per rule, sorted by rule name, showing rule name and its `passed=<n>,failed=<n>` value).
+- Version bumped `0.8.4` → `0.8.5` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md`).
+
+### Tests
+- Added 5 tests in protocol_firewall.rs: `fresh_firewall_has_empty_counters`, `recording_updates_counters`, `nonce_check_records_pf14`, `rate_check_records_pf18`, `eviction_clears_session_state`.
+- Added 1 test in handshake_bus.rs: `evict_expired_at_returns_evicted_ids`.
+- Added 1 test in gatekeeper.rs: `dead_session_evicts_firewall_state`.
+- Added 3 tests in main.rs: `health_on_fresh_service_reports_zero_counters`, `health_after_valid_evaluate_shows_nine_passed`, `health_after_pf12_block_shows_partial_recording`.
+- Full suite from workspace root: **106 tests (86 lib + 20 bin)**, baseline was 97 (80 lib + 17 bin), added 9 tests.
+- Gate verdict: recorded by Wright after the independent release-gate run.
+
 ## [0.8.4] - 2026-10-23
 
 ### Added

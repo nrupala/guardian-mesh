@@ -241,6 +241,12 @@ export interface HealthResponse {
      * @generated from protobuf field: string signing_key_fingerprint = 5
      */
     signingKeyFingerprint: string; // SHA-256 of the daemon's ML-DSA-65 public key (lowercase hex)
+    /**
+     * @generated from protobuf field: map<string, string> protocol_firewall_rule_counters = 6
+     */
+    protocolFirewallRuleCounters: {
+        [key: string]: string;
+    };
 }
 /**
  * @generated from protobuf enum guardian_mesh.HealthResponse.ServingStatus
@@ -1237,7 +1243,8 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
             { no: 2, name: "enclave_health", kind: "map", K: 9 /*ScalarType.STRING*/, V: { kind: "scalar", T: 9 /*ScalarType.STRING*/ } },
             { no: 3, name: "protocol_firewall_rules_passed", kind: "scalar", T: 13 /*ScalarType.UINT32*/ },
             { no: 4, name: "protocol_firewall_rules_total", kind: "scalar", T: 13 /*ScalarType.UINT32*/ },
-            { no: 5, name: "signing_key_fingerprint", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+            { no: 5, name: "signing_key_fingerprint", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 6, name: "protocol_firewall_rule_counters", kind: "map", K: 9 /*ScalarType.STRING*/, V: { kind: "scalar", T: 9 /*ScalarType.STRING*/ } }
         ]);
     }
     create(value?: PartialMessage<HealthResponse>): HealthResponse {
@@ -1247,6 +1254,7 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
         message.protocolFirewallRulesPassed = 0;
         message.protocolFirewallRulesTotal = 0;
         message.signingKeyFingerprint = "";
+        message.protocolFirewallRuleCounters = {};
         if (value !== undefined)
             reflectionMergePartial<HealthResponse>(this, message, value);
         return message;
@@ -1270,6 +1278,9 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
                     break;
                 case /* string signing_key_fingerprint */ 5:
                     message.signingKeyFingerprint = reader.string();
+                    break;
+                case /* map<string, string> protocol_firewall_rule_counters */ 6:
+                    this.binaryReadMap6(message.protocolFirewallRuleCounters, reader, options);
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -1298,6 +1309,22 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
         }
         map[key ?? ""] = val ?? "";
     }
+    private binaryReadMap6(map: HealthResponse["protocolFirewallRuleCounters"], reader: IBinaryReader, options: BinaryReadOptions): void {
+        let len = reader.uint32(), end = reader.pos + len, key: keyof HealthResponse["protocolFirewallRuleCounters"] | undefined, val: HealthResponse["protocolFirewallRuleCounters"][any] | undefined;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    key = reader.string();
+                    break;
+                case 2:
+                    val = reader.string();
+                    break;
+                default: throw new globalThis.Error("unknown map entry field for guardian_mesh.HealthResponse.protocol_firewall_rule_counters");
+            }
+        }
+        map[key ?? ""] = val ?? "";
+    }
     internalBinaryWrite(message: HealthResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
         /* guardian_mesh.HealthResponse.ServingStatus status = 1; */
         if (message.status !== 0)
@@ -1314,6 +1341,9 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
         /* string signing_key_fingerprint = 5; */
         if (message.signingKeyFingerprint !== "")
             writer.tag(5, WireType.LengthDelimited).string(message.signingKeyFingerprint);
+        /* map<string, string> protocol_firewall_rule_counters = 6; */
+        for (let k of globalThis.Object.keys(message.protocolFirewallRuleCounters))
+            writer.tag(6, WireType.LengthDelimited).fork().tag(1, WireType.LengthDelimited).string(k).tag(2, WireType.LengthDelimited).string(message.protocolFirewallRuleCounters[k]).join();
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);

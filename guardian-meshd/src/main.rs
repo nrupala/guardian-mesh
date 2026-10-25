@@ -69,6 +69,13 @@ impl GuardianMeshService {
             config,
         })
     }
+
+    fn sweep_expired_sessions(&self, bus: &HandshakeBus) {
+        let evicted = bus.evict_expired();
+        for id in evicted {
+            self.firewall.evict_session(&id);
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -88,6 +95,7 @@ impl GuardianMesh for GuardianMeshService {
 
         {
             let bus = self.bus.read().await;
+            self.sweep_expired_sessions(&bus);
             GatekeeperEnclave::evaluate(&mut ctx, &bus, &self.firewall, self.config.policy_throttle_rate);
         }
         // WO-5: THROTTLE verdicts from Gatekeeper (PF-18 or policy rate) proceed to proof generation
@@ -244,16 +252,27 @@ impl GuardianMesh for GuardianMeshService {
         enclave_health.insert("arbiter".into(), "ok".into());
         enclave_health.insert("vault".into(), "ok".into());
 
-        // WO-2: Protocol Firewall now enforces PF-1..PF-18 per session.
-        // Global counters are no longer tracked; each session has its own
-        // nonce window and rate limiter state.
         let fingerprint = compute_fingerprint(&self.verifying_key);
+        
+        // WO-19: Report measured firewall counters
+        let rule_counters = self.firewall.rule_counters();
+        let mut protocol_firewall_rule_counters = std::collections::HashMap::new();
+        for (rule, counter) in rule_counters {
+            protocol_firewall_rule_counters.insert(
+                rule,
+                format!("passed={},failed={}", counter.passed, counter.failed)
+            );
+        }
+        
+        let (passed, failed) = self.firewall.totals();
+        
         let response = HealthResponse {
             status: ServingStatus::Serving.into(),
             enclave_health,
-            protocol_firewall_rules_passed: 18, // All PF rules are now enforced
-            protocol_firewall_rules_total: 18,
+            protocol_firewall_rules_passed: passed as u32,
+            protocol_firewall_rules_total: (passed + failed) as u32,
             signing_key_fingerprint: fingerprint,
+            protocol_firewall_rule_counters,
         };
 
         Ok(Response::new(response))
@@ -284,7 +303,7 @@ impl GuardianMesh for GuardianMeshService {
         };
 
         let bus = self.bus.read().await;
-        bus.evict_expired();
+        self.sweep_expired_sessions(&bus);
         let session = bus.create_session_full(&source, &req.source_public_key);
 
         Ok(Response::new(HandshakeResponse {
@@ -995,5 +1014,95 @@ mod tests {
         let verification = audit_resp.verification.unwrap();
         assert!(verification.verified, "Chain verification failed: {}", verification.status_message);
         assert_eq!(verification.entries_checked, 3);
+    }
+
+    // WO-19: Health counter tests
+
+    #[tokio::test]
+    async fn health_on_fresh_service_reports_zero_counters() {
+        let (service, _dir) = test_service();
+        
+        let resp = service
+            .health(Request::new(HealthRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        
+        assert_eq!(resp.protocol_firewall_rules_passed, 0);
+        assert_eq!(resp.protocol_firewall_rules_total, 0);
+        assert_eq!(resp.protocol_firewall_rule_counters.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn health_after_valid_evaluate_shows_nine_passed() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        
+        // Execute one valid evaluation
+        let resp = service
+            .evaluate(Request::new(req))
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(resp.verdict, "ALLOW");
+        
+        // Check health
+        let health_resp = service
+            .health(Request::new(HealthRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        
+        // One valid evaluation executes each rule exactly once
+        assert_eq!(health_resp.protocol_firewall_rules_passed, 9);
+        assert_eq!(health_resp.protocol_firewall_rules_total, 9);
+        
+        // Verify the map has exactly the 9 rules
+        let counters = &health_resp.protocol_firewall_rule_counters;
+        assert_eq!(counters.len(), 9);
+        
+        let expected_rules = ["PF-1", "PF-12", "PF-13", "PF-14", "PF-15", "PF-16", "PF-17", "PF-18", "POLICY_RATE"];
+        for rule in expected_rules {
+            assert!(counters.contains_key(rule), "Missing rule {}", rule);
+            assert_eq!(counters.get(rule).unwrap(), "passed=1,failed=0", "Wrong count for {}", rule);
+        }
+    }
+
+    #[tokio::test]
+    async fn health_after_pf12_block_shows_partial_recording() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        
+        // Payload with an unknown field (violates PF-12)
+        let bad_payload = b"{\"actionType\":\"TOOL_CALL\",\"context\":\"test\",\"target\":\"panel\",\"metadata\":{},\"unknownField\":\"bad\"}";
+        let sealed = SealedEnvelope::new(bad_payload.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        
+        // This should be blocked by PF-12
+        let err = service.evaluate(Request::new(req)).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+        
+        // Check health
+        let health_resp = service
+            .health(Request::new(HealthRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        
+        // PF-1 passed, PF-12 failed, flow stopped before PF-13/PF-14
+        let counters = &health_resp.protocol_firewall_rule_counters;
+        
+        // PF-12 should have failed=1
+        assert!(counters.contains_key("PF-12"));
+        let pf12 = counters.get("PF-12").unwrap();
+        assert!(pf12.contains("failed=1"), "PF-12 should have failed=1, got {}", pf12);
+        
+        // PF-13 and PF-14 should NOT be recorded (flow blocked before them)
+        assert!(!counters.contains_key("PF-13"), "PF-13 should not be recorded");
+        assert!(!counters.contains_key("PF-14"), "PF-14 should not be recorded");
     }
 }

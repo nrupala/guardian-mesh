@@ -39,13 +39,26 @@ impl HandshakeBus {
         }
     }
 
-    pub fn evict_expired(&self) {
+    pub fn evict_expired_at(&self, now_secs: u64) -> Vec<String> {
+        let mut sessions = self.sessions.lock().unwrap();
+        let mut evicted = Vec::new();
+        sessions.retain(|id, s| {
+            if now_secs.saturating_sub(s.created_at) >= SESSION_TTL_SECS {
+                evicted.push(id.clone());
+                false
+            } else {
+                true
+            }
+        });
+        evicted
+    }
+
+    pub fn evict_expired(&self) -> Vec<String> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        let mut sessions = self.sessions.lock().unwrap();
-        sessions.retain(|_, s| now.saturating_sub(s.created_at) < SESSION_TTL_SECS);
+        self.evict_expired_at(now)
     }
 
     pub fn create_session(&self, source_enclave: &str) -> String {
@@ -223,7 +236,29 @@ mod tests {
         let bus = HandshakeBus::new(b"test-secret");
         let sid = bus.create_session("test-enclave");
         assert!(bus.session_exists(&sid));
-        bus.evict_expired();
+        let evicted = bus.evict_expired();
+        assert!(evicted.is_empty());
         assert!(bus.session_exists(&sid));
+    }
+
+    // WO-19: evict_expired_at test
+    #[test]
+    fn evict_expired_at_returns_evicted_ids() {
+        let bus = HandshakeBus::new(b"test-secret");
+        let session = bus.create_session_full("test-enclave", &[]);
+        let sid = session.session_id.clone();
+        let created_at = session.created_at;
+        
+        // At creation time, no eviction
+        let evicted = bus.evict_expired_at(created_at);
+        assert!(evicted.is_empty());
+        assert!(bus.session_exists(&sid));
+        
+        // At TTL+1, session is evicted
+        let future = created_at + SESSION_TTL_SECS + 1;
+        let evicted = bus.evict_expired_at(future);
+        assert_eq!(evicted.len(), 1);
+        assert_eq!(evicted[0], sid);
+        assert!(!bus.session_exists(&sid));
     }
 }

@@ -13,6 +13,21 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.8.5",
+    date: "2026-10-24",
+    summary: "Firewall session eviction wired and Health reports measured per-rule pass/fail counts. Closes v0.4.0 gate findings F1/F2.",
+    highlights: [
+      "ProtocolFirewall now records measured outcomes per rule (RuleCounter with passed/failed counts)",
+      "Gatekeeper records all static checks (PF-1, PF-12, PF-13, PF-15, PF-16, PF-17) and evicts firewall state for dead sessions",
+      "HandshakeBus eviction returns evicted session IDs; TTL sweep wired in handshake() and evaluate()",
+      "Health proto field 6 (protocol_firewall_rule_counters map) carries measured per-rule counts",
+      "WebUI Protocol Firewall card shows per-rule counters and corrected total label (checks run, not named rules)"
+    ],
+    gateVerdict: "Not recorded",
+    tests: "106 tests (86 lib + 20 bin) from workspace root; baseline was 97 (80 lib + 17 bin); added 9 tests (5 protocol_firewall, 1 handshake_bus, 1 gatekeeper, 3 main)",
+    status: "Release candidate"
+  },
+  {
     version: "0.8.4",
     date: "2026-10-23",
     summary: "Public release log page added to the WebUI, fed from CHANGELOG and gate records. A drift guard script now ensures the release log stays current with every release.",
