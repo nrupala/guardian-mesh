@@ -457,5 +457,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-25T00:19:47-06:00",
     "message": "Merge pull request #63 from nrupala/wright/wo19-firewall-health"
+  },
+  {
+    "release": 56,
+    "tag": "release/v56",
+    "previous_tag": "release/v55",
+    "sha": "70b8a337b255d3d11402f5df34b6879663148739",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-25T00:35:17-06:00",
+    "message": "Merge pull request #64 from nrupala/wright/ledger-wo19-20261024"
   }
 ]
