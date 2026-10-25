@@ -823,6 +823,26 @@ do, and none becomes a gate MUST until behaviour-proven here.
   named source as a finding — the GMSI-2 discipline (the
   copy presented, not the copy at mint) applied to status
   claims.
+- **GMSI-84 — A fix outside the build path is a silent
+  no-op ship.** (DogEar v1.2.0 beta.5 gate, 2026-10-24.) A fix
+  that lands outside the path the build actually compiles was
+  exercised in review and then shipped as bytes that never
+  contained it (case F-B5-1). Guardian Mesh must be able to
+  prove \"the bytes CI built contain the fix the exercise
+  exercised\" — path + hash attestation of the named fix
+  files against the exercise record — as a standing probe.
+  A fix claim without a build-path attestation is a finding.
+- **GMSI-85 — State divergence after restore must be
+  provable.** (DogEar v1.1.0 final gate, 2026-10-24.) After a
+  forced process death + restore, the restored surface's
+  page / core / session state diverged silently (case
+  F-B6-1, carried as an accepted RC risk). Guardian Mesh must
+  be able to prove page/core/session agreement after a
+  death + restore cycle — or catch the divergence
+  mechanically and name the disagreeing layer — as a
+  standing probe. A restore that merely resumes is not
+  evidence the restored state agrees.
+
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
