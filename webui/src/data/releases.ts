@@ -23,8 +23,8 @@ export const RELEASES: Release[] = [
       "Health proto field 6 (protocol_firewall_rule_counters map) carries measured per-rule counts",
       "WebUI Protocol Firewall card shows per-rule counters and corrected total label (checks run, not named rules)"
     ],
-    gateVerdict: "Not recorded",
-    tests: "106 tests (86 lib + 20 bin) from workspace root; baseline was 97 (80 lib + 17 bin); added 9 tests (5 protocol_firewall, 1 handshake_bus, 1 gatekeeper, 3 main)",
+    gateVerdict: "PASS WITH FINDINGS",
+    tests: "107 tests (87 lib + 20 bin) Wright-verified on Linux from the workspace root; 106 (86 lib + 20 bin) on the lane's Windows run (one #[cfg(unix)] test absent there); 10 tests added over the 97 baseline; wire proof: fresh Health 0/0 with empty counters map, one valid Evaluate → 9 passed / 9 total across exactly 9 rules, one PF-12 block → PF-12 failed=1",
     status: "Release candidate"
   },
   {

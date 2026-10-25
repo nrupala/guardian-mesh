@@ -24,8 +24,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Added 1 test in handshake_bus.rs: `evict_expired_at_returns_evicted_ids`.
 - Added 1 test in gatekeeper.rs: `dead_session_evicts_firewall_state`.
 - Added 3 tests in main.rs: `health_on_fresh_service_reports_zero_counters`, `health_after_valid_evaluate_shows_nine_passed`, `health_after_pf12_block_shows_partial_recording`.
-- Full suite from workspace root: **106 tests (86 lib + 20 bin)**, baseline was 97 (80 lib + 17 bin), added 9 tests.
-- Gate verdict: recorded by Wright after the independent release-gate run.
+- Full suite, Wright-verified independently on Linux from the workspace root (CI's invocation): **107 tests (87 lib + 20 bin)** — 10 tests added over the v0.8.4 baseline of 97 (80 lib + 17 bin): 7 lib (5 protocol_firewall, 1 handshake_bus, 1 gatekeeper) + 3 bin (main.rs Health). The lane's Windows run from the same root reported 106 (86 lib + 20 bin) — one pre-existing #[cfg(unix)] lib test is absent on Windows; counts name their platform + invocation root per GMSI-75. (The lane draft claimed "106 tests, added 9" — a Windows total compared against the Linux baseline, with the listed tests summing to 10; corrected here, gate finding F1.)
+- WebUI, Wright-verified from a fresh checkout: `npm ci` + `npm run build` (drift guard runs first inside the build) + `npm run lint` + `npm run check:releases` — all passing, 9 versions in the release log.
+- Wire proof (Wright, live local daemon built from the verified tree, driven over gRPC-Web by the shipped TypeScript client incl. the hand-updated protobuf type): fresh daemon Health reports passed=0, total=0, empty rule-counters map; one valid Evaluate (ALLOW) → Health passed=9, total=9 with exactly the 9 rules PF-1, PF-12, PF-13, PF-14, PF-15, PF-16, PF-17, PF-18, POLICY_RATE each "passed=1,failed=0"; one PF-12-blocked Evaluate → PF-12 failed=1, PF-1 passed=2, PF-13/PF-14 unrecorded (flow stopped first), totals 10 passed / 11 total.
+- **Gate verdict: PASS WITH FINDINGS** (release gate, 2026-10-24; pack `~/workspace/release-gate-runs/guardian-mesh-wo19-2026-10-24/`). Scanner BLOCKED only on the GMSI-6 "tests" false lead (tenth occurrence), resolved by the direct suite evidence; 0 secrets, 0 known-vulnerable dependencies (159 deps). F1 (Low): the lane's shipped test counts were arithmetically wrong (see Tests above) — FIXED in the Wright carry commit. v0.8.5 is a RELEASE CANDIDATE under the one-week soak.
 
 ## [0.8.4] - 2026-10-23
 
