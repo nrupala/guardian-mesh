@@ -828,8 +828,8 @@ do, and none becomes a gate MUST until behaviour-proven here.
   that lands outside the path the build actually compiles was
   exercised in review and then shipped as bytes that never
   contained it (case F-B5-1). Guardian Mesh must be able to
-  prove \"the bytes CI built contain the fix the exercise
-  exercised\" — path + hash attestation of the named fix
+  prove "the bytes CI built contain the fix the exercise
+  exercised" — path + hash attestation of the named fix
   files against the exercise record — as a standing probe.
   A fix claim without a build-path attestation is a finding.
 - **GMSI-85 — State divergence after restore must be
