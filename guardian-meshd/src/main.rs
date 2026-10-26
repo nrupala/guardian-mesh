@@ -149,7 +149,11 @@ impl GuardianMeshService {
 
         {
             let bus = self.bus.read().await;
-            self.sweep_expired_sessions(&bus);
+            // A simulation burns nothing: it must not mutate shared
+            // state either, so the TTL sweep runs on real Evaluate only.
+            if !simulation {
+                self.sweep_expired_sessions(&bus);
+            }
             GatekeeperEnclave::evaluate(&mut ctx, &bus, &self.firewall, self.config.policy_throttle_rate, simulation);
         }
         
@@ -178,7 +182,9 @@ impl GuardianMeshService {
             let proof = AuditProof {
                 action_id: ctx.request.action.as_ref().map(|a| a.action_type.clone()).unwrap_or_default(),
                 verdict: final_verdict.as_str().into(),
-                enclave_chain: "Sentinel→Gatekeeper→Vault".into(),
+                // A simulation is never sealed, so its proof must not
+                // name the Vault in its chain.
+                enclave_chain: if simulation { "Sentinel→Gatekeeper".into() } else { "Sentinel→Gatekeeper→Vault".into() },
                 signature: Vec::new(),
                 timestamp: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -372,7 +378,9 @@ impl GuardianMeshService {
         let proof = AuditProof {
             action_id: ctx.request.action.as_ref().map(|a| a.action_type.clone()).unwrap_or_default(),
             verdict: final_verdict.as_str().into(),
-            enclave_chain: "Sentinel→Gatekeeper→Witness→Arbiter→Vault".into(),
+            // A simulation is never sealed, so its proof must not
+            // name the Vault in its chain.
+            enclave_chain: if simulation { "Sentinel→Gatekeeper→Witness→Arbiter".into() } else { "Sentinel→Gatekeeper→Witness→Arbiter→Vault".into() },
             signature: ctx.witness_signature.clone(),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

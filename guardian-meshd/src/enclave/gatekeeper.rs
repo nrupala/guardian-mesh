@@ -17,6 +17,11 @@ impl GatekeeperEnclave {
             None => {
                 ctx.verdict = Some(Verdict::Block);
                 ctx.reason = Some("Missing firewalled request".into());
+                ctx.structured_reasons.push(ReasonDetail {
+                    rule_id: "ENVELOPE".to_string(),
+                    detail: "Missing firewalled request".to_string(),
+                    remediation: "Send a complete firewalled request with a sealed envelope.".to_string(),
+                });
                 return;
             }
         };
@@ -165,10 +170,10 @@ impl GatekeeperEnclave {
             }
         }
         if let Err(reason) = timestamp_result {
-            let rule_id = if reason.starts_with("PF-15") {
-                "PF-15"
-            } else {
+            let rule_id = if reason.starts_with("PF-16") {
                 "PF-16"
+            } else {
+                "PF-15"
             };
             let remediation = if rule_id == "PF-15" {
                 "Send the request within 5 seconds of its envelope timestamp; check the sender clock."
