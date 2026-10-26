@@ -876,6 +876,20 @@ do, and none becomes a gate MUST until behaviour-proven here.
   able to issue that proof per selling surface; the gate
   catches it pre-release, compliance only confirms it
   post-release.
+- **GMSI-89 — Generated-artifact completeness.** (WO-10
+  gate, 2026-10-25.) When a service definition changes,
+  EVERY generated artifact must be diffed against it —
+  message types AND the client stub — and the proof is a
+  clean-tree build (`npm ci` from nothing), never the
+  builder's incremental tree. Founding case: WO-10's lane
+  hand-updated the message file but not the client file —
+  the new RPC was missing from the client and, the new
+  method sitting at service index 1, seven existing client
+  method indices silently pointed at the wrong RPCs —
+  while the lane reported its build green (Wright's clean
+  build failed TS2339). Guardian Mesh must be able to
+  prove a shipped client stub's method table equals the
+  service definition of record.
 
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
@@ -1479,3 +1493,80 @@ the laptop checkouts are working copies, never the source of truth.
   Simulate call + structured verdict reasons). Standing:
   dependabot PR #51 (vite bump) still open, outside the
   work orders.
+- 2026-10-25 (nightly) — **WO-10 shipped as v0.9.0** (PR #66,
+  merged 026dc374; pack refresh PR #65, merged bc318334,
+  filed GMSI-86/GMSI-87/GMSI-88 from the 2026-10-25 gate
+  runs): Simulate call + structured verdict reasons,
+  closing spec DC-9/DC-10. A new Simulate RPC runs the
+  identical verdict pipeline (one shared run_evaluation)
+  with no-burn semantics — no vault seal or audit entry,
+  no nonce/rate consumption and no PF counter recording
+  (new ProtocolFirewall peek variants), empty
+  handshake_token — and is marked simulation=true in the
+  response AND inside the sealed proof; early blocks
+  return Ok(BLOCK) with structured reasons instead of
+  permission_denied, while real Evaluate behaviour is
+  unchanged. Every verdict carries StructuredReason
+  entries (rule_id + detail + remediation): Gatekeeper
+  records the deciding check (PF-1/12/13/14/15/16/17/18,
+  POLICY_RATE, SESSION, HMAC, SIGNATURE, ENVELOPE),
+  Arbiter records POLICY / POLICY_ESCALATION; the proof
+  carries the rule_ids. Built by OpenCode on the laptop
+  in TWO lane runs (fresh clone
+  D:\guardian-mesh-work\wo10 at refreshed main bc318334;
+  the first lane stopped at ~50% and reported honestly,
+  the continuation lane finished; lane commit b89384a;
+  carried by Git-data API with tree equality asserted at
+  each commit — lane tree 74988708, final tree 179c6fa7).
+  Wright-verified independently: cargo 117/117 (90 lib +
+  27 bin) from the workspace root on Linux (lane Windows
+  116 = 89+27; one #[cfg(unix)] test); webui npm ci +
+  build + lint + check:releases green (10 versions);
+  wire proof 26/26 on a local daemon AND 26/26 on
+  production over gRPC-Web through the shipped TS client
+  (simulations left Health 0/0 and the audit log
+  untouched; PF-12 simulation returns BLOCK + PF-12
+  while the same envelope via Evaluate still
+  permission_denies; proofs verify). Gate: PASS WITH
+  FINDINGS — scanner BLOCKED only on the GMSI-6 "tests"
+  false lead (eleventh occurrence); 0 secrets, 0 vulns
+  (159 deps). F1 (High) the lane never updated the
+  generated TS client (guardian_mesh_pb.client.ts):
+  client.simulate missing — Wright's clean build failed
+  TS2339 — and, Simulate sitting at service index 1,
+  every existing client method index pointed at the
+  wrong RPC; FIXED in the carry (simulate added at
+  index 1, VerifyProof..CertificateStatus shifted to
+  2..8). F2 (Low, fixed in carry): a simulation still
+  ran the state-mutating TTL sweep; simulation proofs on
+  the THROTTLE/final paths named the Vault though
+  nothing is sealed; the missing-firewalled block had
+  no ENVELOPE reason; the PF-15/16 fallback inverted
+  the spec. F3 (Low, open): the Dashboard's simulate
+  error path only console.errors. F4 (Low, fixed):
+  lane CHANGELOG/releases test counts garbled. Filed
+  GMSI-89 (above) from this run. Deployed to
+  guardian.aimlds.org (site-integrity declaration
+  cd38da62 opened + closed): aarch64 binary sha256
+  34d1f818… cross-built from merged main (cargo-zigbuild;
+  merged tree == gated tree 179c6fa7), installed
+  (rollback guardian-meshd.bak-v085; webui-dist.bak-v085
+  kept): production fingerprint dd2cf1a3… unchanged
+  (ninth upgrade), both services active, box webui-dist
+  carrying the base-/ build index-BVLu5-3_.js, Access
+  302 intact, audit log at 1,185 entries (+1 = the
+  proof Evaluate's seal; the cert issuance seals one
+  more) with whole-log verification still reporting
+  the historical break at position 557 (pre-fix
+  history, stands as recorded), and the release
+  certified itself on production — certificate
+  cert-20261026-000037 (guardian-mesh 0.9.0, PASS WITH
+  FINDINGS, evidence = the gate verdict sha256
+  4f4b0451…), fingerprint recomputes, VerifyProof
+  valid, supersedes cert-20261025-000036, status
+  ACTIVE. v0.9.0 is a RELEASE CANDIDATE (one-week
+  watched soak, RC register entry; graduates
+  2026-11-01). Part C continues (WO-19, WO-10 done).
+  Next: WO-11 (P1, Part C third in order — policy
+  governance). Standing: dependabot PR #51 (vite bump)
+  still open, outside the work orders.
