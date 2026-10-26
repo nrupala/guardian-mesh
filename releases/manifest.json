@@ -475,5 +475,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-25T23:17:59-06:00",
     "message": "Merge pull request #65 from nrupala/wright/pack-refresh-gmsi-20261025"
+  },
+  {
+    "release": 58,
+    "tag": "release/v58",
+    "previous_tag": "release/v57",
+    "sha": "026dc374f4247f10b9491119b18847042bb09bf4",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-26T00:17:48-06:00",
+    "message": "Merge pull request #66 from nrupala/wright/wo10-simulate"
   }
 ]
