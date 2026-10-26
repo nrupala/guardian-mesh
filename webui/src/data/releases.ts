@@ -23,8 +23,8 @@ export const RELEASES: Release[] = [
       "Gatekeeper and Arbiter populate structured reasons for all Block/Throttle/Escalate/Allow verdicts",
       "WebUI Simulate button with distinct rendering for simulation outcomes showing structured reasons"
     ],
-    gateVerdict: "PENDING",
-    tests: "116 tests (89 lib + 27 bin) from the workspace root on Windows; 10 tests added over the v0.8.5 baseline (7 main.rs, 2 protocol_firewall.rs, 1 gatekeeper.rs); webui build + lint passing",
+    gateVerdict: "PASS WITH FINDINGS",
+    tests: "117 tests (90 lib + 27 bin) from the workspace root on Linux, Wright-verified (116 on Windows; one #[cfg(unix)] lib test is Linux-only); 10 tests added over the v0.8.5 baseline (7 main.rs, 2 protocol_firewall.rs, 1 gatekeeper.rs); webui build + lint passing; wire proof 26/26 through the shipped TS client",
     status: "Release candidate"
   },
   {

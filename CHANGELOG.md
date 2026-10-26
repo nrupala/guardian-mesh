@@ -20,7 +20,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Tests
 - Added 10 tests total: 7 in main.rs (simulate_valid_action_returns_allow_marked_simulation, simulate_blocked_action_returns_block_with_structured_reason, simulate_pf12_block_returns_structured_reason_not_error, simulate_does_not_seal_audit_log, simulate_does_not_consume_nonce_or_counters, simulate_throttle_and_escalate, evaluate_responses_carry_structured_reasons), 2 in protocol_firewall.rs (peek_nonce_does_not_insert, peek_rate_does_not_record), 1 in gatekeeper.rs (simulation_gatekeeper_records_nothing).
-- Full suite from workspace root on Windows: **116 tests (89 lib + 27 bin)** — 10 tests added over the v0.8.5 baseline of 106 (86 lib + 20 bin — note: Windows has one #[cfg(unix)] lib test absent; 0.8.5 counts were 107/106 lib+bin Linux/Windows respectively).
+- Full suite: **117 tests (90 lib + 27 bin) from the workspace root on Linux, Wright-verified; 116 (89 lib + 27 bin) on Windows** (one #[cfg(unix)] lib test is Linux-only) — 10 tests added over the v0.8.5 baseline (107 Linux / 106 Windows).
 - WebUI: `npm ci`, `npm run build` (drift guard passing), `npm run lint` — all passing.
 
 ## [0.8.5] - 2026-10-24
