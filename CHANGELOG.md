@@ -6,6 +6,23 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-25
+
+### Added
+- **WO-10: Simulate RPC + structured verdict reasons.** Closes v0.4.0 gate findings DC-9/DC-10: added a dry-run Simulate RPC running identical verdict logic with no state mutation or execution rights, and every verdict now carries machine-readable structured reasons (rule IDs + remediation strings).
+  - **Simulate RPC**: New `rpc Simulate (EvaluateRequest) returns (EvaluateResponse)` in proto. Runs the identical pipeline (Sentinel → Gatekeeper → Witness → Arbiter) as Evaluate, but with `simulation=true` flag. No audit seal (vault.seal never called), no handshake_token, no nonce consumption, no firewall counter recording, and early blocks return Ok(EvaluateResponse) with verdict BLOCK instead of permission_denied errors. Every response and proof is marked `simulation=true`.
+  - **Firewall peek variants**: Added `check_nonce_uniqueness_peek`, `check_rate_limit_peek`, `check_policy_rate_peek` in protocol_firewall.rs — return exactly what the mutating check methods would return for current state, without inserting nonces, recording hits, or updating counters.
+  - **Gatekeeper simulation mode**: `GatekeeperEnclave::evaluate` gains `simulation: bool` parameter. When true: calls peek variants, skips all `record_rule` calls, skips dead-session `evict_session`. When false: behaviour identical to 0.8.5 (all existing tests pass).
+  - **Structured reasons (DC-10)**: New proto message `StructuredReason { string rule_id, detail, remediation }`. `EvaluateResponse` gains `repeated StructuredReason reasons = 7` and `bool simulation = 8`. `AuditProof` gains `bool simulation = 6` and `repeated string rule_ids = 7`. Rust: new `ReasonDetail` struct on `EnclaveContext.structured_reasons`. Gatekeeper pushes one ReasonDetail for every Block/Throttle verdict (rule_id from PF-1, PF-12, PF-13, PF-14, PF-15, PF-16, PF-17, PF-18, POLICY_RATE, SESSION, HMAC, SIGNATURE, ENVELOPE; remediation strings per spec table). Arbiter pushes for Block (rule_id "POLICY"), Escalate ("POLICY_ESCALATION"), Allow ("POLICY", empty remediation). Response building converts ctx.structured_reasons to proto and populates proof.rule_ids.
+  - **main.rs refactoring**: Extracted evaluate handler body into private async helper `run_evaluation(&self, req: EvaluateRequest, simulation: bool)`. `evaluate` calls it with `false`, new `simulate` handler calls it with `true`. Simulation early blocks (Sentinel, Gatekeeper, Witness) return Ok(EvaluateResponse) with verdict BLOCK, structured reasons, simulation=true, empty handshake_token, and proof.enclave_chain naming only the enclaves traversed before the block (e.g. "Sentinel→Gatekeeper" for a Gatekeeper block). THROTTLE and final paths skip vault.seal when simulation=true.
+  - **WebUI**: Hand-updated `webui/src/gen/guardian_mesh_pb.ts` for new proto fields (StructuredReason message type with full encode/decode, EvaluateResponse fields 7/8, AuditProof fields 6/7, GuardianMesh service Simulate RPC). Added `runSimulation(client, action)` in `webui/src/lib/gmClient.ts` mirroring runEvaluation (fresh envelope + nonce per call). `webui/src/pages/DashboardPage.tsx` LivePanel: added "Simulate (dry run)" button using same inputs, renders simulation outcomes with distinct "SIMULATION — no execution rights, nothing was executed or logged" label, verdict, and structured reasons list (rule_id, detail, remediation). DemoPanel: added disabled "Simulate (dry run)" button for parity.
+- Version bumped `0.8.5` → `0.9.0` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md`).
+
+### Tests
+- Added 10 tests total: 7 in main.rs (simulate_valid_action_returns_allow_marked_simulation, simulate_blocked_action_returns_block_with_structured_reason, simulate_pf12_block_returns_structured_reason_not_error, simulate_does_not_seal_audit_log, simulate_does_not_consume_nonce_or_counters, simulate_throttle_and_escalate, evaluate_responses_carry_structured_reasons), 2 in protocol_firewall.rs (peek_nonce_does_not_insert, peek_rate_does_not_record), 1 in gatekeeper.rs (simulation_gatekeeper_records_nothing).
+- Full suite from workspace root on Windows: **116 tests (89 lib + 27 bin)** — 10 tests added over the v0.8.5 baseline of 106 (86 lib + 20 bin — note: Windows has one #[cfg(unix)] lib test absent; 0.8.5 counts were 107/106 lib+bin Linux/Windows respectively).
+- WebUI: `npm ci`, `npm run build` (drift guard passing), `npm run lint` — all passing.
+
 ## [0.8.5] - 2026-10-24
 
 ### Added

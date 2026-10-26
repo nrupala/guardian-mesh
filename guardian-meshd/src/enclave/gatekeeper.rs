@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Nrupal Akolkar
 // SPDX-License-Identifier: Apache-2.0
 
-use super::{EnclaveContext, Verdict, ContainmentStage};
+use super::{EnclaveContext, Verdict, ContainmentStage, ReasonDetail};
 use crate::handshake_bus::HandshakeBus;
 use crate::protocol_firewall::{ProtocolFirewall, ThrottleReason};
 use crate::sealed_envelope::{verify_proto_envelope, verifying_key_from_bytes};
@@ -9,7 +9,7 @@ use crate::sealed_envelope::{verify_proto_envelope, verifying_key_from_bytes};
 pub struct GatekeeperEnclave;
 
 impl GatekeeperEnclave {
-    pub fn evaluate(ctx: &mut EnclaveContext, bus: &HandshakeBus, firewall: &ProtocolFirewall, policy_throttle_rate: usize) {
+    pub fn evaluate(ctx: &mut EnclaveContext, bus: &HandshakeBus, firewall: &ProtocolFirewall, policy_throttle_rate: usize, simulation: bool) {
         ctx.stage = ContainmentStage::Warn;
 
         let firewalled = match &ctx.request.firewalled {
@@ -22,10 +22,17 @@ impl GatekeeperEnclave {
         };
 
         if !bus.session_exists(&firewalled.handshake_session) {
-            // WO-19: evict firewall state for expired/unknown sessions before blocking
-            firewall.evict_session(&firewalled.handshake_session);
+            // WO-19: evict firewall state for expired/unknown sessions before blocking (real evaluate only)
+            if !simulation {
+                firewall.evict_session(&firewalled.handshake_session);
+            }
             ctx.verdict = Some(Verdict::Block);
             ctx.reason = Some("Invalid or expired handshake session".into());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "SESSION".to_string(),
+                detail: "Invalid or expired handshake session".to_string(),
+                remediation: "Open a new handshake session and retry.".to_string(),
+            });
             return;
         }
 
@@ -44,6 +51,11 @@ impl GatekeeperEnclave {
         if !hmac_ok {
             ctx.verdict = Some(Verdict::Block);
             ctx.reason = Some("HMAC tag mismatch in Gatekeeper".into());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "HMAC".to_string(),
+                detail: "HMAC tag mismatch in Gatekeeper".to_string(),
+                remediation: "Compute the HMAC-SHA256 tag over the payload with the session key issued at handshake.".to_string(),
+            });
             return;
         }
 
@@ -55,41 +67,77 @@ impl GatekeeperEnclave {
             None => {
                 ctx.verdict = Some(Verdict::Block);
                 ctx.reason = Some("Missing envelope for Protocol Firewall checks".into());
+                ctx.structured_reasons.push(ReasonDetail {
+                    rule_id: "ENVELOPE".to_string(),
+                    detail: "Missing envelope for Protocol Firewall checks".to_string(),
+                    remediation: "Send a complete firewalled request with a sealed envelope.".to_string(),
+                });
                 return;
             }
         };
 
         // PF-1/PF-5: Envelope/payload size bounds (64 KiB)
         let size_result = ProtocolFirewall::check_envelope_size(&envelope.payload);
-        firewall.record_rule("PF-1", size_result.is_ok());
+        if !simulation {
+            firewall.record_rule("PF-1", size_result.is_ok());
+        }
         if let Err(reason) = size_result {
             ctx.verdict = Some(Verdict::Block);
-            ctx.reason = Some(reason);
+            ctx.reason = Some(reason.clone());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "PF-1".to_string(),
+                detail: reason,
+                remediation: "Send a payload of at most 64 KiB.".to_string(),
+            });
             return;
         }
 
         // PF-12: Reject unknown fields in ActionDescriptor JSON
         let unknown_fields_result = ProtocolFirewall::check_unknown_fields(&envelope.payload);
-        firewall.record_rule("PF-12", unknown_fields_result.is_ok());
+        if !simulation {
+            firewall.record_rule("PF-12", unknown_fields_result.is_ok());
+        }
         if let Err(reason) = unknown_fields_result {
             ctx.verdict = Some(Verdict::Block);
-            ctx.reason = Some(reason);
+            ctx.reason = Some(reason.clone());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "PF-12".to_string(),
+                detail: reason,
+                remediation: "Remove the unknown fields from the payload; the allowed fields are actionType, context, target and metadata.".to_string(),
+            });
             return;
         }
 
         // PF-13: Nesting depth max 4
         let nesting_result = ProtocolFirewall::check_nesting_depth(&envelope.payload);
-        firewall.record_rule("PF-13", nesting_result.is_ok());
+        if !simulation {
+            firewall.record_rule("PF-13", nesting_result.is_ok());
+        }
         if let Err(reason) = nesting_result {
             ctx.verdict = Some(Verdict::Block);
-            ctx.reason = Some(reason);
+            ctx.reason = Some(reason.clone());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "PF-13".to_string(),
+                detail: reason,
+                remediation: "Flatten the payload JSON so its nesting depth is at most 4.".to_string(),
+            });
             return;
         }
 
         // PF-14: Nonce uniqueness (sliding window)
-        if let Err(reason) = firewall.check_nonce_uniqueness(&firewalled.handshake_session, &envelope.nonce) {
+        let nonce_result = if simulation {
+            firewall.check_nonce_uniqueness_peek(&firewalled.handshake_session, &envelope.nonce)
+        } else {
+            firewall.check_nonce_uniqueness(&firewalled.handshake_session, &envelope.nonce)
+        };
+        if let Err(reason) = nonce_result {
             ctx.verdict = Some(Verdict::Block);
-            ctx.reason = Some(reason);
+            ctx.reason = Some(reason.clone());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "PF-14".to_string(),
+                detail: reason,
+                remediation: "Use a fresh nonce that has not been used on this session.".to_string(),
+            });
             return;
         }
 
@@ -97,55 +145,101 @@ impl GatekeeperEnclave {
         // The client sends timestamp as unix NANOSECONDS (u64)
         let timestamp_result = ProtocolFirewall::check_timestamp_windows(envelope.timestamp);
         // Record: on Ok record pass for BOTH PF-15 and PF-16; on Err record fail for the rule named in the error
-        match &timestamp_result {
-            Ok(()) => {
-                firewall.record_rule("PF-15", true);
-                firewall.record_rule("PF-16", true);
-            }
-            Err(reason) => {
-                // Parse the prefix before the first space to identify the rule
-                let rule = if reason.starts_with("PF-15") {
-                    "PF-15"
-                } else if reason.starts_with("PF-16") {
-                    "PF-16"
-                } else {
-                    "PF-15" // fallback if neither
-                };
-                firewall.record_rule(rule, false);
+        if !simulation {
+            match &timestamp_result {
+                Ok(()) => {
+                    firewall.record_rule("PF-15", true);
+                    firewall.record_rule("PF-16", true);
+                }
+                Err(reason) => {
+                    // Parse the prefix before the first space to identify the rule
+                    let rule = if reason.starts_with("PF-15") {
+                        "PF-15"
+                    } else if reason.starts_with("PF-16") {
+                        "PF-16"
+                    } else {
+                        "PF-15" // fallback if neither
+                    };
+                    firewall.record_rule(rule, false);
+                }
             }
         }
         if let Err(reason) = timestamp_result {
+            let rule_id = if reason.starts_with("PF-15") {
+                "PF-15"
+            } else {
+                "PF-16"
+            };
+            let remediation = if rule_id == "PF-15" {
+                "Send the request within 5 seconds of its envelope timestamp; check the sender clock."
+            } else {
+                "Do not date the envelope more than 1 second in the future; check the sender clock."
+            };
             ctx.verdict = Some(Verdict::Block);
-            ctx.reason = Some(reason);
+            ctx.reason = Some(reason.clone());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: rule_id.to_string(),
+                detail: reason,
+                remediation: remediation.to_string(),
+            });
             return;
         }
 
         // PF-17: Signature format budget
         let sig_format_result = ProtocolFirewall::check_signature_format(&envelope.ml_dsa_65_signature);
-        firewall.record_rule("PF-17", sig_format_result.is_ok());
+        if !simulation {
+            firewall.record_rule("PF-17", sig_format_result.is_ok());
+        }
         if let Err(reason) = sig_format_result {
             ctx.verdict = Some(Verdict::Block);
-            ctx.reason = Some(reason);
+            ctx.reason = Some(reason.clone());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "PF-17".to_string(),
+                detail: reason,
+                remediation: "Use an ML-DSA-65 signature (2420 to 3500 bytes).".to_string(),
+            });
             return;
         }
 
         // WO-5: Policy-configured per-session rate limit (checked first)
-        if let Ok(Some(throttle_reason)) = firewall.check_policy_rate(&firewalled.handshake_session, policy_throttle_rate) {
+        let policy_rate_result = if simulation {
+            firewall.check_policy_rate_peek(&firewalled.handshake_session, policy_throttle_rate)
+        } else {
+            firewall.check_policy_rate(&firewalled.handshake_session, policy_throttle_rate)
+        };
+        if let Ok(Some(throttle_reason)) = policy_rate_result {
             ctx.verdict = Some(Verdict::Throttle);
-            ctx.reason = Some(match throttle_reason {
+            let reason_str = match throttle_reason {
                 ThrottleReason::ProtocolFirewall => "PF-18 rate limit breach: E_RATE_LIMITED".to_string(),
                 ThrottleReason::PolicyRate => "Policy rate limit breach".to_string(),
+            };
+            ctx.reason = Some(reason_str.clone());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "POLICY_RATE".to_string(),
+                detail: reason_str,
+                remediation: "Slow down: this action is over the policy-configured per-session rate; retry later.".to_string(),
             });
             return;
         }
 
         // PF-18: Rate limit (100 msg/s per external session)
         // WO-5: PF-18 breach now returns THROTTLE verdict instead of permission_denied error
-        if let Ok(Some(throttle_reason)) = firewall.check_rate_limit(&firewalled.handshake_session) {
+        let pf18_result = if simulation {
+            firewall.check_rate_limit_peek(&firewalled.handshake_session)
+        } else {
+            firewall.check_rate_limit(&firewalled.handshake_session)
+        };
+        if let Ok(Some(throttle_reason)) = pf18_result {
             ctx.verdict = Some(Verdict::Throttle);
-            ctx.reason = Some(match throttle_reason {
+            let reason_str = match throttle_reason {
                 ThrottleReason::ProtocolFirewall => "PF-18 rate limit breach: E_RATE_LIMITED".to_string(),
                 ThrottleReason::PolicyRate => "Policy rate limit breach".to_string(),
+            };
+            ctx.reason = Some(reason_str.clone());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "PF-18".to_string(),
+                detail: reason_str,
+                remediation: "Slow down: at most 100 messages per second per session.".to_string(),
             });
             return;
         }
@@ -160,7 +254,12 @@ impl GatekeeperEnclave {
         // evaluation never reaches the Arbiter unauthenticated.
         if let Err(reason) = verify_request_signature(firewalled, bus) {
             ctx.verdict = Some(Verdict::Block);
-            ctx.reason = Some(reason);
+            ctx.reason = Some(reason.clone());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "SIGNATURE".to_string(),
+                detail: reason,
+                remediation: "Sign the envelope (crc32c little-endian bytes || payload) with the ML-DSA-65 key bound to the session at handshake.".to_string(),
+            });
             return;
         }
 
@@ -270,7 +369,7 @@ mod tests {
         let sid = session_with_key(&bus, &vk);
         let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100, false);
         assert_eq!(ctx.verdict, Some(Verdict::Allow));
     }
 
@@ -286,7 +385,7 @@ mod tests {
         sealed.payload = b"{\"actionType\":\"CODE_EXECUTE\",\"context\":\"x\",\"target\":\"y\",\"metadata\":{}}".to_vec();
         sealed.crc32c_digest = crc32c::crc32c(&sealed.payload);
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100, false);
         assert_signature_block(&ctx);
     }
 
@@ -299,7 +398,7 @@ mod tests {
         let sid = session_with_key(&bus, &vk_bound);
         let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_other);
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100, false);
         assert_signature_block(&ctx);
     }
 
@@ -312,7 +411,7 @@ mod tests {
         let mut sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         sealed.ml_dsa_65_signature = Vec::new();
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100, false);
         assert_signature_block(&ctx);
     }
 
@@ -325,7 +424,7 @@ mod tests {
         let mut sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         sealed.ml_dsa_65_signature = vec![0xAB; 3309];
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100, false);
         assert_signature_block(&ctx);
     }
 
@@ -338,7 +437,7 @@ mod tests {
         let sid = bus.create_session("webui");
         let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
         let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100, false);
         assert_signature_block(&ctx);
     }
 
@@ -376,7 +475,7 @@ mod tests {
         };
         let mut ctx = EnclaveContext::new(req);
         
-        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100);
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100, false);
         
         // Verdict should be Block with invalid session reason
         assert_eq!(ctx.verdict, Some(Verdict::Block));
@@ -388,5 +487,31 @@ mod tests {
         
         // The same nonce should be accepted again on a fresh check
         assert!(firewall.check_nonce_uniqueness(session_id, b"test_nonce").is_ok());
+    }
+
+    // WO-10: Simulation mode test
+
+    #[test]
+    fn simulation_gatekeeper_records_nothing() {
+        let bus = HandshakeBus::new(b"test_secret");
+        let firewall = ProtocolFirewall::new();
+        
+        let (sk, vk) = generate_keypair();
+        let sid = session_with_key(&bus, &vk);
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let mut ctx = ctx_for(&bus, &sid, proto_envelope(&sealed));
+        
+        // Run in simulation mode
+        GatekeeperEnclave::evaluate(&mut ctx, &bus, &firewall, 100, true);
+        
+        assert_eq!(ctx.verdict, Some(Verdict::Allow));
+        
+        // Counters should be empty (no recording)
+        let counters = firewall.rule_counters();
+        assert_eq!(counters.len(), 0);
+        
+        // Session count should reflect nonce peek (not insertion)
+        // The peek doesn't insert state, so session_count should be 0
+        assert_eq!(firewall.session_count(), 0);
     }
 }

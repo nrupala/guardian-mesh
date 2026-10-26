@@ -13,6 +13,21 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.9.0",
+    date: "2026-10-25",
+    summary: "Simulate dry-run RPC and structured verdict reasons. Closes v0.4.0 gate findings DC-9/DC-10. Agents can now ask 'would this be allowed?' without burning real attempts, and every verdict carries machine-readable rule IDs and remediation strings.",
+    highlights: [
+      "New Simulate RPC running identical verdict logic with no state mutation or execution rights",
+      "Firewall peek variants (check_nonce_uniqueness_peek, check_rate_limit_peek, check_policy_rate_peek) for simulation mode",
+      "Structured reasons in every response: StructuredReason message with rule_id, detail, remediation fields",
+      "Gatekeeper and Arbiter populate structured reasons for all Block/Throttle/Escalate/Allow verdicts",
+      "WebUI Simulate button with distinct rendering for simulation outcomes showing structured reasons"
+    ],
+    gateVerdict: "PENDING",
+    tests: "116 tests (89 lib + 27 bin) from the workspace root on Windows; 10 tests added over the v0.8.5 baseline (7 main.rs, 2 protocol_firewall.rs, 1 gatekeeper.rs); webui build + lint passing",
+    status: "Release candidate"
+  },
+  {
     version: "0.8.5",
     date: "2026-10-24",
     summary: "Firewall session eviction wired and Health reports measured per-rule pass/fail counts. Closes v0.4.0 gate findings F1/F2.",

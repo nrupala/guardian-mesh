@@ -340,6 +340,62 @@ impl ProtocolFirewall {
         let mut sessions = self.sessions.lock().unwrap();
         sessions.remove(session_id);
     }
+
+    /// PF-14 peek variant: check nonce uniqueness without inserting or recording.
+    /// Returns exactly what check_nonce_uniqueness would return for current state.
+    pub fn check_nonce_uniqueness_peek(&self, session_id: &str, nonce: &[u8]) -> Result<(), String> {
+        let sessions = self.sessions.lock().unwrap();
+        if let Some(state) = sessions.get(session_id) {
+            // Check if nonce exists without mutating
+            if state.nonce_window.nonces.iter().any(|n| n.as_slice() == nonce) {
+                return Err("PF-14 nonce reuse rejected".to_string());
+            }
+        }
+        // If session doesn't exist or nonce is not used, peek passes
+        Ok(())
+    }
+
+    /// PF-18 peek variant: check rate limit without recording a hit or counter.
+    pub fn check_rate_limit_peek(&self, session_id: &str) -> Result<Option<ThrottleReason>, String> {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        
+        let sessions = self.sessions.lock().unwrap();
+        if let Some(state) = sessions.get(session_id) {
+            // Count how many timestamps are still in the window
+            let count = state.rate_limiter_pf18.timestamps.iter()
+                .filter(|&&ts| now_ms.saturating_sub(ts) <= RATE_LIMIT_WINDOW_MS)
+                .count();
+            
+            if count >= RATE_LIMIT_EXTERNAL_MSG_PER_SEC {
+                return Ok(Some(ThrottleReason::ProtocolFirewall));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Policy rate peek variant: check policy rate limit without recording.
+    pub fn check_policy_rate_peek(&self, session_id: &str, limit: usize) -> Result<Option<ThrottleReason>, String> {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        
+        let sessions = self.sessions.lock().unwrap();
+        if let Some(state) = sessions.get(session_id) {
+            // Count how many timestamps are still in the window
+            let count = state.rate_limiter_policy.timestamps.iter()
+                .filter(|&&ts| now_ms.saturating_sub(ts) <= RATE_LIMIT_WINDOW_MS)
+                .count();
+            
+            if count >= limit {
+                return Ok(Some(ThrottleReason::PolicyRate));
+            }
+        }
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
@@ -604,5 +660,45 @@ mod tests {
         
         // The same nonce should be accepted again (nonce window is gone)
         assert!(pf.check_nonce_uniqueness("session1", b"nonce1").is_ok());
+    }
+
+    // WO-10: Peek variant tests
+
+    #[test]
+    fn peek_nonce_does_not_insert() {
+        let pf = ProtocolFirewall::new();
+        
+        // Peek should pass (nonce not used)
+        assert!(pf.check_nonce_uniqueness_peek("session1", b"nonce1").is_ok());
+        
+        // Real check with the same nonce should still pass (peek didn't insert)
+        assert!(pf.check_nonce_uniqueness("session1", b"nonce1").is_ok());
+        
+        // Peek now should fail (nonce now used)
+        assert!(pf.check_nonce_uniqueness_peek("session1", b"nonce1").is_err());
+        
+        // Verify counters unchanged by peek
+        let (passed, failed) = pf.totals();
+        assert_eq!(passed, 1); // Only the real check
+        assert_eq!(failed, 0);
+    }
+
+    #[test]
+    fn peek_rate_does_not_record() {
+        let pf = ProtocolFirewall::new();
+        
+        // Multiple peeks should not affect counters
+        for _ in 0..10 {
+            assert!(pf.check_rate_limit_peek("session1").unwrap().is_none());
+            assert!(pf.check_policy_rate_peek("session1", 100).unwrap().is_none());
+        }
+        
+        // Counters should still be zero
+        let (passed, failed) = pf.totals();
+        assert_eq!(passed, 0);
+        assert_eq!(failed, 0);
+        
+        // Session count should be zero (peeks don't create session state)
+        assert_eq!(pf.session_count(), 0);
     }
 }

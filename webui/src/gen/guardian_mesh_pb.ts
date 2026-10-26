@@ -111,6 +111,23 @@ export interface ActionDescriptor {
     };
 }
 /**
+ * @generated from protobuf message guardian_mesh.StructuredReason
+ */
+export interface StructuredReason {
+    /**
+     * @generated from protobuf field: string rule_id = 1
+     */
+    ruleId: string;
+    /**
+     * @generated from protobuf field: string detail = 2
+     */
+    detail: string;
+    /**
+     * @generated from protobuf field: string remediation = 3
+     */
+    remediation: string;
+}
+/**
  * @generated from protobuf message guardian_mesh.EvaluateResponse
  */
 export interface EvaluateResponse {
@@ -142,6 +159,14 @@ export interface EvaluateResponse {
      * @generated from protobuf field: guardian_mesh.SealedEnvelope proof_envelope = 6
      */
     proofEnvelope?: SealedEnvelope;
+    /**
+     * @generated from protobuf field: repeated guardian_mesh.StructuredReason reasons = 7
+     */
+    reasons: StructuredReason[];
+    /**
+     * @generated from protobuf field: bool simulation = 8
+     */
+    simulation: boolean;
 }
 // ── VerifyProof RPC ───────────────────────
 
@@ -295,6 +320,14 @@ export interface AuditProof {
      * @generated from protobuf field: uint64 timestamp = 5
      */
     timestamp: string;
+    /**
+     * @generated from protobuf field: bool simulation = 6
+     */
+    simulation: boolean;
+    /**
+     * @generated from protobuf field: repeated string rule_ids = 7
+     */
+    ruleIds: string[];
     /**
      * @generated from protobuf field: bytes merkle_root = 16
      */
@@ -887,6 +920,69 @@ class ActionDescriptor$Type extends MessageType<ActionDescriptor> {
  */
 export const ActionDescriptor = new ActionDescriptor$Type();
 // @generated message type with reflection information, may provide speed optimized methods
+class StructuredReason$Type extends MessageType<StructuredReason> {
+    constructor() {
+        super("guardian_mesh.StructuredReason", [
+            { no: 1, name: "rule_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "detail", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "remediation", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<StructuredReason>): StructuredReason {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.ruleId = "";
+        message.detail = "";
+        message.remediation = "";
+        if (value !== undefined)
+            reflectionMergePartial<StructuredReason>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: StructuredReason): StructuredReason {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string rule_id */ 1:
+                    message.ruleId = reader.string();
+                    break;
+                case /* string detail */ 2:
+                    message.detail = reader.string();
+                    break;
+                case /* string remediation */ 3:
+                    message.remediation = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: StructuredReason, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string rule_id = 1; */
+        if (message.ruleId !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.ruleId);
+        /* string detail = 2; */
+        if (message.detail !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.detail);
+        /* string remediation = 3; */
+        if (message.remediation !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.remediation);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.StructuredReason
+ */
+export const StructuredReason = new StructuredReason$Type();
+// @generated message type with reflection information, may provide speed optimized methods
 class EvaluateResponse$Type extends MessageType<EvaluateResponse> {
     constructor() {
         super("guardian_mesh.EvaluateResponse", [
@@ -895,7 +991,9 @@ class EvaluateResponse$Type extends MessageType<EvaluateResponse> {
             { no: 3, name: "containment_stage", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 4, name: "proof", kind: "message", T: () => AuditProof },
             { no: 5, name: "handshake_token", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
-            { no: 6, name: "proof_envelope", kind: "message", T: () => SealedEnvelope }
+            { no: 6, name: "proof_envelope", kind: "message", T: () => SealedEnvelope },
+            { no: 7, name: "reasons", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => StructuredReason },
+            { no: 8, name: "simulation", kind: "scalar", T: 8 /*ScalarType.BOOL*/ }
         ]);
     }
     create(value?: PartialMessage<EvaluateResponse>): EvaluateResponse {
@@ -904,6 +1002,8 @@ class EvaluateResponse$Type extends MessageType<EvaluateResponse> {
         message.reason = "";
         message.containmentStage = "";
         message.handshakeToken = new Uint8Array(0);
+        message.reasons = [];
+        message.simulation = false;
         if (value !== undefined)
             reflectionMergePartial<EvaluateResponse>(this, message, value);
         return message;
@@ -930,6 +1030,12 @@ class EvaluateResponse$Type extends MessageType<EvaluateResponse> {
                     break;
                 case /* guardian_mesh.SealedEnvelope proof_envelope */ 6:
                     message.proofEnvelope = SealedEnvelope.internalBinaryRead(reader, reader.uint32(), options, message.proofEnvelope);
+                    break;
+                case /* repeated guardian_mesh.StructuredReason reasons */ 7:
+                    message.reasons.push(StructuredReason.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                case /* bool simulation */ 8:
+                    message.simulation = reader.bool();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -961,6 +1067,12 @@ class EvaluateResponse$Type extends MessageType<EvaluateResponse> {
         /* guardian_mesh.SealedEnvelope proof_envelope = 6; */
         if (message.proofEnvelope)
             SealedEnvelope.internalBinaryWrite(message.proofEnvelope, writer.tag(6, WireType.LengthDelimited).fork(), options).join();
+        /* repeated guardian_mesh.StructuredReason reasons = 7; */
+        for (let i = 0; i < message.reasons.length; i++)
+            StructuredReason.internalBinaryWrite(message.reasons[i], writer.tag(7, WireType.LengthDelimited).fork(), options).join();
+        /* bool simulation = 8; */
+        if (message.simulation !== false)
+            writer.tag(8, WireType.Varint).bool(message.simulation);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -1363,6 +1475,8 @@ class AuditProof$Type extends MessageType<AuditProof> {
             { no: 3, name: "enclave_chain", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 4, name: "signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
             { no: 5, name: "timestamp", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 6, name: "simulation", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 7, name: "rule_ids", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
             { no: 16, name: "merkle_root", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
         ]);
     }
@@ -1373,6 +1487,8 @@ class AuditProof$Type extends MessageType<AuditProof> {
         message.enclaveChain = "";
         message.signature = new Uint8Array(0);
         message.timestamp = "0";
+        message.simulation = false;
+        message.ruleIds = [];
         message.merkleRoot = new Uint8Array(0);
         if (value !== undefined)
             reflectionMergePartial<AuditProof>(this, message, value);
@@ -1397,6 +1513,12 @@ class AuditProof$Type extends MessageType<AuditProof> {
                     break;
                 case /* uint64 timestamp */ 5:
                     message.timestamp = reader.uint64().toString();
+                    break;
+                case /* bool simulation */ 6:
+                    message.simulation = reader.bool();
+                    break;
+                case /* repeated string rule_ids */ 7:
+                    message.ruleIds.push(reader.string());
                     break;
                 case /* bytes merkle_root */ 16:
                     message.merkleRoot = reader.bytes();
@@ -1428,6 +1550,12 @@ class AuditProof$Type extends MessageType<AuditProof> {
         /* uint64 timestamp = 5; */
         if (message.timestamp !== "0")
             writer.tag(5, WireType.Varint).uint64(message.timestamp);
+        /* bool simulation = 6; */
+        if (message.simulation !== false)
+            writer.tag(6, WireType.Varint).bool(message.simulation);
+        /* repeated string rule_ids = 7; */
+        for (let i = 0; i < message.ruleIds.length; i++)
+            writer.tag(7, WireType.LengthDelimited).string(message.ruleIds[i]);
         /* bytes merkle_root = 16; */
         if (message.merkleRoot.length)
             writer.tag(16, WireType.LengthDelimited).bytes(message.merkleRoot);
@@ -2316,6 +2444,7 @@ export const CertificateBody = new CertificateBody$Type();
  */
 export const GuardianMesh = new ServiceType("guardian_mesh.GuardianMesh", [
     { name: "Evaluate", options: {}, I: EvaluateRequest, O: EvaluateResponse },
+    { name: "Simulate", options: {}, I: EvaluateRequest, O: EvaluateResponse },
     { name: "VerifyProof", options: {}, I: VerifyProofRequest, O: VerifyProofResponse },
     { name: "Health", options: {}, I: HealthRequest, O: HealthResponse },
     { name: "Handshake", options: {}, I: HandshakeRequest, O: HandshakeResponse },

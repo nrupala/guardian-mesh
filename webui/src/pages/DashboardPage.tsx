@@ -9,6 +9,7 @@ import {
   daemonClient,
   fetchHealth,
   runEvaluation,
+  runSimulation,
   sessionState,
   verifyProofEnvelope,
   fetchAuditLog,
@@ -78,6 +79,7 @@ function DemoPanel() {
           <h2>Quick Actions</h2>
           <div className="action-grid">
             <button className="action-btn" disabled>Run Evaluation</button>
+            <button className="action-btn" disabled>Simulate (dry run)</button>
             <button className="action-btn" disabled>Verify Proof</button>
             <button className="action-btn" disabled>Health Check</button>
           </div>
@@ -133,7 +135,9 @@ function LivePanel() {
   const [context, setContext] = useState("")
   const [target, setTarget] = useState("")
   const [evaluating, setEvaluating] = useState(false)
+  const [simulating, setSimulating] = useState(false)
   const [outcome, setOutcome] = useState<EvalOutcome | null>(null)
+  const [simOutcome, setSimOutcome] = useState<EvaluateResponse | null>(null)
 
   const [pasteEnvelope, setPasteEnvelope] = useState("")
   const [verifying, setVerifying] = useState(false)
@@ -207,6 +211,26 @@ function LivePanel() {
       setEvaluating(false)
       setSessionTick((t) => t + 1)
       void doHealth()
+    }
+  }
+
+  const doSimulate = async () => {
+    setSimulating(true)
+    setSimOutcome(null)
+    try {
+      const response = await runSimulation(client, {
+        actionType,
+        context: context || "Requested from the guardian.aimlds.org control panel",
+        target: target || "panel",
+      })
+      setSimOutcome(response)
+    } catch (e) {
+      // Simulate should not error on verdict outcomes, but handle
+      // unexpected errors
+      setSimOutcome(null)
+      console.error("Simulation error:", e)
+    } finally {
+      setSimulating(false)
     }
   }
 
@@ -491,13 +515,22 @@ function LivePanel() {
                 placeholder="panel"
               />
             </label>
-            <button
-              className="action-btn"
-              onClick={() => void doEvaluate()}
-              disabled={evaluating}
-            >
-              {evaluating ? "Asking the guardians…" : "Ask Guardian Mesh"}
-            </button>
+            <div className="action-grid">
+              <button
+                className="action-btn"
+                onClick={() => void doEvaluate()}
+                disabled={evaluating}
+              >
+                {evaluating ? "Asking the guardians…" : "Ask Guardian Mesh"}
+              </button>
+              <button
+                className="action-btn"
+                onClick={() => void doSimulate()}
+                disabled={simulating}
+              >
+                {simulating ? "Simulating…" : "Simulate (dry run)"}
+              </button>
+            </div>
           </div>
 
           {outcome?.kind === "verdict" && (
@@ -555,6 +588,34 @@ function LivePanel() {
             <div className="verdict-panel verdict-block">
               <p className="verdict-word">No answer</p>
               <p>The evaluation could not be completed: {outcome.message}</p>
+            </div>
+          )}
+
+          {simOutcome && (
+            <div className={`verdict-panel verdict-${simOutcome.verdict.toLowerCase()}`}>
+              <p className="verdict-word">SIMULATION — no execution rights, nothing was executed or logged</p>
+              <p className="verdict-word">{simOutcome.verdict}</p>
+              <p>{simOutcome.reason}</p>
+              <p className="status-sub">
+                Containment stage: {simOutcome.containmentStage}
+              </p>
+              {simOutcome.reasons && simOutcome.reasons.length > 0 && (
+                <div className="structured-reasons">
+                  <h4>Structured reasons:</h4>
+                  <ul>
+                    {simOutcome.reasons.map((r, i) => (
+                      <li key={i}>
+                        <strong>{r.ruleId}</strong>: {r.detail}
+                        {r.remediation && (
+                          <div className="remediation">
+                            <em>Remediation:</em> {r.remediation}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </section>

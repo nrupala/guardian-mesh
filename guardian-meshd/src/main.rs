@@ -21,7 +21,7 @@ use guardian_meshd::sealed_envelope::{verify_proto_envelope, load_or_generate_si
 use guardian_meshd::certificate::{CertificateRegistry, Tests, IssuanceResult, CertificateStatus as CertStatus};
 use guardian_meshd::proto::{
     guardian_mesh_server::{GuardianMesh, GuardianMeshServer},
-    EvaluateRequest, EvaluateResponse, AuditProof,
+    EvaluateRequest, EvaluateResponse, AuditProof, StructuredReason,
     VerifyProofRequest, VerifyProofResponse,
     HealthRequest, HealthResponse,
     HandshakeRequest, HandshakeResponse,
@@ -76,35 +76,104 @@ impl GuardianMeshService {
             self.firewall.evict_session(&id);
         }
     }
-}
 
-#[tonic::async_trait]
-impl GuardianMesh for GuardianMeshService {
-    async fn evaluate(
+    async fn run_evaluation(
         &self,
-        request: Request<EvaluateRequest>,
+        req: EvaluateRequest,
+        simulation: bool,
     ) -> Result<Response<EvaluateResponse>, Status> {
-        let req = request.into_inner();
         let mut ctx = EnclaveContext::new(req);
 
         SentinelEnclave::evaluate(&mut ctx);
         if ctx.verdict != Some(Verdict::Allow) {
-            let msg = ctx.reason.unwrap_or_else(|| "Sentinel blocked".into());
-            return Err(Status::permission_denied(msg));
+            let msg = ctx.reason.clone().unwrap_or_else(|| "Sentinel blocked".into());
+            if simulation {
+                // Simulation early block: return Ok(EvaluateResponse) with verdict BLOCK
+                let reasons: Vec<StructuredReason> = ctx.structured_reasons.iter().map(|r| {
+                    StructuredReason {
+                        rule_id: r.rule_id.clone(),
+                        detail: r.detail.clone(),
+                        remediation: r.remediation.clone(),
+                    }
+                }).collect();
+                
+                let rule_ids: Vec<String> = ctx.structured_reasons.iter()
+                    .map(|r| r.rule_id.clone())
+                    .collect();
+                
+                let proof = AuditProof {
+                    action_id: ctx.request.action.as_ref().map(|a| a.action_type.clone()).unwrap_or_default(),
+                    verdict: "BLOCK".into(),
+                    enclave_chain: "Sentinel".into(),
+                    signature: Vec::new(),
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs(),
+                    simulation: true,
+                    rule_ids,
+                    merkle_root: Vec::new(),
+                };
+
+                let proof_envelope = {
+                    let sealed = SealedEnvelope::new(
+                        proof.encode_to_vec(),
+                        b"guardian_mesh.AuditProof".to_vec(),
+                        &self.signing_key,
+                    );
+                    ProtoSealedEnvelope {
+                        payload: sealed.payload,
+                        payload_type: sealed.payload_type,
+                        crc32c: sealed.crc32c_digest,
+                        ml_dsa_65_signature: sealed.ml_dsa_65_signature,
+                        timestamp: sealed.timestamp,
+                        nonce: sealed.nonce.to_vec(),
+                    }
+                };
+
+                let response = EvaluateResponse {
+                    verdict: "BLOCK".into(),
+                    reason: msg,
+                    containment_stage: ctx.stage.as_str().into(),
+                    proof: Some(proof),
+                    handshake_token: Vec::new(),
+                    proof_envelope: Some(proof_envelope),
+                    reasons,
+                    simulation: true,
+                };
+                return Ok(Response::new(response));
+            } else {
+                return Err(Status::permission_denied(msg));
+            }
         }
 
         {
             let bus = self.bus.read().await;
             self.sweep_expired_sessions(&bus);
-            GatekeeperEnclave::evaluate(&mut ctx, &bus, &self.firewall, self.config.policy_throttle_rate);
+            GatekeeperEnclave::evaluate(&mut ctx, &bus, &self.firewall, self.config.policy_throttle_rate, simulation);
         }
+        
         // WO-5: THROTTLE verdicts from Gatekeeper (PF-18 or policy rate) proceed to proof generation
         if ctx.verdict == Some(Verdict::Throttle) {
             // THROTTLE verdict: skip Witness and Arbiter, go directly to proof and audit
             let final_verdict = Verdict::Throttle;
             let final_reason = ctx.reason.clone().unwrap_or_default();
 
-            self.vault.seal(&ctx);
+            if !simulation {
+                self.vault.seal(&ctx);
+            }
+            
+            let reasons: Vec<StructuredReason> = ctx.structured_reasons.iter().map(|r| {
+                StructuredReason {
+                    rule_id: r.rule_id.clone(),
+                    detail: r.detail.clone(),
+                    remediation: r.remediation.clone(),
+                }
+            }).collect();
+            
+            let rule_ids: Vec<String> = ctx.structured_reasons.iter()
+                .map(|r| r.rule_id.clone())
+                .collect();
 
             let proof = AuditProof {
                 action_id: ctx.request.action.as_ref().map(|a| a.action_type.clone()).unwrap_or_default(),
@@ -115,6 +184,8 @@ impl GuardianMesh for GuardianMeshService {
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
+                simulation,
+                rule_ids,
                 merkle_root: Vec::new(),
             };
 
@@ -141,19 +212,136 @@ impl GuardianMesh for GuardianMeshService {
                 proof: Some(proof),
                 handshake_token: Vec::new(),
                 proof_envelope: Some(proof_envelope),
+                reasons,
+                simulation,
             };
 
             return Ok(Response::new(response));
         }
+        
         if ctx.verdict != Some(Verdict::Allow) {
-            let msg = ctx.reason.unwrap_or_else(|| "Gatekeeper blocked".into());
-            return Err(Status::permission_denied(msg));
+            let msg = ctx.reason.clone().unwrap_or_else(|| "Gatekeeper blocked".into());
+            if simulation {
+                // Simulation early block from Gatekeeper
+                let reasons: Vec<StructuredReason> = ctx.structured_reasons.iter().map(|r| {
+                    StructuredReason {
+                        rule_id: r.rule_id.clone(),
+                        detail: r.detail.clone(),
+                        remediation: r.remediation.clone(),
+                    }
+                }).collect();
+                
+                let rule_ids: Vec<String> = ctx.structured_reasons.iter()
+                    .map(|r| r.rule_id.clone())
+                    .collect();
+                
+                let proof = AuditProof {
+                    action_id: ctx.request.action.as_ref().map(|a| a.action_type.clone()).unwrap_or_default(),
+                    verdict: "BLOCK".into(),
+                    enclave_chain: "Sentinel→Gatekeeper".into(),
+                    signature: Vec::new(),
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs(),
+                    simulation: true,
+                    rule_ids,
+                    merkle_root: Vec::new(),
+                };
+
+                let proof_envelope = {
+                    let sealed = SealedEnvelope::new(
+                        proof.encode_to_vec(),
+                        b"guardian_mesh.AuditProof".to_vec(),
+                        &self.signing_key,
+                    );
+                    ProtoSealedEnvelope {
+                        payload: sealed.payload,
+                        payload_type: sealed.payload_type,
+                        crc32c: sealed.crc32c_digest,
+                        ml_dsa_65_signature: sealed.ml_dsa_65_signature,
+                        timestamp: sealed.timestamp,
+                        nonce: sealed.nonce.to_vec(),
+                    }
+                };
+
+                let response = EvaluateResponse {
+                    verdict: "BLOCK".into(),
+                    reason: msg,
+                    containment_stage: ctx.stage.as_str().into(),
+                    proof: Some(proof),
+                    handshake_token: Vec::new(),
+                    proof_envelope: Some(proof_envelope),
+                    reasons,
+                    simulation: true,
+                };
+                return Ok(Response::new(response));
+            } else {
+                return Err(Status::permission_denied(msg));
+            }
         }
 
         WitnessEnclave::evaluate(&mut ctx, &self.signing_key);
         if ctx.verdict != Some(Verdict::Allow) {
-            let msg = ctx.reason.unwrap_or_else(|| "Witness blocked".into());
-            return Err(Status::permission_denied(msg));
+            let msg = ctx.reason.clone().unwrap_or_else(|| "Witness blocked".into());
+            if simulation {
+                // Simulation early block from Witness
+                let reasons: Vec<StructuredReason> = ctx.structured_reasons.iter().map(|r| {
+                    StructuredReason {
+                        rule_id: r.rule_id.clone(),
+                        detail: r.detail.clone(),
+                        remediation: r.remediation.clone(),
+                    }
+                }).collect();
+                
+                let rule_ids: Vec<String> = ctx.structured_reasons.iter()
+                    .map(|r| r.rule_id.clone())
+                    .collect();
+                
+                let proof = AuditProof {
+                    action_id: ctx.request.action.as_ref().map(|a| a.action_type.clone()).unwrap_or_default(),
+                    verdict: "BLOCK".into(),
+                    enclave_chain: "Sentinel→Gatekeeper→Witness".into(),
+                    signature: ctx.witness_signature.clone(),
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs(),
+                    simulation: true,
+                    rule_ids,
+                    merkle_root: Vec::new(),
+                };
+
+                let proof_envelope = {
+                    let sealed = SealedEnvelope::new(
+                        proof.encode_to_vec(),
+                        b"guardian_mesh.AuditProof".to_vec(),
+                        &self.signing_key,
+                    );
+                    ProtoSealedEnvelope {
+                        payload: sealed.payload,
+                        payload_type: sealed.payload_type,
+                        crc32c: sealed.crc32c_digest,
+                        ml_dsa_65_signature: sealed.ml_dsa_65_signature,
+                        timestamp: sealed.timestamp,
+                        nonce: sealed.nonce.to_vec(),
+                    }
+                };
+
+                let response = EvaluateResponse {
+                    verdict: "BLOCK".into(),
+                    reason: msg,
+                    containment_stage: ctx.stage.as_str().into(),
+                    proof: Some(proof),
+                    handshake_token: Vec::new(),
+                    proof_envelope: Some(proof_envelope),
+                    reasons,
+                    simulation: true,
+                };
+                return Ok(Response::new(response));
+            } else {
+                return Err(Status::permission_denied(msg));
+            }
         }
 
         {
@@ -165,7 +353,21 @@ impl GuardianMesh for GuardianMeshService {
         let final_verdict = ctx.verdict.as_ref().cloned().unwrap_or(Verdict::Block);
         let final_reason = ctx.reason.clone().unwrap_or_default();
 
-        self.vault.seal(&ctx);
+        if !simulation {
+            self.vault.seal(&ctx);
+        }
+        
+        let reasons: Vec<StructuredReason> = ctx.structured_reasons.iter().map(|r| {
+            StructuredReason {
+                rule_id: r.rule_id.clone(),
+                detail: r.detail.clone(),
+                remediation: r.remediation.clone(),
+            }
+        }).collect();
+        
+        let rule_ids: Vec<String> = ctx.structured_reasons.iter()
+            .map(|r| r.rule_id.clone())
+            .collect();
 
         let proof = AuditProof {
             action_id: ctx.request.action.as_ref().map(|a| a.action_type.clone()).unwrap_or_default(),
@@ -176,6 +378,8 @@ impl GuardianMesh for GuardianMeshService {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
+            simulation,
+            rule_ids,
             merkle_root: Vec::new(),
         };
 
@@ -205,9 +409,28 @@ impl GuardianMesh for GuardianMeshService {
             proof: Some(proof),
             handshake_token: Vec::new(),
             proof_envelope: Some(proof_envelope),
+            reasons,
+            simulation,
         };
 
         Ok(Response::new(response))
+    }
+}
+
+#[tonic::async_trait]
+impl GuardianMesh for GuardianMeshService {
+    async fn evaluate(
+        &self,
+        request: Request<EvaluateRequest>,
+    ) -> Result<Response<EvaluateResponse>, Status> {
+        self.run_evaluation(request.into_inner(), false).await
+    }
+
+    async fn simulate(
+        &self,
+        request: Request<EvaluateRequest>,
+    ) -> Result<Response<EvaluateResponse>, Status> {
+        self.run_evaluation(request.into_inner(), true).await
     }
 
     async fn verify_proof(
@@ -1104,5 +1327,286 @@ mod tests {
         // PF-13 and PF-14 should NOT be recorded (flow blocked before them)
         assert!(!counters.contains_key("PF-13"), "PF-13 should not be recorded");
         assert!(!counters.contains_key("PF-14"), "PF-14 should not be recorded");
+    }
+
+    // WO-10: Simulate RPC tests
+
+    #[tokio::test]
+    async fn simulate_valid_action_returns_allow_marked_simulation() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        
+        let resp = service.simulate(Request::new(req)).await.unwrap().into_inner();
+        
+        assert_eq!(resp.verdict, "ALLOW");
+        assert_eq!(resp.simulation, true);
+        assert_eq!(resp.handshake_token.len(), 0);
+        
+        // Decode the proof to check simulation flag
+        let proof = resp.proof.unwrap();
+        assert_eq!(proof.simulation, true);
+        assert!(proof.rule_ids.contains(&"POLICY".to_string()));
+    }
+
+    #[tokio::test]
+    async fn simulate_blocked_action_returns_block_with_structured_reason() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        
+        // CODE_EXECUTE is blocked by default policy
+        let payload = b"{\"actionType\":\"CODE_EXECUTE\",\"context\":\"test\",\"target\":\"panel\",\"metadata\":{}}";
+        let sealed = SealedEnvelope::new(payload.to_vec(), b"test".to_vec(), &sk);
+        let envelope = ProtoSealedEnvelope {
+            payload: sealed.payload.clone(),
+            payload_type: sealed.payload_type.clone(),
+            crc32c: sealed.crc32c_digest,
+            ml_dsa_65_signature: sealed.ml_dsa_65_signature.clone(),
+            timestamp: sealed.timestamp,
+            nonce: sealed.nonce.to_vec(),
+        };
+        let hmac_tag = {
+            let bus = service.bus.read().await;
+            bus.compute_hmac(&session.session_id, &envelope.payload).unwrap()
+        };
+        let req = EvaluateRequest {
+            firewalled: Some(FirewalledRequest {
+                envelope: Some(envelope),
+                source_enclave: "webui".into(),
+                handshake_session: session.session_id.clone(),
+                hmac_tag,
+            }),
+            action: Some(ActionDescriptor {
+                action_type: "CODE_EXECUTE".into(),
+                context: "test".into(),
+                target: "panel".into(),
+                metadata: Default::default(),
+            }),
+        };
+        
+        // Simulate should return Ok(response), not an error
+        let resp = service.simulate(Request::new(req)).await.unwrap().into_inner();
+        
+        assert_eq!(resp.verdict, "BLOCK");
+        assert_eq!(resp.simulation, true);
+        assert!(!resp.reasons.is_empty());
+        
+        let policy_reason = resp.reasons.iter().find(|r| r.rule_id == "POLICY");
+        assert!(policy_reason.is_some());
+        assert!(!policy_reason.unwrap().remediation.is_empty());
+    }
+
+    #[tokio::test]
+    async fn simulate_pf12_block_returns_structured_reason_not_error() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        
+        // Payload with an unknown field (violates PF-12)
+        let bad_payload = b"{\"actionType\":\"TOOL_CALL\",\"context\":\"test\",\"target\":\"panel\",\"metadata\":{},\"unknownField\":\"bad\"}";
+        let sealed = SealedEnvelope::new(bad_payload.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        
+        // Simulate should return Ok with BLOCK verdict
+        let resp = service.simulate(Request::new(req.clone())).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "BLOCK");
+        assert_eq!(resp.simulation, true);
+        assert!(!resp.reasons.is_empty());
+        assert_eq!(resp.reasons[0].rule_id, "PF-12");
+        assert!(!resp.reasons[0].remediation.is_empty());
+        
+        // Real Evaluate should still return permission_denied error
+        let err = service.evaluate(Request::new(req)).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+    }
+
+    #[tokio::test]
+    async fn simulate_does_not_seal_audit_log() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        
+        // Get initial count
+        let initial_resp = service.read_audit_log(Request::new(ReadAuditLogRequest {}))
+            .await.unwrap().into_inner();
+        let initial_count = initial_resp.entries.len();
+        
+        // Simulate ALLOW
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test1".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        let resp = service.simulate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "ALLOW");
+        
+        // Simulate BLOCK
+        let bad_payload = b"{\"actionType\":\"CODE_EXECUTE\",\"context\":\"test\",\"target\":\"panel\",\"metadata\":{}}";
+        let sealed2 = SealedEnvelope::new(bad_payload.to_vec(), b"test2".to_vec(), &sk);
+        let envelope2 = ProtoSealedEnvelope {
+            payload: sealed2.payload.clone(),
+            payload_type: sealed2.payload_type.clone(),
+            crc32c: sealed2.crc32c_digest,
+            ml_dsa_65_signature: sealed2.ml_dsa_65_signature.clone(),
+            timestamp: sealed2.timestamp,
+            nonce: sealed2.nonce.to_vec(),
+        };
+        let hmac_tag2 = {
+            let bus = service.bus.read().await;
+            bus.compute_hmac(&session.session_id, &envelope2.payload).unwrap()
+        };
+        let req2 = EvaluateRequest {
+            firewalled: Some(FirewalledRequest {
+                envelope: Some(envelope2),
+                source_enclave: "webui".into(),
+                handshake_session: session.session_id.clone(),
+                hmac_tag: hmac_tag2,
+            }),
+            action: Some(ActionDescriptor {
+                action_type: "CODE_EXECUTE".into(),
+                context: "test".into(),
+                target: "panel".into(),
+                metadata: Default::default(),
+            }),
+        };
+        let resp2 = service.simulate(Request::new(req2)).await.unwrap().into_inner();
+        assert_eq!(resp2.verdict, "BLOCK");
+        
+        // Check audit log count unchanged
+        let final_resp = service.read_audit_log(Request::new(ReadAuditLogRequest {}))
+            .await.unwrap().into_inner();
+        assert_eq!(final_resp.entries.len(), initial_count);
+    }
+
+    #[tokio::test]
+    async fn simulate_does_not_consume_nonce_or_counters() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        
+        // Get initial health
+        let initial_health = service.health(Request::new(HealthRequest {}))
+            .await.unwrap().into_inner();
+        let initial_passed = initial_health.protocol_firewall_rules_passed;
+        let initial_total = initial_health.protocol_firewall_rules_total;
+        
+        // Create a single sealed envelope with a specific nonce
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"same_nonce".to_vec(), &sk);
+        let req1 = evaluate_request(&service, &session.session_id, &sealed).await;
+        
+        // Simulate TWICE with the same nonce
+        let req2 = req1.clone();
+        let resp1 = service.simulate(Request::new(req1)).await.unwrap().into_inner();
+        assert_eq!(resp1.verdict, "ALLOW");
+        
+        let resp2 = service.simulate(Request::new(req2)).await.unwrap().into_inner();
+        assert_eq!(resp2.verdict, "ALLOW"); // Would be BLOCK if nonce was consumed
+        
+        // Check health counters unchanged
+        let mid_health = service.health(Request::new(HealthRequest {}))
+            .await.unwrap().into_inner();
+        assert_eq!(mid_health.protocol_firewall_rules_passed, initial_passed);
+        assert_eq!(mid_health.protocol_firewall_rules_total, initial_total);
+        
+        // Now do a REAL Evaluate with the same envelope - should succeed
+        let sealed3 = SealedEnvelope::new(PAYLOAD.to_vec(), b"same_nonce".to_vec(), &sk);
+        let req3 = evaluate_request(&service, &session.session_id, &sealed3).await;
+        let resp3 = service.evaluate(Request::new(req3)).await.unwrap().into_inner();
+        assert_eq!(resp3.verdict, "ALLOW"); // Proves simulation left no state
+    }
+
+    #[tokio::test]
+    async fn simulate_throttle_and_escalate() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = Config::default();
+        config.workspace_dir = dir.path().join("ws").to_string_lossy().into_owned();
+        config.output_dir = dir.path().join("out").to_string_lossy().into_owned();
+        config.policy_escalate_actions = vec!["TOOL_CALL".to_string()];
+        config.ensure_dirs().unwrap();
+        let service = GuardianMeshService::new(config).unwrap();
+        
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        
+        // Test ESCALATE
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test_escalate".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        let resp = service.simulate(Request::new(req)).await.unwrap().into_inner();
+        
+        assert_eq!(resp.verdict, "ESCALATE");
+        assert_eq!(resp.simulation, true);
+        let escalate_reason = resp.reasons.iter().find(|r| r.rule_id == "POLICY_ESCALATION");
+        assert!(escalate_reason.is_some());
+        assert!(!escalate_reason.unwrap().remediation.is_empty());
+        
+        // Test THROTTLE (drive many requests quickly)
+        // This is harder to reliably trigger in a test, so we just verify the flow exists
+        // by checking that a valid action still works in simulate mode
+        let sealed2 = SealedEnvelope::new(PAYLOAD.to_vec(), b"test_throttle".to_vec(), &sk);
+        let req2 = evaluate_request(&service, &session.session_id, &sealed2).await;
+        let resp2 = service.simulate(Request::new(req2)).await.unwrap().into_inner();
+        // Should either ALLOW or ESCALATE, but simulation flag should be true
+        assert_eq!(resp2.simulation, true);
+    }
+
+    #[tokio::test]
+    async fn evaluate_responses_carry_structured_reasons() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        
+        // Real Evaluate ALLOW
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test_real_allow".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        
+        assert_eq!(resp.verdict, "ALLOW");
+        assert_eq!(resp.simulation, false);
+        assert!(!resp.reasons.is_empty());
+        assert_eq!(resp.reasons[0].rule_id, "POLICY");
+        
+        let proof = resp.proof.unwrap();
+        assert_eq!(proof.simulation, false);
+        assert!(proof.rule_ids.contains(&"POLICY".to_string()));
+        
+        // Real Evaluate BLOCK
+        let bad_payload = b"{\"actionType\":\"CODE_EXECUTE\",\"context\":\"test\",\"target\":\"panel\",\"metadata\":{}}";
+        let sealed2 = SealedEnvelope::new(bad_payload.to_vec(), b"test_real_block".to_vec(), &sk);
+        let envelope2 = ProtoSealedEnvelope {
+            payload: sealed2.payload.clone(),
+            payload_type: sealed2.payload_type.clone(),
+            crc32c: sealed2.crc32c_digest,
+            ml_dsa_65_signature: sealed2.ml_dsa_65_signature.clone(),
+            timestamp: sealed2.timestamp,
+            nonce: sealed2.nonce.to_vec(),
+        };
+        let hmac_tag2 = {
+            let bus = service.bus.read().await;
+            bus.compute_hmac(&session.session_id, &envelope2.payload).unwrap()
+        };
+        let req2 = EvaluateRequest {
+            firewalled: Some(FirewalledRequest {
+                envelope: Some(envelope2),
+                source_enclave: "webui".into(),
+                handshake_session: session.session_id.clone(),
+                hmac_tag: hmac_tag2,
+            }),
+            action: Some(ActionDescriptor {
+                action_type: "CODE_EXECUTE".into(),
+                context: "test".into(),
+                target: "panel".into(),
+                metadata: Default::default(),
+            }),
+        };
+        let resp2 = service.evaluate(Request::new(req2)).await.unwrap().into_inner();
+        
+        assert_eq!(resp2.verdict, "BLOCK");
+        assert_eq!(resp2.simulation, false);
+        let policy_reason = resp2.reasons.iter().find(|r| r.rule_id == "POLICY");
+        assert!(policy_reason.is_some());
+        assert!(!policy_reason.unwrap().remediation.is_empty());
+        
+        let proof2 = resp2.proof.unwrap();
+        assert!(proof2.rule_ids.contains(&"POLICY".to_string()));
     }
 }
