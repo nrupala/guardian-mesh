@@ -1565,7 +1565,7 @@ the laptop checkouts are working copies, never the source of truth.
   4f4b0451…), fingerprint recomputes, VerifyProof
   valid, supersedes cert-20261025-000036, status
   ACTIVE. v0.9.0 is a RELEASE CANDIDATE (one-week
-  watched soak, RC register row 34; graduates
+  watched soak, RC register entry; graduates
   2026-11-01). Part C continues (WO-19, WO-10 done).
   Next: WO-11 (P1, Part C third in order — policy
   governance). Standing: dependabot PR #51 (vite bump)
