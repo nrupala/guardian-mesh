@@ -484,5 +484,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-26T00:17:48-06:00",
     "message": "Merge pull request #66 from nrupala/wright/wo10-simulate"
+  },
+  {
+    "release": 59,
+    "tag": "release/v59",
+    "previous_tag": "release/v58",
+    "sha": "307fe11e248e77e5d77228f62c6c79dd9487c22f",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-26T00:31:27-06:00",
+    "message": "Merge pull request #67 from nrupala/wright/ledger-wo10-20261025"
   }
 ]
