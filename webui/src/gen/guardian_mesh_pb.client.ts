@@ -47,6 +47,13 @@ export interface IGuardianMeshClient {
      */
     evaluate(input: EvaluateRequest, options?: RpcOptions): UnaryCall<EvaluateRequest, EvaluateResponse>;
     /**
+     * Simulate (dry-run) evaluation — identical verdict logic, no execution rights,
+     * no audit seal, proof marked simulation.
+     *
+     * @generated from protobuf rpc: Simulate
+     */
+    simulate(input: EvaluateRequest, options?: RpcOptions): UnaryCall<EvaluateRequest, EvaluateResponse>;
+    /**
      * Verify a cryptographically sealed audit proof
      *
      * @generated from protobuf rpc: VerifyProof
@@ -121,12 +128,22 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
         return stackIntercept<EvaluateRequest, EvaluateResponse>("unary", this._transport, method, opt, input);
     }
     /**
+     * Simulate (dry-run) evaluation — identical verdict logic, no execution rights,
+     * no audit seal, proof marked simulation.
+     *
+     * @generated from protobuf rpc: Simulate
+     */
+    simulate(input: EvaluateRequest, options?: RpcOptions): UnaryCall<EvaluateRequest, EvaluateResponse> {
+        const method = this.methods[1], opt = this._transport.mergeOptions(options);
+        return stackIntercept<EvaluateRequest, EvaluateResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
      * Verify a cryptographically sealed audit proof
      *
      * @generated from protobuf rpc: VerifyProof
      */
     verifyProof(input: VerifyProofRequest, options?: RpcOptions): UnaryCall<VerifyProofRequest, VerifyProofResponse> {
-        const method = this.methods[1], opt = this._transport.mergeOptions(options);
+        const method = this.methods[2], opt = this._transport.mergeOptions(options);
         return stackIntercept<VerifyProofRequest, VerifyProofResponse>("unary", this._transport, method, opt, input);
     }
     /**
@@ -135,7 +152,7 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
      * @generated from protobuf rpc: Health
      */
     health(input: HealthRequest, options?: RpcOptions): UnaryCall<HealthRequest, HealthResponse> {
-        const method = this.methods[2], opt = this._transport.mergeOptions(options);
+        const method = this.methods[3], opt = this._transport.mergeOptions(options);
         return stackIntercept<HealthRequest, HealthResponse>("unary", this._transport, method, opt, input);
     }
     /**
@@ -147,7 +164,7 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
      * @generated from protobuf rpc: Handshake
      */
     handshake(input: HandshakeRequest, options?: RpcOptions): UnaryCall<HandshakeRequest, HandshakeResponse> {
-        const method = this.methods[3], opt = this._transport.mergeOptions(options);
+        const method = this.methods[4], opt = this._transport.mergeOptions(options);
         return stackIntercept<HandshakeRequest, HandshakeResponse>("unary", this._transport, method, opt, input);
     }
     /**
@@ -157,7 +174,7 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
      * @generated from protobuf rpc: ReadAuditLog
      */
     readAuditLog(input: ReadAuditLogRequest, options?: RpcOptions): UnaryCall<ReadAuditLogRequest, ReadAuditLogResponse> {
-        const method = this.methods[4], opt = this._transport.mergeOptions(options);
+        const method = this.methods[5], opt = this._transport.mergeOptions(options);
         return stackIntercept<ReadAuditLogRequest, ReadAuditLogResponse>("unary", this._transport, method, opt, input);
     }
     /**
@@ -167,7 +184,7 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
      * @generated from protobuf rpc: IssueCertificate
      */
     issueCertificate(input: IssueCertificateRequest, options?: RpcOptions): UnaryCall<IssueCertificateRequest, IssueCertificateResponse> {
-        const method = this.methods[5], opt = this._transport.mergeOptions(options);
+        const method = this.methods[6], opt = this._transport.mergeOptions(options);
         return stackIntercept<IssueCertificateRequest, IssueCertificateResponse>("unary", this._transport, method, opt, input);
     }
     /**
@@ -176,7 +193,7 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
      * @generated from protobuf rpc: RevokeCertificate
      */
     revokeCertificate(input: RevokeCertificateRequest, options?: RpcOptions): UnaryCall<RevokeCertificateRequest, RevokeCertificateResponse> {
-        const method = this.methods[6], opt = this._transport.mergeOptions(options);
+        const method = this.methods[7], opt = this._transport.mergeOptions(options);
         return stackIntercept<RevokeCertificateRequest, RevokeCertificateResponse>("unary", this._transport, method, opt, input);
     }
     /**
@@ -185,7 +202,7 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
      * @generated from protobuf rpc: CertificateStatus
      */
     certificateStatus(input: CertificateStatusRequest, options?: RpcOptions): UnaryCall<CertificateStatusRequest, CertificateStatusResponse> {
-        const method = this.methods[7], opt = this._transport.mergeOptions(options);
+        const method = this.methods[8], opt = this._transport.mergeOptions(options);
         return stackIntercept<CertificateStatusRequest, CertificateStatusResponse>("unary", this._transport, method, opt, input);
     }
 }

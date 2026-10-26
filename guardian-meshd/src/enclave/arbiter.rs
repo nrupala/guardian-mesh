@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Nrupal Akolkar
 // SPDX-License-Identifier: Apache-2.0
 
-use super::{EnclaveContext, Verdict, ContainmentStage};
+use super::{EnclaveContext, Verdict, ContainmentStage, ReasonDetail};
 use crate::policy::PolicyEngine;
 
 pub struct ArbiterEnclave;
@@ -24,15 +24,33 @@ impl ArbiterEnclave {
         if is_blocked {
             // Blocked actions stay blocked even if on escalate list
             ctx.verdict = Some(Verdict::Block);
-            ctx.reason = Some("Arbiter denied via policy engine".into());
+            let reason = "Arbiter denied via policy engine".to_string();
+            ctx.reason = Some(reason.clone());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "POLICY".to_string(),
+                detail: reason,
+                remediation: "Use an action type the current policy allows, or have the policy changed by its owner.".to_string(),
+            });
         } else if requires_escalation {
             // Action is allowed by policy but requires human decision
             ctx.verdict = Some(Verdict::Escalate);
-            ctx.reason = Some(format!("Action type '{}' requires human escalation per policy", action_type));
+            let reason = format!("Action type '{}' requires human escalation per policy", action_type);
+            ctx.reason = Some(reason.clone());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "POLICY_ESCALATION".to_string(),
+                detail: reason,
+                remediation: "Obtain a human approval for this action type, or choose a different action.".to_string(),
+            });
         } else {
             // Action is allowed and does not require escalation
             ctx.verdict = Some(Verdict::Allow);
-            ctx.reason = Some("Arbiter approved via policy engine".into());
+            let reason = "Arbiter approved via policy engine".to_string();
+            ctx.reason = Some(reason.clone());
+            ctx.structured_reasons.push(ReasonDetail {
+                rule_id: "POLICY".to_string(),
+                detail: reason,
+                remediation: "".to_string(),
+            });
         }
     }
 }

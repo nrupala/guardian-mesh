@@ -53,12 +53,20 @@ impl ContainmentStage {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReasonDetail {
+    pub rule_id: String,
+    pub detail: String,
+    pub remediation: String,
+}
+
 pub struct EnclaveContext {
     pub request: EvaluateRequest,
     pub stage: ContainmentStage,
     pub verdict: Option<Verdict>,
     pub reason: Option<String>,
     pub witness_signature: Vec<u8>,
+    pub structured_reasons: Vec<ReasonDetail>,
 }
 
 impl EnclaveContext {
@@ -69,6 +77,7 @@ impl EnclaveContext {
             verdict: None,
             reason: None,
             witness_signature: Vec::new(),
+            structured_reasons: Vec::new(),
         }
     }
 }

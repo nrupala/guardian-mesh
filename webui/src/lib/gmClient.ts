@@ -149,11 +149,12 @@ async function ensureSession(client: GuardianMeshClient): Promise<Session> {
 //      own signing layout — the daemon verifies it against the
 //      registered key before the action is judged
 //   3. HMAC-SHA256 the payload with the session key
-//   4. Evaluate
+//   4. Evaluate or Simulate
 //
-// A BLOCK from the Sentinel or Gatekeeper arrives as a
+// A BLOCK from the Sentinel or Gatekeeper in real Evaluate arrives as a
 // permission-denied error carrying the enclave's reason — callers
-// should read RpcError.code for that case.
+// should read RpcError.code for that case. Simulate never errors on a
+// verdict outcome: every block returns as Ok(EvaluateResponse).
 
 export interface ActionInput {
   actionType: string
@@ -202,6 +203,59 @@ export async function runEvaluation(
   const hmacTag = await hmacSha256(s.key, payload)
 
   return client.evaluate({
+    firewalled: {
+      envelope,
+      sourceEnclave: "webui",
+      handshakeSession: s.id,
+      hmacTag,
+    },
+    action: descriptor,
+  }).response
+}
+
+export async function runSimulation(
+  client: GuardianMeshClient,
+  action: ActionInput,
+): Promise<EvaluateResponse> {
+  const s = await ensureSession(client)
+
+  const { ml_dsa65 } = await import("@noble/post-quantum/ml-dsa.js")
+  const keyPair = await getClientKeyPair()
+
+  const descriptor: ActionDescriptor = {
+    actionType: action.actionType,
+    context: action.context,
+    target: action.target,
+    metadata: { source: "webui" },
+  }
+  const payload = new TextEncoder().encode(JSON.stringify(descriptor))
+  const crc = crc32c(payload)
+
+  const crcLe = new Uint8Array(4)
+  new DataView(crcLe.buffer).setUint32(0, crc, true)
+  const toSign = new Uint8Array(crcLe.length + payload.length)
+  toSign.set(crcLe, 0)
+  toSign.set(payload, crcLe.length)
+  const signature = ml_dsa65.sign(toSign, keyPair.secretKey)
+
+  // Each call seals a FRESH envelope with a fresh nonce, exactly like
+  // runEvaluation — that is what makes "simulate, then really evaluate
+  // the same action" work.
+  const nonce = new Uint8Array(32)
+  crypto.getRandomValues(nonce)
+
+  const envelope: SealedEnvelope = {
+    payload,
+    payloadType: new TextEncoder().encode("guardian_mesh.ActionDescriptor"),
+    crc32C: crc,
+    mlDsa65Signature: signature,
+    timestamp: (BigInt(Date.now()) * 1_000_000n).toString(),
+    nonce,
+  }
+
+  const hmacTag = await hmacSha256(s.key, payload)
+
+  return client.simulate({
     firewalled: {
       envelope,
       sourceEnclave: "webui",

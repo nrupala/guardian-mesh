@@ -17,6 +17,10 @@ service GuardianMesh {
   // Pipeline: Sentinel → Gatekeeper → Witness → Arbiter → Vault
   rpc Evaluate (EvaluateRequest) returns (EvaluateResponse);
 
+  // Simulate (dry-run) evaluation — identical verdict logic, no execution rights,
+  // no audit seal, proof marked simulation.
+  rpc Simulate (EvaluateRequest) returns (EvaluateResponse);
+
   // Verify a cryptographically sealed audit proof
   rpc VerifyProof (VerifyProofRequest) returns (VerifyProofResponse);
 
@@ -78,6 +82,12 @@ message ActionDescriptor {
   map<string, string> metadata = 16;
 }
 
+message StructuredReason {
+  string rule_id = 1;
+  string detail = 2;
+  string remediation = 3;
+}
+
 message EvaluateResponse {
   string verdict = 1;       // ALLOW, BLOCK, THROTTLE, ESCALATE
   string reason = 2;
@@ -88,6 +98,8 @@ message EvaluateResponse {
   // (payload is the encoded AuditProof). Present it to VerifyProof
   // to re-check the proof independently of this response.
   SealedEnvelope proof_envelope = 6;
+  repeated StructuredReason reasons = 7;
+  bool simulation = 8;
 }
 
 // ── VerifyProof RPC ───────────────────────
@@ -146,6 +158,8 @@ message AuditProof {
   string enclave_chain = 3;    // Sentinel→Gatekeeper→Witness→Arbiter
   bytes signature = 4;         // Witness-signed digest
   uint64 timestamp = 5;
+  bool simulation = 6;
+  repeated string rule_ids = 7;
   bytes merkle_root = 16;      // Optional — for batch audit verification
 }
 
