@@ -842,6 +842,40 @@ do, and none becomes a gate MUST until behaviour-proven here.
   mechanically and name the disagreeing layer — as a
   standing probe. A restore that merely resumes is not
   evidence the restored state agrees.
+- **GMSI-86 — A scanner candidate's context labels must be
+  proven against the source before it can block.** (codetopo
+  v0.7.0 gate, 2026-10-25.) The release-gate scanner reported
+  a Rust `#[test]` fixture plaintext as a secret candidate
+  labelled `in_test: false` and blocked on it — the GMSI-6
+  family on a new leg: test-suite detection was taught, but
+  secret-candidate context labelling was not. Guardian Mesh
+  must be able to prove a scanner's candidate labels
+  (in-test / in-fixture / in-example) against the actual
+  source context before a candidate blocks a gate; a label
+  asserted without a source read is a finding.
+- **GMSI-87 — A privacy-doc check must state its scope and
+  accept the published policy location.** (codetopo v0.7.0
+  gate, 2026-10-25.) The scanner's privacy-policy check
+  passes/fails on repo files only, without stating that
+  scope, and accepts no evidence of a policy published at a
+  site route or a README section — so its verdict reflects
+  the filing cabinet, not the product. Guardian Mesh
+  certificates must bind a privacy-evidence claim to its
+  scope (repo files | published location) and to the
+  location checked, and treat an unscoped PASS/FAIL as a
+  finding.
+- **GMSI-88 — A selling surface's legal pages are a live,
+  pre-sale proof.** (Sanity Check legal-pages gate,
+  2026-10-25.) That product passed its 2026-10-23 gate with
+  no /privacy or /terms pages at all; the gap was caught
+  post-release by the daily asset-compliance check. Any
+  surface that sells (checkout, licence sale, subscription)
+  must present live /privacy and /terms naming the legal
+  entity in the body BEFORE first sale — proven on the live
+  surface, never from source files. Guardian Mesh must be
+  able to issue that proof per selling surface; the gate
+  catches it pre-release, compliance only confirms it
+  post-release.
 
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
