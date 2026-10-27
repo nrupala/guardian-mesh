@@ -904,6 +904,24 @@ do, and none becomes a gate MUST until behaviour-proven here.
   the evidence — a code-path PASS without the artifact
   read-back is a finding, not a proof.
 
+- **GMSI-91 — A generated file under @ts-nocheck
+  defeats the type checker's completeness proof.**
+  (Guardian Mesh WO-11 gate, 2026-10-26.) The lane's
+  hand-updated generated TS message file carried the
+  seven new policy message INTERFACES and the three
+  new service methods but NO protobuf-ts MessageType
+  classes for them, and AuditProof's MessageType
+  lacked its new field — yet the WebUI build and lint
+  were green, because the file is @ts-nocheck and
+  Rollup treats the undefined class identifiers as
+  external globals; the shipped bundle would have
+  thrown ReferenceError at module import, and TS
+  wire clients silently dropped the new proof field
+  on decode. Client-stub completeness must be proven
+  BY EXECUTION — import the built module, or drive
+  every method of the table — never by a green build
+  alone. This is GMSI-89's class, second occurrence.
+
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
@@ -1583,3 +1601,92 @@ the laptop checkouts are working copies, never the source of truth.
   Next: WO-11 (P1, Part C third in order — policy
   governance). Standing: dependabot PR #51 (vite bump)
   still open, outside the work orders.
+- 2026-10-26 — **WO-11 shipped as v0.10.0** (PR #69,
+  merged e2aeacba): policy governance (spec DC-18,
+  DC-19, BM-6/BM-12) — signed versioned policy
+  bundles (canonical serialization + SHA-256 content
+  hash; genesis v1 = the previous defaults; fail-closed
+  validation: version == current+1, prev_hash == current
+  hash, no duplicate/invalid actions), a dual-control
+  change path (ProposePolicyChange by a registered
+  ML-DSA-65 policy admin, ApprovePolicyChange by a
+  SECOND distinct registered admin; approval persists
+  atomically via temp + rename, swaps under the write
+  lock, audit-logs POLICY_CHANGE_APPLIED; no admins
+  configured ⇒ change path refuses, publication still
+  serves), a GetPolicy publication endpoint (bundle +
+  hash + daemon signature over the canonical bytes +
+  fingerprint + proposer/approver of record), and
+  AuditProof.policy_version (proto field 8) on every
+  verdict path including simulation. WebUI: read-only
+  Dashboard policy display; no admin WebUI; multi-node
+  propagation out of scope (single-node atomic swap;
+  the bundle is the distributable unit). Built by the
+  laptop lane (OpenCode, fresh clone
+  D:\guardian-mesh-work\wo11 at refreshed main
+  687534e9 — the pack had been refreshed the same night
+  by PR #68 filing GMSI-90; lane commit a97b67d carried
+  by API with tree equality asserted, 02a84b2f, then two
+  Wright carry commits to gated tree efa76549 ==
+  merged tree). Wright-verified independently: cargo
+  137/137 at the workspace root (Linux; 136 Windows —
+  one #[cfg(unix)] lib test; +20 over the 117 baseline);
+  webui npm ci + build (drift guard: 11 versions) +
+  lint green on a clean tree; wire proof through the
+  shipped TS client 31/31 — genesis publication (hash
+  recomputed in TS, daemon signature, fingerprint),
+  policy_version 1 stamped on v1 proofs, unregistered /
+  bad-signature refusals, dual-control propose/approve
+  (same-principal approval refused), the verdict flip
+  under v2 with policy_version 2, the POLICY_CHANGE_APPLIED
+  audit entry, and restart persistence (v2 in force;
+  the persisted file byte-for-byte the canonical
+  bundle). Release gate: PASS WITH FINDINGS (scanner
+  BLOCKED only on the GMSI-6 "tests" false lead, 12th
+  occurrence; 0 secrets, 0 vulns / 159 deps). F1 (High,
+  FIXED in Wright carry): the lane's generated TS
+  message file declared the new policy interfaces +
+  methods but no MessageType classes, and AuditProof's
+  MessageType lacked field 8 — @ts-nocheck + Rollup
+  globals kept build/lint green while the shipped
+  bundle referenced undefined identifiers (runtime
+  import failure) and TS clients dropped
+  policy_version on decode; the carry adds all seven
+  classes + the field, proven by the wire run. F2
+  (Low, FIXED in carry): lane test-count arithmetic /
+  placeholders corrected to verified counts. F3 (Low,
+  OPEN): approval persists before the under-lock
+  re-validation and swallows a record_policy_event
+  error; no divergent state constructible in review.
+  Filed GMSI-91 (above) from this run. Deployed to
+  guardian.aimlds.org (site-integrity declaration
+  a956ce80): aarch64 binary sha256 ec4ecc72…
+  cross-built from merged main (cargo-zigbuild;
+  merged tree == gated tree efa76549), installed
+  (rollback guardian-meshd.bak-v090; webui-dist.bak-v090
+  kept): production fingerprint dd2cf1a3… unchanged
+  (tenth upgrade), both services active, box webui-dist
+  carrying the base-/ build index-BSxUB-i_.js, Access
+  intact, production wire proof 12/12 — genesis v1
+  published with the identical content hash as the
+  local daemon's (9b921513…), a change proposal
+  refused with "unknown policy admin" (no admin
+  registry configured on production — fail-closed by
+  configuration, an operator decision), Evaluate
+  ALLOW with proof policy_version 1; audit log at
+  1,188 entries (+1 = the proof Evaluate's seal; the
+  cert issuance seals one more) with whole-log
+  verification still reporting the historical break
+  at position 557 (pre-fix history, stands as
+  recorded), and the release certified itself on
+  production — certificate cert-20261027-000038
+  (guardian-mesh 0.10.0, PASS WITH FINDINGS, evidence
+  = the gate verdict sha256 c84dff34…), fingerprint
+  recomputes, VerifyProof valid, supersedes
+  cert-20261026-000037, status ACTIVE. v0.10.0 is a
+  RELEASE CANDIDATE (one-week watched soak, RC
+  register entry; graduates 2026-11-02). Part C
+  continues (WO-19, WO-10, WO-11 done). Next: WO-12
+  (P1, Part C fourth in order — revocation service).
+  Standing: dependabot PR #51 (vite bump) still open,
+  outside the work orders.
