@@ -14,10 +14,11 @@ use guardian_meshd::enclave::witness::WitnessEnclave;
 use guardian_meshd::enclave::arbiter::ArbiterEnclave;
 use guardian_meshd::enclave::vault::VaultEnclave;
 use guardian_meshd::handshake_bus::{HandshakeBus, SESSION_TTL_SECS};
-use guardian_meshd::policy::PolicyEngine;
+use guardian_meshd::policy::{PolicyEngine, PolicyBundle, PolicyRule};
 use guardian_meshd::protocol_firewall::ProtocolFirewall;
-use guardian_meshd::sealed_envelope::{generate_keypair, SealedEnvelope, ML_DSA_65_VERIFYING_KEY_LEN};
+use guardian_meshd::sealed_envelope::{generate_keypair, SealedEnvelope, ML_DSA_65_VERIFYING_KEY_LEN, verifying_key_from_bytes};
 use guardian_meshd::sealed_envelope::{verify_proto_envelope, load_or_generate_signing_key, compute_fingerprint};
+use ml_dsa::Signer;
 use guardian_meshd::certificate::{CertificateRegistry, Tests, IssuanceResult, CertificateStatus as CertStatus};
 use guardian_meshd::proto::{
     guardian_mesh_server::{GuardianMesh, GuardianMeshServer},
@@ -33,9 +34,17 @@ use guardian_meshd::proto::{
     certificate_status_response::Status as ProtoStatus,
     SealedEnvelope as ProtoSealedEnvelope,
     health_response::ServingStatus,
+    GetPolicyRequest, PolicyBundleMessage, PolicyRuleMessage,
+    ProposePolicyChangeRequest, ProposePolicyChangeResponse,
+    ApprovePolicyChangeRequest, ApprovePolicyChangeResponse,
 };
 use prost::Message as _;
-use ml_dsa::{MlDsa65, SigningKey, VerifyingKey};
+use ml_dsa::{MlDsa65, SigningKey, VerifyingKey, Verifier, SignatureEncoding};
+
+struct PendingPolicyChange {
+    bundle: PolicyBundle,
+    proposer: String,
+}
 
 pub struct GuardianMeshService {
     config: Config,
@@ -46,13 +55,34 @@ pub struct GuardianMeshService {
     signing_key: SigningKey<MlDsa65>,
     verifying_key: VerifyingKey<MlDsa65>,
     certificates: Arc<CertificateRegistry>,
+    policy_admins: std::collections::HashMap<String, VerifyingKey<MlDsa65>>,
+    pending_policy_change: Arc<RwLock<Option<PendingPolicyChange>>>,
+    policy_principals: Arc<RwLock<(String, String)>>, // (proposer, approver)
 }
 
 impl GuardianMeshService {
     pub fn new(config: Config) -> Result<Self, String> {
         let (sk, vk) = load_or_generate_signing_key(config.keys_dir())?;
         let vault = Arc::new(VaultEnclave::new(10_000, config.audit_dir()));
-        let policy = PolicyEngine::with_escalate_actions(config.policy_escalate_actions.clone());
+        
+        // Load policy admins from the configured directory
+        let policy_admins = Self::load_policy_admins(&config)?;
+        
+        // Load or create genesis policy
+        let (policy, proposer, approver) = match PolicyEngine::load_from_file(&config.policy_dir())? {
+            Some(bundle) => {
+                let mut engine = PolicyEngine::new();
+                engine.apply_bundle(bundle);
+                // Loaded from persistence - principals are "persisted"
+                (engine, "persisted".to_string(), "persisted".to_string())
+            }
+            None => {
+                // Genesis policy
+                let engine = PolicyEngine::with_escalate_actions(config.policy_escalate_actions.clone());
+                (engine, "daemon-defaults".to_string(), "".to_string())
+            }
+        };
+        
         let certificates = CertificateRegistry::new(
             config.workspace_dir.as_str(),
             vault.clone(),
@@ -66,8 +96,77 @@ impl GuardianMeshService {
             signing_key: sk,
             verifying_key: vk,
             certificates: Arc::new(certificates),
+            policy_admins,
+            pending_policy_change: Arc::new(RwLock::new(None)),
+            policy_principals: Arc::new(RwLock::new((proposer, approver))),
             config,
         })
+    }
+
+    fn load_policy_admins(config: &Config) -> Result<std::collections::HashMap<String, VerifyingKey<MlDsa65>>, String> {
+        let mut admins = std::collections::HashMap::new();
+        
+        let keys_dir = match &config.policy_admin_keys_dir {
+            Some(dir) => dir,
+            None => return Ok(admins), // No directory configured, empty registry
+        };
+        
+        let dir_path = std::path::Path::new(keys_dir);
+        if !dir_path.exists() {
+            return Ok(admins); // Directory doesn't exist, empty registry
+        }
+        
+        let entries = std::fs::read_dir(dir_path)
+            .map_err(|e| format!("failed to read policy admin keys directory: {}", e))?;
+        
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("failed to read directory entry: {}", e))?;
+            let path = entry.path();
+            
+            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                if !file_name.ends_with(".vk") {
+                    continue;
+                }
+                
+                let principal = file_name.strip_suffix(".vk").unwrap();
+                
+                // Validate principal name: [a-z0-9][a-z0-9_-]{0,31}
+                if !Self::is_valid_principal_name(principal) {
+                    return Err(format!("invalid principal name in file: {}", file_name));
+                }
+                
+                // Read the raw 1952-byte ML-DSA-65 verifying key
+                let key_bytes = std::fs::read(&path)
+                    .map_err(|e| format!("failed to read admin key file {}: {}", file_name, e))?;
+                
+                if key_bytes.len() != ML_DSA_65_VERIFYING_KEY_LEN {
+                    return Err(format!(
+                        "admin key file {} has wrong size: expected {}, got {}",
+                        file_name, ML_DSA_65_VERIFYING_KEY_LEN, key_bytes.len()
+                    ));
+                }
+                
+                let vk = verifying_key_from_bytes(&key_bytes)
+                    .map_err(|e| format!("failed to decode admin key from {}: {}", file_name, e))?;
+                
+                admins.insert(principal.to_string(), vk);
+            }
+        }
+        
+        Ok(admins)
+    }
+
+    fn is_valid_principal_name(name: &str) -> bool {
+        if name.is_empty() || name.len() > 32 {
+            return false;
+        }
+        
+        let chars: Vec<char> = name.chars().collect();
+        if !matches!(chars[0], 'a'..='z' | '0'..='9') {
+            return false;
+        }
+        
+        chars.iter().all(|&c| matches!(c, 'a'..='z' | '0'..='9' | '_' | '-'))
     }
 
     fn sweep_expired_sessions(&self, bus: &HandshakeBus) {
@@ -83,6 +182,11 @@ impl GuardianMeshService {
         simulation: bool,
     ) -> Result<Response<EvaluateResponse>, Status> {
         let mut ctx = EnclaveContext::new(req);
+
+        let policy_version = {
+            let policy = self.policy.read().await;
+            policy.policy_version()
+        };
 
         SentinelEnclave::evaluate(&mut ctx);
         if ctx.verdict != Some(Verdict::Allow) {
@@ -112,6 +216,7 @@ impl GuardianMeshService {
                         .as_secs(),
                     simulation: true,
                     rule_ids,
+                    policy_version,
                     merkle_root: Vec::new(),
                 };
 
@@ -192,6 +297,7 @@ impl GuardianMeshService {
                     .as_secs(),
                 simulation,
                 rule_ids,
+                policy_version,
                 merkle_root: Vec::new(),
             };
 
@@ -252,6 +358,7 @@ impl GuardianMeshService {
                         .as_secs(),
                     simulation: true,
                     rule_ids,
+                    policy_version,
                     merkle_root: Vec::new(),
                 };
 
@@ -315,6 +422,7 @@ impl GuardianMeshService {
                         .as_secs(),
                     simulation: true,
                     rule_ids,
+                    policy_version,
                     merkle_root: Vec::new(),
                 };
 
@@ -388,6 +496,7 @@ impl GuardianMeshService {
                 .as_secs(),
             simulation,
             rule_ids,
+            policy_version,
             merkle_root: Vec::new(),
         };
 
@@ -682,6 +791,267 @@ impl GuardianMesh for GuardianMeshService {
             body: proto_body,
         }))
     }
+
+    async fn get_policy(
+        &self,
+        _request: Request<GetPolicyRequest>,
+    ) -> Result<Response<PolicyBundleMessage>, Status> {
+        let policy = self.policy.read().await;
+        let bundle = policy.bundle();
+        
+        let canonical = bundle.to_canonical_string();
+        let signature = self.signing_key.sign(canonical.as_bytes());
+        
+        let (proposer, approver) = {
+            let principals = self.policy_principals.read().await;
+            principals.clone()
+        };
+        
+        let rules: Vec<PolicyRuleMessage> = bundle.rules.iter().map(|r| PolicyRuleMessage {
+            action_type: r.action_type.clone(),
+            allow: r.allow,
+            priority: r.priority,
+        }).collect();
+        
+        let response = PolicyBundleMessage {
+            version: bundle.version,
+            rules,
+            escalate_actions: bundle.escalate_actions.clone(),
+            prev_hash: bundle.prev_hash.clone(),
+            content_hash: bundle.content_hash(),
+            daemon_signature: signature.to_bytes().to_vec(),
+            signer_fingerprint: compute_fingerprint(&self.verifying_key),
+            proposer,
+            approver,
+        };
+        
+        Ok(Response::new(response))
+    }
+
+    async fn propose_policy_change(
+        &self,
+        request: Request<ProposePolicyChangeRequest>,
+    ) -> Result<Response<ProposePolicyChangeResponse>, Status> {
+        let req = request.into_inner();
+        
+        // Check if proposer is a registered admin
+        let proposer_vk = match self.policy_admins.get(&req.proposer) {
+            Some(vk) => vk,
+            None => {
+                return Ok(Response::new(ProposePolicyChangeResponse {
+                    accepted: false,
+                    change_id: String::new(),
+                    message: "unknown policy admin".to_string(),
+                }));
+            }
+        };
+        
+        // Build the proposed bundle
+        let rules: Vec<PolicyRule> = req.rules.iter().map(|r| PolicyRule {
+            action_type: r.action_type.clone(),
+            allow: r.allow,
+            priority: r.priority,
+        }).collect();
+        
+        let proposed = PolicyBundle {
+            version: req.version,
+            rules,
+            escalate_actions: req.escalate_actions,
+            prev_hash: req.prev_hash,
+        };
+        
+        // Verify proposer signature over canonical bytes
+        let canonical = proposed.to_canonical_string();
+        let sig = match ml_dsa::Signature::<MlDsa65>::try_from(req.proposer_signature.as_slice()) {
+            Ok(s) => s,
+            Err(_) => {
+                return Ok(Response::new(ProposePolicyChangeResponse {
+                    accepted: false,
+                    change_id: String::new(),
+                    message: "signature verification failed".to_string(),
+                }));
+            }
+        };
+        
+        if let Err(_) = proposer_vk.verify(canonical.as_bytes(), &sig) {
+            return Ok(Response::new(ProposePolicyChangeResponse {
+                accepted: false,
+                change_id: String::new(),
+                message: "signature verification failed".to_string(),
+            }));
+        }
+        
+        // Validate against current policy
+        {
+            let policy = self.policy.read().await;
+            if let Err(e) = policy.validate_next(&proposed) {
+                return Ok(Response::new(ProposePolicyChangeResponse {
+                    accepted: false,
+                    change_id: String::new(),
+                    message: e,
+                }));
+            }
+        }
+        
+        // Check if a pending change already exists
+        {
+            let mut pending = self.pending_policy_change.write().await;
+            if pending.is_some() {
+                return Ok(Response::new(ProposePolicyChangeResponse {
+                    accepted: false,
+                    change_id: String::new(),
+                    message: "a policy change is already pending".to_string(),
+                }));
+            }
+            
+            let change_id = proposed.content_hash();
+            *pending = Some(PendingPolicyChange {
+                bundle: proposed,
+                proposer: req.proposer,
+            });
+            
+            Ok(Response::new(ProposePolicyChangeResponse {
+                accepted: true,
+                change_id,
+                message: String::new(),
+            }))
+        }
+    }
+
+    async fn approve_policy_change(
+        &self,
+        request: Request<ApprovePolicyChangeRequest>,
+    ) -> Result<Response<ApprovePolicyChangeResponse>, Status> {
+        let req = request.into_inner();
+        
+        // Check if approver is a registered admin
+        let approver_vk = match self.policy_admins.get(&req.approver) {
+            Some(vk) => vk,
+            None => {
+                return Ok(Response::new(ApprovePolicyChangeResponse {
+                    applied: false,
+                    version: 0,
+                    content_hash: String::new(),
+                    message: "unknown policy admin".to_string(),
+                }));
+            }
+        };
+        
+        // Check if a pending change exists
+        let (pending_bundle, proposer) = {
+            let pending = self.pending_policy_change.read().await;
+            match pending.as_ref() {
+                Some(p) => {
+                    if p.bundle.content_hash() != req.change_id {
+                        return Ok(Response::new(ApprovePolicyChangeResponse {
+                            applied: false,
+                            version: 0,
+                            content_hash: String::new(),
+                            message: "change_id mismatch".to_string(),
+                        }));
+                    }
+                    (p.bundle.clone(), p.proposer.clone())
+                }
+                None => {
+                    return Ok(Response::new(ApprovePolicyChangeResponse {
+                        applied: false,
+                        version: 0,
+                        content_hash: String::new(),
+                        message: "no pending policy change".to_string(),
+                    }));
+                }
+            }
+        };
+        
+        // Dual control: approver != proposer
+        if req.approver == proposer {
+            return Ok(Response::new(ApprovePolicyChangeResponse {
+                applied: false,
+                version: 0,
+                content_hash: String::new(),
+                message: "dual control violation: approver cannot be the same as proposer".to_string(),
+            }));
+        }
+        
+        // Verify approver signature
+        let canonical = pending_bundle.to_canonical_string();
+        let sig = match ml_dsa::Signature::<MlDsa65>::try_from(req.approver_signature.as_slice()) {
+            Ok(s) => s,
+            Err(_) => {
+                return Ok(Response::new(ApprovePolicyChangeResponse {
+                    applied: false,
+                    version: 0,
+                    content_hash: String::new(),
+                    message: "signature verification failed".to_string(),
+                }));
+            }
+        };
+        
+        if let Err(_) = approver_vk.verify(canonical.as_bytes(), &sig) {
+            return Ok(Response::new(ApprovePolicyChangeResponse {
+                applied: false,
+                version: 0,
+                content_hash: String::new(),
+                message: "signature verification failed".to_string(),
+            }));
+        }
+        
+        // Persist FIRST (fail-closed: if persistence fails, policy is not changed)
+        if let Err(e) = PolicyEngine::persist_bundle(&pending_bundle, &self.config.policy_dir()) {
+            return Ok(Response::new(ApprovePolicyChangeResponse {
+                applied: false,
+                version: 0,
+                content_hash: String::new(),
+                message: format!("persistence failed: {}", e),
+            }));
+        }
+        
+        // Apply under write lock
+        let (new_version, new_hash) = {
+            let mut policy = self.policy.write().await;
+            
+            // Re-validate (the world may have moved)
+            if let Err(e) = policy.validate_next(&pending_bundle) {
+                return Ok(Response::new(ApprovePolicyChangeResponse {
+                    applied: false,
+                    version: 0,
+                    content_hash: String::new(),
+                    message: e,
+                }));
+            }
+            
+            policy.apply_bundle(pending_bundle.clone());
+            (policy.policy_version(), policy.content_hash())
+        };
+        
+        // Clear pending
+        {
+            let mut pending = self.pending_policy_change.write().await;
+            *pending = None;
+        }
+        
+        // Record principals
+        {
+            let mut principals = self.policy_principals.write().await;
+            *principals = (proposer.clone(), req.approver.clone());
+        }
+        
+        // Audit log the change
+        let reason = format!("proposer={} approver={}", proposer, req.approver);
+        let _ = self.vault.record_policy_event(
+            new_version,
+            &new_hash,
+            "POLICY_CHANGE_APPLIED",
+            &reason,
+        );
+        
+        Ok(Response::new(ApprovePolicyChangeResponse {
+            applied: true,
+            version: new_version,
+            content_hash: new_hash,
+            message: String::new(),
+        }))
+    }
 }
 
 fn real_main() {
@@ -744,6 +1114,7 @@ fn main() {
 mod tests {
     use super::*;
     use guardian_meshd::proto::{ActionDescriptor, FirewalledRequest};
+    use ml_dsa::SignatureEncoding;
 
     // WO-2: PF-12 enforces the exact field set the shipped client uses (webui/src/lib/gmClient.ts).
     // The client sends: actionType, context, target, metadata (all camelCase).
@@ -1616,5 +1987,572 @@ mod tests {
         
         let proof2 = resp2.proof.unwrap();
         assert!(proof2.rule_ids.contains(&"POLICY".to_string()));
+    }
+
+    fn test_service_with_admins() -> (GuardianMeshService, tempfile::TempDir, SigningKey<MlDsa65>, SigningKey<MlDsa65>) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = Config::default();
+        config.workspace_dir = dir.path().join("ws").to_string_lossy().into_owned();
+        config.output_dir = dir.path().join("out").to_string_lossy().into_owned();
+        
+        // Create admin keys directory
+        let admin_keys_dir = dir.path().join("admin_keys");
+        std::fs::create_dir_all(&admin_keys_dir).unwrap();
+        
+        // Generate two admin keypairs
+        let (sk_alice, vk_alice) = generate_keypair();
+        let (sk_bob, vk_bob) = generate_keypair();
+        
+        // Write their verifying keys
+        std::fs::write(admin_keys_dir.join("alice.vk"), vk_alice.encode().to_vec()).unwrap();
+        std::fs::write(admin_keys_dir.join("bob.vk"), vk_bob.encode().to_vec()).unwrap();
+        
+        config.policy_admin_keys_dir = Some(admin_keys_dir.to_string_lossy().into_owned());
+        config.ensure_dirs().unwrap();
+        
+        let service = GuardianMeshService::new(config).unwrap();
+        (service, dir, sk_alice, sk_bob)
+    }
+
+    #[tokio::test]
+    async fn get_policy_returns_genesis_with_daemon_signature() {
+        let (service, _dir, _, _) = test_service_with_admins();
+        
+        let resp = service.get_policy(Request::new(GetPolicyRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        
+        assert_eq!(resp.version, 1);
+        assert_eq!(resp.prev_hash, "genesis");
+        assert_eq!(resp.proposer, "daemon-defaults");
+        assert_eq!(resp.approver, "");
+        assert!(!resp.daemon_signature.is_empty());
+        assert!(!resp.signer_fingerprint.is_empty());
+        assert_eq!(resp.rules.len(), 11); // Default rules
+        
+        // Verify daemon signature
+        let canonical = service.policy.read().await.bundle().to_canonical_string();
+        let sig = ml_dsa::Signature::<MlDsa65>::try_from(resp.daemon_signature.as_slice()).unwrap();
+        service.verifying_key.verify(canonical.as_bytes(), &sig).unwrap();
+    }
+
+    #[tokio::test]
+    async fn propose_by_unregistered_principal_refused() {
+        let (service, _dir, _, _) = test_service_with_admins();
+        let (sk_eve, _vk_eve) = generate_keypair();
+        
+        let current = service.policy.read().await;
+        let new_rules = vec![PolicyRuleMessage {
+            action_type: "TOOL_CALL".to_string(),
+            allow: false,
+            priority: 100,
+        }];
+        
+        let proposed = PolicyBundle {
+            version: 2,
+            rules: vec![PolicyRule {
+                action_type: "TOOL_CALL".to_string(),
+                allow: false,
+                priority: 100,
+            }],
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+        };
+        
+        let canonical = proposed.to_canonical_string();
+        let sig = sk_eve.sign(canonical.as_bytes());
+        
+        let resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+            version: 2,
+            rules: new_rules,
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+            proposer: "eve".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!resp.accepted);
+        assert_eq!(resp.message, "unknown policy admin");
+    }
+
+    #[tokio::test]
+    async fn propose_with_bad_signature_refused() {
+        let (service, _dir, _, _) = test_service_with_admins();
+        let (sk_wrong, _) = generate_keypair();
+        
+        let current = service.policy.read().await;
+        let new_rules = vec![PolicyRuleMessage {
+            action_type: "TOOL_CALL".to_string(),
+            allow: false,
+            priority: 100,
+        }];
+        
+        let proposed = PolicyBundle {
+            version: 2,
+            rules: vec![PolicyRule {
+                action_type: "TOOL_CALL".to_string(),
+                allow: false,
+                priority: 100,
+            }],
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+        };
+        
+        let canonical = proposed.to_canonical_string();
+        let sig = sk_wrong.sign(canonical.as_bytes());
+        
+        let resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+            version: 2,
+            rules: new_rules,
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!resp.accepted);
+        assert_eq!(resp.message, "signature verification failed");
+    }
+
+    #[tokio::test]
+    async fn propose_with_wrong_version_refused() {
+        let (service, _dir, sk_alice, _) = test_service_with_admins();
+        
+        let current = service.policy.read().await;
+        let new_rules = vec![PolicyRuleMessage {
+            action_type: "TOOL_CALL".to_string(),
+            allow: false,
+            priority: 100,
+        }];
+        
+        let proposed = PolicyBundle {
+            version: 3, // Wrong: should be 2
+            rules: vec![PolicyRule {
+                action_type: "TOOL_CALL".to_string(),
+                allow: false,
+                priority: 100,
+            }],
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+        };
+        
+        let canonical = proposed.to_canonical_string();
+        let sig = sk_alice.sign(canonical.as_bytes());
+        
+        let resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+            version: 3,
+            rules: new_rules,
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!resp.accepted);
+        assert!(resp.message.contains("version"));
+    }
+
+    #[tokio::test]
+    async fn dual_control_approve_by_same_admin_refused() {
+        let (service, _dir, sk_alice, _) = test_service_with_admins();
+        
+        let current = service.policy.read().await;
+        let new_rules = vec![PolicyRuleMessage {
+            action_type: "TOOL_CALL".to_string(),
+            allow: false,
+            priority: 100,
+        }];
+        
+        let proposed = PolicyBundle {
+            version: 2,
+            rules: vec![PolicyRule {
+                action_type: "TOOL_CALL".to_string(),
+                allow: false,
+                priority: 100,
+            }],
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+        };
+        
+        let canonical = proposed.to_canonical_string();
+        let sig = sk_alice.sign(canonical.as_bytes());
+        
+        // Propose by alice
+        let propose_resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+            version: 2,
+            rules: new_rules.clone(),
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(propose_resp.accepted);
+        let change_id = propose_resp.change_id;
+        
+        // Try to approve by alice (same person)
+        let approve_resp = service.approve_policy_change(Request::new(ApprovePolicyChangeRequest {
+            change_id,
+            approver: "alice".to_string(),
+            approver_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!approve_resp.applied);
+        assert!(approve_resp.message.contains("dual control"));
+    }
+
+    #[tokio::test]
+    async fn approve_with_bad_signature_refused() {
+        let (service, _dir, sk_alice, _) = test_service_with_admins();
+        let (sk_wrong, _) = generate_keypair();
+        
+        let current = service.policy.read().await;
+        let new_rules = vec![PolicyRuleMessage {
+            action_type: "TOOL_CALL".to_string(),
+            allow: false,
+            priority: 100,
+        }];
+        
+        let proposed = PolicyBundle {
+            version: 2,
+            rules: vec![PolicyRule {
+                action_type: "TOOL_CALL".to_string(),
+                allow: false,
+                priority: 100,
+            }],
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+        };
+        
+        let canonical = proposed.to_canonical_string();
+        let sig_alice = sk_alice.sign(canonical.as_bytes());
+        
+        // Propose by alice
+        let propose_resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+            version: 2,
+            rules: new_rules,
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig_alice.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(propose_resp.accepted);
+        
+        // Try to approve with wrong signature
+        let bad_sig = sk_wrong.sign(canonical.as_bytes());
+        let approve_resp = service.approve_policy_change(Request::new(ApprovePolicyChangeRequest {
+            change_id: propose_resp.change_id,
+            approver: "bob".to_string(),
+            approver_signature: bad_sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!approve_resp.applied);
+        assert_eq!(approve_resp.message, "signature verification failed");
+    }
+
+    #[tokio::test]
+    async fn propose_and_approve_updates_policy_and_verdicts() {
+        let (service, _dir, sk_alice, sk_bob) = test_service_with_admins();
+        
+        // Check initial policy
+        let initial_policy = service.get_policy(Request::new(GetPolicyRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(initial_policy.version, 1);
+        
+        // Propose a bundle that blocks TOOL_CALL
+        let current = service.policy.read().await;
+        let new_rules = vec![PolicyRuleMessage {
+            action_type: "TOOL_CALL".to_string(),
+            allow: false,
+            priority: 100,
+        }];
+        
+        let proposed = PolicyBundle {
+            version: 2,
+            rules: vec![PolicyRule {
+                action_type: "TOOL_CALL".to_string(),
+                allow: false,
+                priority: 100,
+            }],
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+        };
+        drop(current);
+        
+        let canonical = proposed.to_canonical_string();
+        let sig_alice = sk_alice.sign(canonical.as_bytes());
+        
+        // Propose by alice
+        let propose_resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+            version: 2,
+            rules: new_rules,
+            escalate_actions: vec![],
+            prev_hash: proposed.prev_hash.clone(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig_alice.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(propose_resp.accepted);
+        
+        // Approve by bob
+        let sig_bob = sk_bob.sign(canonical.as_bytes());
+        let approve_resp = service.approve_policy_change(Request::new(ApprovePolicyChangeRequest {
+            change_id: propose_resp.change_id,
+            approver: "bob".to_string(),
+            approver_signature: sig_bob.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(approve_resp.applied);
+        assert_eq!(approve_resp.version, 2);
+        
+        // GetPolicy should show new version
+        let new_policy = service.get_policy(Request::new(GetPolicyRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(new_policy.version, 2);
+        assert_eq!(new_policy.proposer, "alice");
+        assert_eq!(new_policy.approver, "bob");
+        
+        // Evaluate a TOOL_CALL should now BLOCK
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        
+        assert_eq!(resp.verdict, "BLOCK");
+        
+        // Proof should carry policy_version = 2
+        let proof = resp.proof.unwrap();
+        assert_eq!(proof.policy_version, 2);
+    }
+
+    #[tokio::test]
+    async fn second_proposal_while_pending_refused() {
+        let (service, _dir, sk_alice, _) = test_service_with_admins();
+        
+        let current = service.policy.read().await;
+        let new_rules = vec![PolicyRuleMessage {
+            action_type: "TOOL_CALL".to_string(),
+            allow: false,
+            priority: 100,
+        }];
+        
+        let proposed = PolicyBundle {
+            version: 2,
+            rules: vec![PolicyRule {
+                action_type: "TOOL_CALL".to_string(),
+                allow: false,
+                priority: 100,
+            }],
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+        };
+        drop(current);
+        
+        let canonical = proposed.to_canonical_string();
+        let sig = sk_alice.sign(canonical.as_bytes());
+        
+        // First proposal
+        let resp1 = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+            version: 2,
+            rules: new_rules.clone(),
+            escalate_actions: vec![],
+            prev_hash: proposed.prev_hash.clone(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(resp1.accepted);
+        
+        // Second proposal while first is pending
+        let resp2 = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+            version: 2,
+            rules: new_rules,
+            escalate_actions: vec![],
+            prev_hash: proposed.prev_hash,
+            proposer: "alice".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!resp2.accepted);
+        assert_eq!(resp2.message, "a policy change is already pending");
+    }
+
+    #[tokio::test]
+    async fn persistence_survives_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws_path = dir.path().join("ws").to_string_lossy().into_owned();
+        let out_path = dir.path().join("out").to_string_lossy().into_owned();
+        let admin_keys_dir = dir.path().join("admin_keys");
+        std::fs::create_dir_all(&admin_keys_dir).unwrap();
+        
+        let (sk_alice, vk_alice) = generate_keypair();
+        let (sk_bob, vk_bob) = generate_keypair();
+        
+        std::fs::write(admin_keys_dir.join("alice.vk"), vk_alice.encode().to_vec()).unwrap();
+        std::fs::write(admin_keys_dir.join("bob.vk"), vk_bob.encode().to_vec()).unwrap();
+        
+        // First instance: apply a policy change
+        {
+            let mut config1 = Config::default();
+            config1.workspace_dir = ws_path.clone();
+            config1.output_dir = out_path.clone();
+            config1.policy_admin_keys_dir = Some(admin_keys_dir.to_string_lossy().into_owned());
+            config1.ensure_dirs().unwrap();
+            
+            let service1 = GuardianMeshService::new(config1).unwrap();
+            
+            let current = service1.policy.read().await;
+            let proposed = PolicyBundle {
+                version: 2,
+                rules: vec![PolicyRule {
+                    action_type: "TOOL_CALL".to_string(),
+                    allow: false,
+                    priority: 100,
+                }],
+                escalate_actions: vec![],
+                prev_hash: current.content_hash(),
+            };
+            drop(current);
+            
+            let canonical = proposed.to_canonical_string();
+            let sig_alice = sk_alice.sign(canonical.as_bytes());
+            let sig_bob = sk_bob.sign(canonical.as_bytes());
+            
+            let propose_resp = service1.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+                version: 2,
+                rules: vec![PolicyRuleMessage {
+                    action_type: "TOOL_CALL".to_string(),
+                    allow: false,
+                    priority: 100,
+                }],
+                escalate_actions: vec![],
+                prev_hash: proposed.prev_hash.clone(),
+                proposer: "alice".to_string(),
+                proposer_signature: sig_alice.to_bytes().to_vec(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+            
+            assert!(propose_resp.accepted);
+            
+            let approve_resp = service1.approve_policy_change(Request::new(ApprovePolicyChangeRequest {
+                change_id: propose_resp.change_id,
+                approver: "bob".to_string(),
+                approver_signature: sig_bob.to_bytes().to_vec(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+            
+            assert!(approve_resp.applied);
+            assert_eq!(approve_resp.version, 2);
+        }
+        
+        // Second instance: should start at v2
+        {
+            let mut config2 = Config::default();
+            config2.workspace_dir = ws_path;
+            config2.output_dir = out_path;
+            config2.policy_admin_keys_dir = Some(admin_keys_dir.to_string_lossy().into_owned());
+            let service2 = GuardianMeshService::new(config2).unwrap();
+            
+            let policy = service2.get_policy(Request::new(GetPolicyRequest {}))
+                .await
+                .unwrap()
+                .into_inner();
+            
+            assert_eq!(policy.version, 2);
+            assert_eq!(policy.content_hash, service2.policy.read().await.content_hash());
+        }
+    }
+
+    #[tokio::test]
+    async fn no_admins_configured_propose_refused_getpolicy_works() {
+        let (service, _dir) = test_service();
+        
+        // GetPolicy should still work
+        let policy = service.get_policy(Request::new(GetPolicyRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(policy.version, 1);
+        
+        // Propose should fail (no admins)
+        let (sk, _) = generate_keypair();
+        let current = service.policy.read().await;
+        let proposed = PolicyBundle {
+            version: 2,
+            rules: vec![PolicyRule {
+                action_type: "TOOL_CALL".to_string(),
+                allow: false,
+                priority: 100,
+            }],
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+        };
+        drop(current);
+        
+        let canonical = proposed.to_canonical_string();
+        let sig = sk.sign(canonical.as_bytes());
+        
+        let resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+            version: 2,
+            rules: vec![PolicyRuleMessage {
+                action_type: "TOOL_CALL".to_string(),
+                allow: false,
+                priority: 100,
+            }],
+            escalate_actions: vec![],
+            prev_hash: proposed.prev_hash,
+            proposer: "anyone".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!resp.accepted);
+        assert_eq!(resp.message, "unknown policy admin");
     }
 }
