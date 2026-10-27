@@ -493,5 +493,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-26T00:31:27-06:00",
     "message": "Merge pull request #67 from nrupala/wright/ledger-wo10-20261025"
+  },
+  {
+    "release": 60,
+    "tag": "release/v60",
+    "previous_tag": "release/v59",
+    "sha": "687534e9615f3a3b1ddc8efa0b9d90fc16ea136a",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-26T23:23:11-06:00",
+    "message": "Merge pull request #68 from nrupala/wright/pack-refresh-gmsi-20261026"
   }
 ]
