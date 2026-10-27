@@ -329,6 +329,10 @@ export interface AuditProof {
      */
     ruleIds: string[];
     /**
+     * @generated from protobuf field: uint64 policy_version = 8
+     */
+    policyVersion: string; // Policy bundle version at evaluation time (WO-11)
+    /**
      * @generated from protobuf field: bytes merkle_root = 16
      */
     merkleRoot: Uint8Array; // Optional — for batch audit verification
@@ -621,6 +625,155 @@ export interface CertificateBody {
      * @generated from protobuf field: string fingerprint = 15
      */
     fingerprint: string;
+}
+// ── Policy Governance RPCs (WO-11) ───────────
+
+/**
+ * @generated from protobuf message guardian_mesh.PolicyRuleMessage
+ */
+export interface PolicyRuleMessage {
+    /**
+     * @generated from protobuf field: string action_type = 1
+     */
+    actionType: string;
+    /**
+     * @generated from protobuf field: bool allow = 2
+     */
+    allow: boolean;
+    /**
+     * @generated from protobuf field: uint32 priority = 3
+     */
+    priority: number;
+}
+/**
+ * @generated from protobuf message guardian_mesh.PolicyBundleMessage
+ */
+export interface PolicyBundleMessage {
+    /**
+     * @generated from protobuf field: uint64 version = 1
+     */
+    version: string;
+    /**
+     * @generated from protobuf field: repeated guardian_mesh.PolicyRuleMessage rules = 2
+     */
+    rules: PolicyRuleMessage[];
+    /**
+     * @generated from protobuf field: repeated string escalate_actions = 3
+     */
+    escalateActions: string[];
+    /**
+     * @generated from protobuf field: string prev_hash = 4
+     */
+    prevHash: string;
+    /**
+     * @generated from protobuf field: string content_hash = 5
+     */
+    contentHash: string;
+    /**
+     * @generated from protobuf field: bytes daemon_signature = 6
+     */
+    daemonSignature: Uint8Array; // daemon ML-DSA-65 signature over the canonical bundle bytes
+    /**
+     * @generated from protobuf field: string signer_fingerprint = 7
+     */
+    signerFingerprint: string; // Health fingerprint of the daemon key
+    /**
+     * @generated from protobuf field: string proposer = 8
+     */
+    proposer: string; // principal of record for this version ("daemon-defaults" for genesis)
+    /**
+     * @generated from protobuf field: string approver = 9
+     */
+    approver: string; // second principal of record ("" for genesis)
+}
+/**
+ * @generated from protobuf message guardian_mesh.GetPolicyRequest
+ */
+export interface GetPolicyRequest {
+}
+/**
+ * @generated from protobuf message guardian_mesh.ProposePolicyChangeRequest
+ */
+export interface ProposePolicyChangeRequest {
+    /**
+     * @generated from protobuf field: uint64 version = 1
+     */
+    version: string;
+    /**
+     * @generated from protobuf field: repeated guardian_mesh.PolicyRuleMessage rules = 2
+     */
+    rules: PolicyRuleMessage[];
+    /**
+     * @generated from protobuf field: repeated string escalate_actions = 3
+     */
+    escalateActions: string[];
+    /**
+     * @generated from protobuf field: string prev_hash = 4
+     */
+    prevHash: string;
+    /**
+     * @generated from protobuf field: string proposer = 5
+     */
+    proposer: string;
+    /**
+     * @generated from protobuf field: bytes proposer_signature = 6
+     */
+    proposerSignature: Uint8Array; // proposer's ML-DSA-65 signature over the canonical bundle bytes of the proposed bundle
+}
+/**
+ * @generated from protobuf message guardian_mesh.ProposePolicyChangeResponse
+ */
+export interface ProposePolicyChangeResponse {
+    /**
+     * @generated from protobuf field: bool accepted = 1
+     */
+    accepted: boolean;
+    /**
+     * @generated from protobuf field: string change_id = 2
+     */
+    changeId: string; // content_hash of the proposed bundle when accepted
+    /**
+     * @generated from protobuf field: string message = 3
+     */
+    message: string; // refusal reason when not accepted
+}
+/**
+ * @generated from protobuf message guardian_mesh.ApprovePolicyChangeRequest
+ */
+export interface ApprovePolicyChangeRequest {
+    /**
+     * @generated from protobuf field: string change_id = 1
+     */
+    changeId: string; // content_hash of the pending bundle
+    /**
+     * @generated from protobuf field: string approver = 2
+     */
+    approver: string;
+    /**
+     * @generated from protobuf field: bytes approver_signature = 3
+     */
+    approverSignature: Uint8Array; // approver's ML-DSA-65 signature over the canonical bundle bytes of the pending bundle
+}
+/**
+ * @generated from protobuf message guardian_mesh.ApprovePolicyChangeResponse
+ */
+export interface ApprovePolicyChangeResponse {
+    /**
+     * @generated from protobuf field: bool applied = 1
+     */
+    applied: boolean;
+    /**
+     * @generated from protobuf field: uint64 version = 2
+     */
+    version: string; // new current version when applied
+    /**
+     * @generated from protobuf field: string content_hash = 3
+     */
+    contentHash: string; // new current hash when applied
+    /**
+     * @generated from protobuf field: string message = 4
+     */
+    message: string; // refusal reason when not applied
 }
 // @generated message type with reflection information, may provide speed optimized methods
 class SealedEnvelope$Type extends MessageType<SealedEnvelope> {
@@ -2451,5 +2604,8 @@ export const GuardianMesh = new ServiceType("guardian_mesh.GuardianMesh", [
     { name: "ReadAuditLog", options: {}, I: ReadAuditLogRequest, O: ReadAuditLogResponse },
     { name: "IssueCertificate", options: {}, I: IssueCertificateRequest, O: IssueCertificateResponse },
     { name: "RevokeCertificate", options: {}, I: RevokeCertificateRequest, O: RevokeCertificateResponse },
-    { name: "CertificateStatus", options: {}, I: CertificateStatusRequest, O: CertificateStatusResponse }
+    { name: "CertificateStatus", options: {}, I: CertificateStatusRequest, O: CertificateStatusResponse },
+    { name: "GetPolicy", options: {}, I: GetPolicyRequest, O: PolicyBundleMessage },
+    { name: "ProposePolicyChange", options: {}, I: ProposePolicyChangeRequest, O: ProposePolicyChangeResponse },
+    { name: "ApprovePolicyChange", options: {}, I: ApprovePolicyChangeRequest, O: ApprovePolicyChangeResponse }
 ]);

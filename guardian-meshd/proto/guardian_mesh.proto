@@ -46,6 +46,15 @@ service GuardianMesh {
 
   // Query the lifecycle status of a certificate by serial.
   rpc CertificateStatus (CertificateStatusRequest) returns (CertificateStatusResponse);
+
+  // Get the current policy bundle (publication endpoint for judged agents).
+  rpc GetPolicy (GetPolicyRequest) returns (PolicyBundleMessage);
+
+  // Propose a policy change (dual-control first step).
+  rpc ProposePolicyChange (ProposePolicyChangeRequest) returns (ProposePolicyChangeResponse);
+
+  // Approve a policy change (dual-control second step).
+  rpc ApprovePolicyChange (ApprovePolicyChangeRequest) returns (ApprovePolicyChangeResponse);
 }
 
 // ── Message Types ─────────────────────────
@@ -160,6 +169,7 @@ message AuditProof {
   uint64 timestamp = 5;
   bool simulation = 6;
   repeated string rule_ids = 7;
+  uint64 policy_version = 8;   // Policy bundle version at evaluation time (WO-11)
   bytes merkle_root = 16;      // Optional — for batch audit verification
 }
 
@@ -257,4 +267,54 @@ message CertificateBody {
   uint64 issued_at = 13;
   string supersedes = 14;          // serial or empty string (null)
   string fingerprint = 15;
+}
+
+// ── Policy Governance RPCs (WO-11) ───────────
+
+message PolicyRuleMessage {
+  string action_type = 1;
+  bool allow = 2;
+  uint32 priority = 3;
+}
+
+message PolicyBundleMessage {
+  uint64 version = 1;
+  repeated PolicyRuleMessage rules = 2;
+  repeated string escalate_actions = 3;
+  string prev_hash = 4;
+  string content_hash = 5;
+  bytes daemon_signature = 6;      // daemon ML-DSA-65 signature over the canonical bundle bytes
+  string signer_fingerprint = 7;   // Health fingerprint of the daemon key
+  string proposer = 8;              // principal of record for this version ("daemon-defaults" for genesis)
+  string approver = 9;              // second principal of record ("" for genesis)
+}
+
+message GetPolicyRequest {}
+
+message ProposePolicyChangeRequest {
+  uint64 version = 1;
+  repeated PolicyRuleMessage rules = 2;
+  repeated string escalate_actions = 3;
+  string prev_hash = 4;
+  string proposer = 5;
+  bytes proposer_signature = 6;    // proposer's ML-DSA-65 signature over the canonical bundle bytes of the proposed bundle
+}
+
+message ProposePolicyChangeResponse {
+  bool accepted = 1;
+  string change_id = 2;             // content_hash of the proposed bundle when accepted
+  string message = 3;               // refusal reason when not accepted
+}
+
+message ApprovePolicyChangeRequest {
+  string change_id = 1;             // content_hash of the pending bundle
+  string approver = 2;
+  bytes approver_signature = 3;     // approver's ML-DSA-65 signature over the canonical bundle bytes of the pending bundle
+}
+
+message ApprovePolicyChangeResponse {
+  bool applied = 1;
+  uint64 version = 2;               // new current version when applied
+  string content_hash = 3;          // new current hash when applied
+  string message = 4;               // refusal reason when not applied
 }

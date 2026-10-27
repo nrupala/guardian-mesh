@@ -13,6 +13,7 @@ import {
   sessionState,
   verifyProofEnvelope,
   fetchAuditLog,
+  getPolicy,
   base64ToBytes,
   bytesToBase64,
 } from "../lib/gmClient"
@@ -25,6 +26,7 @@ import type {
   HealthResponse,
   VerifyProofResponse,
   ReadAuditLogResponse,
+  PolicyBundleMessage,
 } from "../gen/guardian_mesh_pb"
 
 export function DashboardPage() {
@@ -148,9 +150,13 @@ function LivePanel() {
   const [auditLoading, setAuditLoading] = useState(false)
   const [auditError, setAuditError] = useState<string | null>(null)
 
+  const [policy, setPolicy] = useState<PolicyBundleMessage | null>(null)
+  const [policyError, setPolicyError] = useState<string | null>(null)
+
   const evalRef = useRef<HTMLElement | null>(null)
   const verifyRef = useRef<HTMLElement | null>(null)
   const auditRef = useRef<HTMLElement | null>(null)
+  const policyRef = useRef<HTMLElement | null>(null)
 
   const doHealth = useCallback(async () => {
     setCheckingHealth(true)
@@ -272,6 +278,25 @@ function LivePanel() {
       setAuditLoading(false)
     }
   }
+
+  useEffect(() => {
+    let cancelled = false
+    getPolicy(client)
+      .then((p) => {
+        if (!cancelled) {
+          setPolicy(p)
+          setPolicyError(null)
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setPolicyError(e instanceof Error ? e.message : String(e))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [client])
 
   const sess = sessionState()
   void sessionTick // session card re-renders when evaluations run
@@ -474,6 +499,74 @@ function LivePanel() {
               <p className="verdict-word">Could not load audit log</p>
               <p>{auditError}</p>
             </div>
+          )}
+        </section>
+
+        <section className="dash-section" ref={policyRef}>
+          <h2>Current Policy</h2>
+          <p className="hint">
+            The policy bundle governs what actions are allowed or blocked. Each
+            version is signed and forms part of the audit trail.
+          </p>
+          {policyError ? (
+            <div className="verdict-panel verdict-block">
+              <p className="verdict-word">Could not load policy</p>
+              <p>{policyError}</p>
+            </div>
+          ) : policy ? (
+            <div className="card">
+              <div className="audit-entry-body">
+                <p>
+                  <strong>Version:</strong> {policy.version}
+                </p>
+                <p>
+                  <strong>Content Hash:</strong> {policy.contentHash.slice(0, 16)}…
+                </p>
+                <p>
+                  <strong>Rules:</strong> {policy.rules.length}
+                </p>
+                {policy.proposer && (
+                  <p>
+                    <strong>Proposer:</strong> {policy.proposer}
+                  </p>
+                )}
+                {policy.approver && (
+                  <p>
+                    <strong>Approver:</strong> {policy.approver}
+                  </p>
+                )}
+              </div>
+              <div className="audit-entries" style={{ marginTop: "1rem" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: "left", padding: "0.5rem" }}>Action</th>
+                      <th style={{ textAlign: "center", padding: "0.5rem" }}>Decision</th>
+                      <th style={{ textAlign: "right", padding: "0.5rem" }}>Priority</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {policy.rules.map((rule, idx) => (
+                      <tr key={idx} style={{ borderTop: "1px solid #eee" }}>
+                        <td style={{ padding: "0.5rem" }}>{rule.actionType}</td>
+                        <td style={{ textAlign: "center", padding: "0.5rem" }}>
+                          <span
+                            className={`verdict-tag verdict-${rule.allow ? "allow" : "block"}`}
+                          >
+                            {rule.allow ? "ALLOW" : "BLOCK"}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: "right", padding: "0.5rem" }}>
+                          {rule.priority}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <p className="hint">Loading policy…</p>
           )}
         </section>
 

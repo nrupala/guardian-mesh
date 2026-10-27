@@ -16,6 +16,7 @@ pub struct Config {
     pub program_dir: String,
     pub policy_throttle_rate: usize,
     pub policy_escalate_actions: Vec<String>,
+    pub policy_admin_keys_dir: Option<String>,
 }
 
 impl Config {
@@ -29,6 +30,10 @@ impl Config {
 
     pub fn keys_dir(&self) -> PathBuf {
         Path::new(&self.workspace_dir).join("keys")
+    }
+
+    pub fn policy_dir(&self) -> PathBuf {
+        Path::new(&self.workspace_dir).join("policy")
     }
 
     pub fn project_output_dir(&self, project_name: &str) -> PathBuf {
@@ -57,6 +62,7 @@ impl Config {
         std::fs::create_dir_all(self.audit_dir())?;
         std::fs::create_dir_all(self.sessions_dir())?;
         std::fs::create_dir_all(self.keys_dir())?;
+        std::fs::create_dir_all(self.policy_dir())?;
         Ok(())
     }
 
@@ -110,6 +116,8 @@ impl Default for Config {
             .map(|s| s.split(',').map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect())
             .unwrap_or_default();
         
+        let policy_admin_keys_dir = std::env::var("GUARDIAN_MESH_POLICY_ADMIN_KEYS_DIR").ok();
+        
         Self {
             bind_addr: std::env::var("GUARDIAN_MESH_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".into()),
             bind_port: std::env::var("GUARDIAN_MESH_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or_else(find_free_port),
@@ -123,6 +131,7 @@ impl Default for Config {
             program_dir: ".".into(),
             policy_throttle_rate,
             policy_escalate_actions,
+            policy_admin_keys_dir,
         }
     }
 }

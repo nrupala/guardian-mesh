@@ -13,6 +13,24 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.10.0",
+    date: "2026-10-26",
+    summary: "Policy governance with signed versioned bundles, dual-control approval, publication endpoint, and policy version in all verdicts. Closes v0.4.0 gate specs DC-18, DC-19, BM-6/BM-12.",
+    highlights: [
+      "PolicyBundle: signed, versioned bundles with canonical deterministic serialization and SHA-256 content hashes",
+      "Dual-control policy changes: ProposePolicyChange and ApprovePolicyChange RPCs requiring two distinct admin principals (BM-12)",
+      "GetPolicy publication endpoint for judged agents to read current policy (DC-19)",
+      "Policy persistence in canonical format with atomic temp file + rename",
+      "Every AuditProof now carries policy_version field naming the bundle version at evaluation time (DC-18)",
+      "Admin registry from ML-DSA-65 verifying keys in policy_admin_keys_dir",
+      "VaultEnclave::record_policy_event for hash-chained audit logging of policy changes",
+      "WebUI Current Policy section displaying bundle version, rules table, proposer/approver principals"
+    ],
+    gateVerdict: "Pending",
+    tests: "Test counts pending — platform and invocation root to be recorded after running the full suite; webui build + lint pending execution",
+    status: "Release candidate"
+  },
+  {
     version: "0.9.0",
     date: "2026-10-25",
     summary: "Simulate dry-run RPC and structured verdict reasons. Closes v0.4.0 gate findings DC-9/DC-10. Agents can now ask 'would this be allowed?' without burning real attempts, and every verdict carries machine-readable rule IDs and remediation strings.",

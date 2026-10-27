@@ -11,6 +11,12 @@ import type { ServiceInfo } from "@protobuf-ts/runtime-rpc";
 import { GuardianMesh } from "./guardian_mesh_pb";
 import type { CertificateStatusResponse } from "./guardian_mesh_pb";
 import type { CertificateStatusRequest } from "./guardian_mesh_pb";
+import type { ApprovePolicyChangeResponse } from "./guardian_mesh_pb";
+import type { ApprovePolicyChangeRequest } from "./guardian_mesh_pb";
+import type { ProposePolicyChangeResponse } from "./guardian_mesh_pb";
+import type { ProposePolicyChangeRequest } from "./guardian_mesh_pb";
+import type { PolicyBundleMessage } from "./guardian_mesh_pb";
+import type { GetPolicyRequest } from "./guardian_mesh_pb";
 import type { RevokeCertificateResponse } from "./guardian_mesh_pb";
 import type { RevokeCertificateRequest } from "./guardian_mesh_pb";
 import type { IssueCertificateResponse } from "./guardian_mesh_pb";
@@ -100,6 +106,24 @@ export interface IGuardianMeshClient {
      * @generated from protobuf rpc: CertificateStatus
      */
     certificateStatus(input: CertificateStatusRequest, options?: RpcOptions): UnaryCall<CertificateStatusRequest, CertificateStatusResponse>;
+    /**
+     * Get the current policy bundle (publication endpoint for judged agents).
+     *
+     * @generated from protobuf rpc: GetPolicy
+     */
+    getPolicy(input: GetPolicyRequest, options?: RpcOptions): UnaryCall<GetPolicyRequest, PolicyBundleMessage>;
+    /**
+     * Propose a policy change (dual-control first step).
+     *
+     * @generated from protobuf rpc: ProposePolicyChange
+     */
+    proposePolicyChange(input: ProposePolicyChangeRequest, options?: RpcOptions): UnaryCall<ProposePolicyChangeRequest, ProposePolicyChangeResponse>;
+    /**
+     * Approve a policy change (dual-control second step).
+     *
+     * @generated from protobuf rpc: ApprovePolicyChange
+     */
+    approvePolicyChange(input: ApprovePolicyChangeRequest, options?: RpcOptions): UnaryCall<ApprovePolicyChangeRequest, ApprovePolicyChangeResponse>;
 }
 // ──────────────────────────────────────────
 //  Guardian Mesh — gRPC Service Definitions
@@ -204,5 +228,32 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
     certificateStatus(input: CertificateStatusRequest, options?: RpcOptions): UnaryCall<CertificateStatusRequest, CertificateStatusResponse> {
         const method = this.methods[8], opt = this._transport.mergeOptions(options);
         return stackIntercept<CertificateStatusRequest, CertificateStatusResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Get the current policy bundle (publication endpoint for judged agents).
+     *
+     * @generated from protobuf rpc: GetPolicy
+     */
+    getPolicy(input: GetPolicyRequest, options?: RpcOptions): UnaryCall<GetPolicyRequest, PolicyBundleMessage> {
+        const method = this.methods[9], opt = this._transport.mergeOptions(options);
+        return stackIntercept<GetPolicyRequest, PolicyBundleMessage>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Propose a policy change (dual-control first step).
+     *
+     * @generated from protobuf rpc: ProposePolicyChange
+     */
+    proposePolicyChange(input: ProposePolicyChangeRequest, options?: RpcOptions): UnaryCall<ProposePolicyChangeRequest, ProposePolicyChangeResponse> {
+        const method = this.methods[10], opt = this._transport.mergeOptions(options);
+        return stackIntercept<ProposePolicyChangeRequest, ProposePolicyChangeResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Approve a policy change (dual-control second step).
+     *
+     * @generated from protobuf rpc: ApprovePolicyChange
+     */
+    approvePolicyChange(input: ApprovePolicyChangeRequest, options?: RpcOptions): UnaryCall<ApprovePolicyChangeRequest, ApprovePolicyChangeResponse> {
+        const method = this.methods[11], opt = this._transport.mergeOptions(options);
+        return stackIntercept<ApprovePolicyChangeRequest, ApprovePolicyChangeResponse>("unary", this._transport, method, opt, input);
     }
 }
