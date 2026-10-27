@@ -502,5 +502,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-26T23:23:11-06:00",
     "message": "Merge pull request #68 from nrupala/wright/pack-refresh-gmsi-20261026"
+  },
+  {
+    "release": 61,
+    "tag": "release/v61",
+    "previous_tag": "release/v60",
+    "sha": "e2aeacba81aea4b71dfa45f971e196da760bc877",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-27T00:19:47-06:00",
+    "message": "Merge pull request #69 from nrupala/wright/wo11-policy-governance"
   }
 ]
