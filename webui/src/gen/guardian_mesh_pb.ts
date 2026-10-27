@@ -1630,6 +1630,7 @@ class AuditProof$Type extends MessageType<AuditProof> {
             { no: 5, name: "timestamp", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
             { no: 6, name: "simulation", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
             { no: 7, name: "rule_ids", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
+            { no: 8, name: "policy_version", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
             { no: 16, name: "merkle_root", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
         ]);
     }
@@ -1642,6 +1643,7 @@ class AuditProof$Type extends MessageType<AuditProof> {
         message.timestamp = "0";
         message.simulation = false;
         message.ruleIds = [];
+        message.policyVersion = "0";
         message.merkleRoot = new Uint8Array(0);
         if (value !== undefined)
             reflectionMergePartial<AuditProof>(this, message, value);
@@ -1672,6 +1674,9 @@ class AuditProof$Type extends MessageType<AuditProof> {
                     break;
                 case /* repeated string rule_ids */ 7:
                     message.ruleIds.push(reader.string());
+                    break;
+                case /* uint64 policy_version */ 8:
+                    message.policyVersion = reader.uint64().toString();
                     break;
                 case /* bytes merkle_root */ 16:
                     message.merkleRoot = reader.bytes();
@@ -1709,6 +1714,9 @@ class AuditProof$Type extends MessageType<AuditProof> {
         /* repeated string rule_ids = 7; */
         for (let i = 0; i < message.ruleIds.length; i++)
             writer.tag(7, WireType.LengthDelimited).string(message.ruleIds[i]);
+        /* uint64 policy_version = 8; */
+        if (message.policyVersion !== "0")
+            writer.tag(8, WireType.Varint).uint64(message.policyVersion);
         /* bytes merkle_root = 16; */
         if (message.merkleRoot.length)
             writer.tag(16, WireType.LengthDelimited).bytes(message.merkleRoot);
@@ -2592,6 +2600,502 @@ class CertificateBody$Type extends MessageType<CertificateBody> {
  * @generated MessageType for protobuf message guardian_mesh.CertificateBody
  */
 export const CertificateBody = new CertificateBody$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class PolicyRuleMessage$Type extends MessageType<PolicyRuleMessage> {
+    constructor() {
+        super("guardian_mesh.PolicyRuleMessage", [
+            { no: 1, name: "action_type", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "allow", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 3, name: "priority", kind: "scalar", T: 13 /*ScalarType.UINT32*/ }
+        ]);
+    }
+    create(value?: PartialMessage<PolicyRuleMessage>): PolicyRuleMessage {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.actionType = "";
+        message.allow = false;
+        message.priority = 0;
+        if (value !== undefined)
+            reflectionMergePartial<PolicyRuleMessage>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: PolicyRuleMessage): PolicyRuleMessage {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string action_type */ 1:
+                    message.actionType = reader.string();
+                    break;
+                case /* bool allow */ 2:
+                    message.allow = reader.bool();
+                    break;
+                case /* uint32 priority */ 3:
+                    message.priority = reader.uint32();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: PolicyRuleMessage, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string action_type = 1; */
+        if (message.actionType !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.actionType);
+        /* bool allow = 2; */
+        if (message.allow !== false)
+            writer.tag(2, WireType.Varint).bool(message.allow);
+        /* uint32 priority = 3; */
+        if (message.priority !== 0)
+            writer.tag(3, WireType.Varint).uint32(message.priority);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.PolicyRuleMessage
+ */
+export const PolicyRuleMessage = new PolicyRuleMessage$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class PolicyBundleMessage$Type extends MessageType<PolicyBundleMessage> {
+    constructor() {
+        super("guardian_mesh.PolicyBundleMessage", [
+            { no: 1, name: "version", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 2, name: "rules", kind: "message", repeat: 2 /*RepeatType.UNPACKED*/, T: () => PolicyRuleMessage },
+            { no: 3, name: "escalate_actions", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
+            { no: 4, name: "prev_hash", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 5, name: "content_hash", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 6, name: "daemon_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
+            { no: 7, name: "signer_fingerprint", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 8, name: "proposer", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 9, name: "approver", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<PolicyBundleMessage>): PolicyBundleMessage {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.version = "0";
+        message.rules = [];
+        message.escalateActions = [];
+        message.prevHash = "";
+        message.contentHash = "";
+        message.daemonSignature = new Uint8Array(0);
+        message.signerFingerprint = "";
+        message.proposer = "";
+        message.approver = "";
+        if (value !== undefined)
+            reflectionMergePartial<PolicyBundleMessage>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: PolicyBundleMessage): PolicyBundleMessage {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* uint64 version */ 1:
+                    message.version = reader.uint64().toString();
+                    break;
+                case /* repeated guardian_mesh.PolicyRuleMessage rules */ 2:
+                    message.rules.push(PolicyRuleMessage.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                case /* repeated string escalate_actions */ 3:
+                    message.escalateActions.push(reader.string());
+                    break;
+                case /* string prev_hash */ 4:
+                    message.prevHash = reader.string();
+                    break;
+                case /* string content_hash */ 5:
+                    message.contentHash = reader.string();
+                    break;
+                case /* bytes daemon_signature */ 6:
+                    message.daemonSignature = reader.bytes();
+                    break;
+                case /* string signer_fingerprint */ 7:
+                    message.signerFingerprint = reader.string();
+                    break;
+                case /* string proposer */ 8:
+                    message.proposer = reader.string();
+                    break;
+                case /* string approver */ 9:
+                    message.approver = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: PolicyBundleMessage, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* uint64 version = 1; */
+        if (message.version !== "0")
+            writer.tag(1, WireType.Varint).uint64(message.version);
+        /* repeated guardian_mesh.PolicyRuleMessage rules = 2; */
+        for (let i = 0; i < message.rules.length; i++)
+            PolicyRuleMessage.internalBinaryWrite(message.rules[i], writer.tag(2, WireType.LengthDelimited).fork(), options).join();
+        /* repeated string escalate_actions = 3; */
+        for (let i = 0; i < message.escalateActions.length; i++)
+            writer.tag(3, WireType.LengthDelimited).string(message.escalateActions[i]);
+        /* string prev_hash = 4; */
+        if (message.prevHash !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.prevHash);
+        /* string content_hash = 5; */
+        if (message.contentHash !== "")
+            writer.tag(5, WireType.LengthDelimited).string(message.contentHash);
+        /* bytes daemon_signature = 6; */
+        if (message.daemonSignature.length)
+            writer.tag(6, WireType.LengthDelimited).bytes(message.daemonSignature);
+        /* string signer_fingerprint = 7; */
+        if (message.signerFingerprint !== "")
+            writer.tag(7, WireType.LengthDelimited).string(message.signerFingerprint);
+        /* string proposer = 8; */
+        if (message.proposer !== "")
+            writer.tag(8, WireType.LengthDelimited).string(message.proposer);
+        /* string approver = 9; */
+        if (message.approver !== "")
+            writer.tag(9, WireType.LengthDelimited).string(message.approver);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.PolicyBundleMessage
+ */
+export const PolicyBundleMessage = new PolicyBundleMessage$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class GetPolicyRequest$Type extends MessageType<GetPolicyRequest> {
+    constructor() {
+        super("guardian_mesh.GetPolicyRequest", []);
+    }
+    create(value?: PartialMessage<GetPolicyRequest>): GetPolicyRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        if (value !== undefined)
+            reflectionMergePartial<GetPolicyRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: GetPolicyRequest): GetPolicyRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: GetPolicyRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.GetPolicyRequest
+ */
+export const GetPolicyRequest = new GetPolicyRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class ProposePolicyChangeRequest$Type extends MessageType<ProposePolicyChangeRequest> {
+    constructor() {
+        super("guardian_mesh.ProposePolicyChangeRequest", [
+            { no: 1, name: "version", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 2, name: "rules", kind: "message", repeat: 2 /*RepeatType.UNPACKED*/, T: () => PolicyRuleMessage },
+            { no: 3, name: "escalate_actions", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
+            { no: 4, name: "prev_hash", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 5, name: "proposer", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 6, name: "proposer_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ProposePolicyChangeRequest>): ProposePolicyChangeRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.version = "0";
+        message.rules = [];
+        message.escalateActions = [];
+        message.prevHash = "";
+        message.proposer = "";
+        message.proposerSignature = new Uint8Array(0);
+        if (value !== undefined)
+            reflectionMergePartial<ProposePolicyChangeRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ProposePolicyChangeRequest): ProposePolicyChangeRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* uint64 version */ 1:
+                    message.version = reader.uint64().toString();
+                    break;
+                case /* repeated guardian_mesh.PolicyRuleMessage rules */ 2:
+                    message.rules.push(PolicyRuleMessage.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                case /* repeated string escalate_actions */ 3:
+                    message.escalateActions.push(reader.string());
+                    break;
+                case /* string prev_hash */ 4:
+                    message.prevHash = reader.string();
+                    break;
+                case /* string proposer */ 5:
+                    message.proposer = reader.string();
+                    break;
+                case /* bytes proposer_signature */ 6:
+                    message.proposerSignature = reader.bytes();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ProposePolicyChangeRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* uint64 version = 1; */
+        if (message.version !== "0")
+            writer.tag(1, WireType.Varint).uint64(message.version);
+        /* repeated guardian_mesh.PolicyRuleMessage rules = 2; */
+        for (let i = 0; i < message.rules.length; i++)
+            PolicyRuleMessage.internalBinaryWrite(message.rules[i], writer.tag(2, WireType.LengthDelimited).fork(), options).join();
+        /* repeated string escalate_actions = 3; */
+        for (let i = 0; i < message.escalateActions.length; i++)
+            writer.tag(3, WireType.LengthDelimited).string(message.escalateActions[i]);
+        /* string prev_hash = 4; */
+        if (message.prevHash !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.prevHash);
+        /* string proposer = 5; */
+        if (message.proposer !== "")
+            writer.tag(5, WireType.LengthDelimited).string(message.proposer);
+        /* bytes proposer_signature = 6; */
+        if (message.proposerSignature.length)
+            writer.tag(6, WireType.LengthDelimited).bytes(message.proposerSignature);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.ProposePolicyChangeRequest
+ */
+export const ProposePolicyChangeRequest = new ProposePolicyChangeRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class ProposePolicyChangeResponse$Type extends MessageType<ProposePolicyChangeResponse> {
+    constructor() {
+        super("guardian_mesh.ProposePolicyChangeResponse", [
+            { no: 1, name: "accepted", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 2, name: "change_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "message", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ProposePolicyChangeResponse>): ProposePolicyChangeResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.accepted = false;
+        message.changeId = "";
+        message.message = "";
+        if (value !== undefined)
+            reflectionMergePartial<ProposePolicyChangeResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ProposePolicyChangeResponse): ProposePolicyChangeResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* bool accepted */ 1:
+                    message.accepted = reader.bool();
+                    break;
+                case /* string change_id */ 2:
+                    message.changeId = reader.string();
+                    break;
+                case /* string message */ 3:
+                    message.message = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ProposePolicyChangeResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* bool accepted = 1; */
+        if (message.accepted !== false)
+            writer.tag(1, WireType.Varint).bool(message.accepted);
+        /* string change_id = 2; */
+        if (message.changeId !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.changeId);
+        /* string message = 3; */
+        if (message.message !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.message);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.ProposePolicyChangeResponse
+ */
+export const ProposePolicyChangeResponse = new ProposePolicyChangeResponse$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class ApprovePolicyChangeRequest$Type extends MessageType<ApprovePolicyChangeRequest> {
+    constructor() {
+        super("guardian_mesh.ApprovePolicyChangeRequest", [
+            { no: 1, name: "change_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "approver", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "approver_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ApprovePolicyChangeRequest>): ApprovePolicyChangeRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.changeId = "";
+        message.approver = "";
+        message.approverSignature = new Uint8Array(0);
+        if (value !== undefined)
+            reflectionMergePartial<ApprovePolicyChangeRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ApprovePolicyChangeRequest): ApprovePolicyChangeRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string change_id */ 1:
+                    message.changeId = reader.string();
+                    break;
+                case /* string approver */ 2:
+                    message.approver = reader.string();
+                    break;
+                case /* bytes approver_signature */ 3:
+                    message.approverSignature = reader.bytes();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ApprovePolicyChangeRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string change_id = 1; */
+        if (message.changeId !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.changeId);
+        /* string approver = 2; */
+        if (message.approver !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.approver);
+        /* bytes approver_signature = 3; */
+        if (message.approverSignature.length)
+            writer.tag(3, WireType.LengthDelimited).bytes(message.approverSignature);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.ApprovePolicyChangeRequest
+ */
+export const ApprovePolicyChangeRequest = new ApprovePolicyChangeRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class ApprovePolicyChangeResponse$Type extends MessageType<ApprovePolicyChangeResponse> {
+    constructor() {
+        super("guardian_mesh.ApprovePolicyChangeResponse", [
+            { no: 1, name: "applied", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 2, name: "version", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 3, name: "content_hash", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 4, name: "message", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ApprovePolicyChangeResponse>): ApprovePolicyChangeResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.applied = false;
+        message.version = "0";
+        message.contentHash = "";
+        message.message = "";
+        if (value !== undefined)
+            reflectionMergePartial<ApprovePolicyChangeResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ApprovePolicyChangeResponse): ApprovePolicyChangeResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* bool applied */ 1:
+                    message.applied = reader.bool();
+                    break;
+                case /* uint64 version */ 2:
+                    message.version = reader.uint64().toString();
+                    break;
+                case /* string content_hash */ 3:
+                    message.contentHash = reader.string();
+                    break;
+                case /* string message */ 4:
+                    message.message = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ApprovePolicyChangeResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* bool applied = 1; */
+        if (message.applied !== false)
+            writer.tag(1, WireType.Varint).bool(message.applied);
+        /* uint64 version = 2; */
+        if (message.version !== "0")
+            writer.tag(2, WireType.Varint).uint64(message.version);
+        /* string content_hash = 3; */
+        if (message.contentHash !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.contentHash);
+        /* string message = 4; */
+        if (message.message !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.message);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.ApprovePolicyChangeResponse
+ */
+export const ApprovePolicyChangeResponse = new ApprovePolicyChangeResponse$Type();
 /**
  * @generated ServiceType for protobuf service guardian_mesh.GuardianMesh
  */
