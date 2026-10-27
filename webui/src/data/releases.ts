@@ -26,8 +26,8 @@ export const RELEASES: Release[] = [
       "VaultEnclave::record_policy_event for hash-chained audit logging of policy changes",
       "WebUI Current Policy section displaying bundle version, rules table, proposer/approver principals"
     ],
-    gateVerdict: "Pending",
-    tests: "Test counts pending — platform and invocation root to be recorded after running the full suite; webui build + lint pending execution",
+    gateVerdict: "PASS WITH FINDINGS",
+    tests: "137 tests (100 lib + 37 bin) from the workspace root on Linux, Wright-verified (136 on Windows; one #[cfg(unix)] lib test is Linux-only); 20 tests added over the v0.9.0 baseline (10 policy.rs, 10 main.rs); webui build + lint passing; wire proof 31/31 through the shipped TS client (dual-control propose/approve, verdict flip under v2, policy_version in proofs, audit event, restart persistence)",
     status: "Release candidate"
   },
   {
