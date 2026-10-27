@@ -511,5 +511,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-27T00:19:47-06:00",
     "message": "Merge pull request #69 from nrupala/wright/wo11-policy-governance"
+  },
+  {
+    "release": 62,
+    "tag": "release/v62",
+    "previous_tag": "release/v61",
+    "sha": "626a729a4a7fc9244833cd9876d5f6ee9fc78f0d",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-27T00:41:32-06:00",
+    "message": "Merge pull request #70 from nrupala/wright/ledger-wo11-gmsi91-20261026"
   }
 ]
