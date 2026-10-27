@@ -890,6 +890,19 @@ do, and none becomes a gate MUST until behaviour-proven here.
   build failed TS2339). Guardian Mesh must be able to
   prove a shipped client stub's method table equals the
   service definition of record.
+- **GMSI-90 — A paid deliverable's rendering is part of
+  the product.** (Sanity Check report-formats gate,
+  2026-10-26.) That gate's flagship deliverable — the
+  customer report — had its code paths checked while the
+  rendered artifact itself, in every offered format, went
+  ungenerated and unread pre-release; the gap was caught
+  by the Director reading a customer report, not by any
+  automated check. Guardian Mesh certificates must be
+  able to bind a deliverable-rendering claim: the flagship
+  artifact itself, generated in EVERY format the surface
+  offers and read back, with the formats enumerated in
+  the evidence — a code-path PASS without the artifact
+  read-back is a finding, not a proof.
 
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
