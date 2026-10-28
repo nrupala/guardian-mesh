@@ -529,5 +529,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-28T00:04:26-06:00",
     "message": "Merge pull request #71 from nrupala/wright/wo12-revocation-service"
+  },
+  {
+    "release": 64,
+    "tag": "release/v64",
+    "previous_tag": "release/v63",
+    "sha": "5dd1ba041d51952068e98bb91f420bd4646ed27e",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-28T00:20:07-06:00",
+    "message": "Merge pull request #72 from nrupala/wright/ledger-wo12-gmsi92-20261027"
   }
 ]
