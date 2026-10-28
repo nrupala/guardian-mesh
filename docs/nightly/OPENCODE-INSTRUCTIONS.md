@@ -922,6 +922,22 @@ do, and none becomes a gate MUST until behaviour-proven here.
   every method of the table — never by a green build
   alone. This is GMSI-89's class, second occurrence.
 
+- **GMSI-92 — Revocation-effect proofs must cover
+  the negative space.** (Guardian Mesh WO-12 gate,
+  2026-10-27.) A revocation is proven in three
+  separate legs: EFFECT — every capability the
+  revoked credential had is re-attempted and
+  refused (a revoked session's Evaluate denied; a
+  revoked key's Handshake refused); NON-EFFECT — an
+  unrelated credential is shown still working
+  (revocation is surgical, not a outage); and
+  DURABILITY — the revocation is shown surviving a
+  restart from its persisted record. Any one leg
+  alone is not a revocation proof. Founding case:
+  the WO-12 wire proof (36/36 through the shipped
+  TS client) ran all three legs for sessions and
+  keys, and effect + durability for certificates.
+
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
@@ -1690,3 +1706,87 @@ the laptop checkouts are working copies, never the source of truth.
   (P1, Part C fourth in order — revocation service).
   Standing: dependabot PR #51 (vite bump) still open,
   outside the work orders.
+- 2026-10-27 — **WO-12 shipped as v0.11.0** (PR #71,
+  merged 7e973a6d): revocation service (spec DC-14,
+  EV-4, BM-12) — dual-control propose/approve
+  revocation over the shared WO-11 admin registry
+  for sessions (bus drop + firewall evict), client
+  ML-DSA-65 keys (all bound sessions dropped;
+  Handshake refused by key fingerprint), and
+  certificates (registry revoke); approval applies
+  synchronously under lock and measures propagation
+  against the configured bound
+  (GUARDIAN_MESH_REVOCATION_BOUND_SECS, default
+  60 s); persistent fail-closed JSONL registry;
+  REVOCATION_APPLIED audit events with failures
+  surfaced, never swallowed; legacy
+  RevokeCertificate refuses when an admin registry
+  is configured; WebUI read-only revocation
+  summary; multi-node propagation is WO-16 scope
+  and is not claimed. Built by the laptop lane
+  (OpenCode, fresh clone D:\guardian-mesh-work\wo12
+  at main 626a729a; no pack refresh needed — no new
+  GMSI had arrived; lane commit cfbfea6 carried by
+  API with tree equality asserted, 453ac43a, then
+  one Wright carry commit to gated tree 50ec2c4b ==
+  merged tree). Wright-verified independently:
+  cargo 160/160 at the workspace root (Linux;
+  159 Windows — one pre-existing #[cfg(unix)] lib
+  test; +23 over the 137 baseline); webui npm ci +
+  build (drift guard: 12 versions) + lint green on
+  a clean tree; wire proof through the shipped TS
+  client 36/36 (all three kinds end-to-end,
+  dual-control + signature refusals, change_id ==
+  TS-computed SHA-256 of the canonical string,
+  legacy-RPC tightening, REVOCATION_APPLIED audit
+  entries, restart persistence). Release gate: PASS
+  WITH FINDINGS (scanner BLOCKED only on the
+  GMSI-6 "tests" false lead, 13th occurrence; 0
+  secrets, 0 vulns). F1 (Low, FIXED in carry):
+  CHANGELOG test arithmetic. F2 (Low, FIXED in
+  carry): release-log "bound enforcement" wording —
+  the bound is measured and reported, not
+  watchdog-enforced. F3 (Low, OPEN): no propagation
+  watchdog — single-node application is synchronous
+  by construction; multi-node is WO-16. Filed
+  GMSI-92 (above) from this run. Deployed to
+  guardian.aimlds.org via gm-deploy: aarch64 binary
+  sha256 0b612653… cross-built from merged main
+  (cargo-zigbuild; merged tree == gated tree
+  50ec2c4b), installed (rollback
+  guardian-meshd.bak-v0100; webui-dist.bak-v0100
+  kept); production fingerprint dd2cf1a3… unchanged
+  (eleventh upgrade), both services active, box
+  webui-dist carrying the base-/ build
+  index-DVJt8f8u.js, Access intact (302),
+  production wire proof 14/14 — Health SERVING with
+  PF fields consistent with the measured rule
+  counters, revocation summary bound 60 / total 0,
+  a change proposal refused with "unknown policy
+  admin" (no admin registry configured on
+  production — fail-closed by configuration, an
+  operator decision), Evaluate ALLOW with proof
+  policy_version 1, VerifyProof valid; audit log
+  at 1,430 entries with whole-log verification
+  still reporting the historical break at position
+  557 (pre-fix history, stands as recorded), and
+  the release certified itself on production —
+  certificate cert-20261028-000039 (guardian-mesh
+  0.11.0, PASS WITH FINDINGS, evidence = the gate
+  verdict sha256 a2f06539…), fingerprint recomputes,
+  VerifyProof valid, supersedes cert-20261027-000038,
+  status ACTIVE. Deploy note: gm-deploy's box E2E
+  scored 15/16 — its Health check still expects the
+  retired pre-WO-19 constant 18/18 and its bundled
+  client does not decode Health field 6; the
+  daemon's measured-counter behaviour was proven
+  directly in the production wire proof, and
+  box-e2e.mjs was left byte-identical to its
+  pre-run state with the stale check filed as a
+  harness finding. v0.11.0 is a RELEASE CANDIDATE
+  (one-week watched soak, RC register entry;
+  graduates 2026-11-03). Part C continues (WO-19,
+  WO-10, WO-11, WO-12 done). Next: WO-14 (P2, Part
+  C fifth in order — boundary authenticators).
+  Standing: dependabot PR #51 (vite bump) still
+  open, outside the work orders.
