@@ -19,7 +19,7 @@ export const RELEASES: Release[] = [
     highlights: [
       "ProposeRevocation and ApproveRevocation RPCs implementing dual-control revocation (BM-12)",
       "Revocation of sessions, ML-DSA-65 client keys, and certificates with per-kind validation",
-      "Synchronous propagation with measured timing (DC-14 bound enforcement)",
+      "Synchronous propagation, measured at approval against the DC-14 bound",
       "RevocationStatus RPC for querying individual targets or registry summary",
       "Persistent revocation registry (revocations.jsonl) with restart durability",
       "Legacy RevokeCertificate tightened: refuses when admin registry is configured",
@@ -27,8 +27,8 @@ export const RELEASES: Release[] = [
       "Audit events for all applied revocations with proposer/approver principals",
       "WebUI revocation summary showing total count and DC-14 propagation bound"
     ],
-    gateVerdict: "PENDING — recorded by Wright.",
-    tests: "(lane-measured; Wright-verified counts in the gate record)",
+    gateVerdict: "PASS WITH FINDINGS",
+    tests: "Cargo 160/160 Linux (111 lib + 49 bin) / 159/159 Windows, Wright-verified from the workspace root; WebUI npm ci + build (drift guard: 12 versions) + lint green; wire proof through the shipped TS client 36/36 (session, key, and certificate revocation end-to-end incl. dual-control refusals, legacy-RPC tightening, audit entries, and restart persistence).",
     status: "Release candidate"
   },
   {
