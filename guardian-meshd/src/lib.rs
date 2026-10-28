@@ -8,6 +8,7 @@ pub mod enclave;
 pub mod policy;
 pub mod config;
 pub mod certificate;
+pub mod revocation;
 
 pub mod proto {
     tonic::include_proto!("guardian_mesh");

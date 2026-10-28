@@ -13,6 +13,25 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.11.0",
+    date: "2026-10-27",
+    summary: "Dual-control revocation service for sessions, keys, and certificates with DC-14 propagation bound. Closes specs DC-14, EV-4, BM-12.",
+    highlights: [
+      "ProposeRevocation and ApproveRevocation RPCs implementing dual-control revocation (BM-12)",
+      "Revocation of sessions, ML-DSA-65 client keys, and certificates with per-kind validation",
+      "Synchronous propagation, measured at approval against the DC-14 bound",
+      "RevocationStatus RPC for querying individual targets or registry summary",
+      "Persistent revocation registry (revocations.jsonl) with restart durability",
+      "Legacy RevokeCertificate tightened: refuses when admin registry is configured",
+      "Handshake refuses revoked client keys; key revocation drops all bound sessions",
+      "Audit events for all applied revocations with proposer/approver principals",
+      "WebUI revocation summary showing total count and DC-14 propagation bound"
+    ],
+    gateVerdict: "PASS WITH FINDINGS",
+    tests: "Cargo 160/160 Linux (111 lib + 49 bin) / 159/159 Windows, Wright-verified from the workspace root; WebUI npm ci + build (drift guard: 12 versions) + lint green; wire proof through the shipped TS client 36/36 (session, key, and certificate revocation end-to-end incl. dual-control refusals, legacy-RPC tightening, audit entries, and restart persistence).",
+    status: "Release candidate"
+  },
+  {
     version: "0.10.0",
     date: "2026-10-26",
     summary: "Policy governance with signed versioned bundles, dual-control approval, publication endpoint, and policy version in all verdicts. Closes v0.4.0 gate specs DC-18, DC-19, BM-6/BM-12.",

@@ -19,6 +19,7 @@ import type {
   VerifyProofResponse,
   ReadAuditLogResponse,
   PolicyBundleMessage,
+  RevocationStatusResponse,
 } from "../gen/guardian_mesh_pb"
 
 export const DAEMON_ENDPOINT: string | null =
@@ -290,4 +291,10 @@ export async function getPolicy(
   client: GuardianMeshClient,
 ): Promise<PolicyBundleMessage> {
   return client.getPolicy({}).response
+}
+
+export async function getRevocationSummary(
+  client: GuardianMeshClient,
+): Promise<RevocationStatusResponse> {
+  return client.revocationStatus({ kind: "", targetId: "" }).response
 }

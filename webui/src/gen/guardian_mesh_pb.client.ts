@@ -15,6 +15,12 @@ import type { ApprovePolicyChangeResponse } from "./guardian_mesh_pb";
 import type { ApprovePolicyChangeRequest } from "./guardian_mesh_pb";
 import type { ProposePolicyChangeResponse } from "./guardian_mesh_pb";
 import type { ProposePolicyChangeRequest } from "./guardian_mesh_pb";
+import type { RevocationStatusResponse } from "./guardian_mesh_pb";
+import type { RevocationStatusRequest } from "./guardian_mesh_pb";
+import type { ApproveRevocationResponse } from "./guardian_mesh_pb";
+import type { ApproveRevocationRequest } from "./guardian_mesh_pb";
+import type { ProposeRevocationResponse } from "./guardian_mesh_pb";
+import type { ProposeRevocationRequest } from "./guardian_mesh_pb";
 import type { PolicyBundleMessage } from "./guardian_mesh_pb";
 import type { GetPolicyRequest } from "./guardian_mesh_pb";
 import type { RevokeCertificateResponse } from "./guardian_mesh_pb";
@@ -124,6 +130,24 @@ export interface IGuardianMeshClient {
      * @generated from protobuf rpc: ApprovePolicyChange
      */
     approvePolicyChange(input: ApprovePolicyChangeRequest, options?: RpcOptions): UnaryCall<ApprovePolicyChangeRequest, ApprovePolicyChangeResponse>;
+    /**
+     * Propose a revocation (dual-control first step, WO-12 / DC-14 / BM-12).
+     *
+     * @generated from protobuf rpc: ProposeRevocation
+     */
+    proposeRevocation(input: ProposeRevocationRequest, options?: RpcOptions): UnaryCall<ProposeRevocationRequest, ProposeRevocationResponse>;
+    /**
+     * Approve a revocation (dual-control second step; applies synchronously).
+     *
+     * @generated from protobuf rpc: ApproveRevocation
+     */
+    approveRevocation(input: ApproveRevocationRequest, options?: RpcOptions): UnaryCall<ApproveRevocationRequest, ApproveRevocationResponse>;
+    /**
+     * Query revocation status for one target, or the registry summary.
+     *
+     * @generated from protobuf rpc: RevocationStatus
+     */
+    revocationStatus(input: RevocationStatusRequest, options?: RpcOptions): UnaryCall<RevocationStatusRequest, RevocationStatusResponse>;
 }
 // ──────────────────────────────────────────
 //  Guardian Mesh — gRPC Service Definitions
@@ -255,5 +279,32 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
     approvePolicyChange(input: ApprovePolicyChangeRequest, options?: RpcOptions): UnaryCall<ApprovePolicyChangeRequest, ApprovePolicyChangeResponse> {
         const method = this.methods[11], opt = this._transport.mergeOptions(options);
         return stackIntercept<ApprovePolicyChangeRequest, ApprovePolicyChangeResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Propose a revocation (dual-control first step, WO-12 / DC-14 / BM-12).
+     *
+     * @generated from protobuf rpc: ProposeRevocation
+     */
+    proposeRevocation(input: ProposeRevocationRequest, options?: RpcOptions): UnaryCall<ProposeRevocationRequest, ProposeRevocationResponse> {
+        const method = this.methods[12], opt = this._transport.mergeOptions(options);
+        return stackIntercept<ProposeRevocationRequest, ProposeRevocationResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Approve a revocation (dual-control second step; applies synchronously).
+     *
+     * @generated from protobuf rpc: ApproveRevocation
+     */
+    approveRevocation(input: ApproveRevocationRequest, options?: RpcOptions): UnaryCall<ApproveRevocationRequest, ApproveRevocationResponse> {
+        const method = this.methods[13], opt = this._transport.mergeOptions(options);
+        return stackIntercept<ApproveRevocationRequest, ApproveRevocationResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Query revocation status for one target, or the registry summary.
+     *
+     * @generated from protobuf rpc: RevocationStatus
+     */
+    revocationStatus(input: RevocationStatusRequest, options?: RpcOptions): UnaryCall<RevocationStatusRequest, RevocationStatusResponse> {
+        const method = this.methods[14], opt = this._transport.mergeOptions(options);
+        return stackIntercept<RevocationStatusRequest, RevocationStatusResponse>("unary", this._transport, method, opt, input);
     }
 }

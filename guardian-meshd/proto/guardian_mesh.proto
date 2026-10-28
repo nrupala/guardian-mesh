@@ -55,6 +55,13 @@ service GuardianMesh {
 
   // Approve a policy change (dual-control second step).
   rpc ApprovePolicyChange (ApprovePolicyChangeRequest) returns (ApprovePolicyChangeResponse);
+
+  // Propose a revocation (dual-control first step, WO-12 / DC-14 / BM-12).
+  rpc ProposeRevocation (ProposeRevocationRequest) returns (ProposeRevocationResponse);
+  // Approve a revocation (dual-control second step; applies synchronously).
+  rpc ApproveRevocation (ApproveRevocationRequest) returns (ApproveRevocationResponse);
+  // Query revocation status for one target, or the registry summary.
+  rpc RevocationStatus (RevocationStatusRequest) returns (RevocationStatusResponse);
 }
 
 // ── Message Types ─────────────────────────
@@ -317,4 +324,54 @@ message ApprovePolicyChangeResponse {
   uint64 version = 2;               // new current version when applied
   string content_hash = 3;          // new current hash when applied
   string message = 4;               // refusal reason when not applied
+}
+
+// ── Revocation RPCs (WO-12) ───────────────
+
+message ProposeRevocationRequest {
+  string kind = 1;              // "SESSION" | "KEY" | "CERTIFICATE"
+  string target_id = 2;         // session id hex | key fingerprint hex | certificate serial
+  string reason = 3;
+  string proposer = 4;
+  bytes proposer_signature = 5; // proposer's ML-DSA-65 signature over the canonical revocation string
+}
+
+message ProposeRevocationResponse {
+  bool accepted = 1;
+  string change_id = 2;         // SHA-256 of the canonical revocation string when accepted
+  string message = 3;
+}
+
+message ApproveRevocationRequest {
+  string change_id = 1;
+  string approver = 2;
+  bytes approver_signature = 3; // approver's ML-DSA-65 signature over the pending proposal's canonical string
+}
+
+message ApproveRevocationResponse {
+  bool applied = 1;
+  string kind = 2;
+  string target_id = 3;
+  uint32 effects = 4;           // sessions dropped by this revocation (0 for certificates / unknown sessions)
+  uint64 propagation_ms = 5;    // measured time from approval start to effects applied
+  uint64 bound_secs = 6;        // the configured DC-14 bound
+  string message = 7;
+}
+
+message RevocationStatusRequest {
+  string kind = 1;              // empty kind+target = registry summary
+  string target_id = 2;
+}
+
+message RevocationStatusResponse {
+  bool revoked = 1;             // for a specific target; false in summary mode
+  string kind = 2;
+  string target_id = 3;
+  string reason = 4;
+  string proposer = 5;
+  string approver = 6;
+  uint64 revoked_at = 7;
+  uint64 propagation_ms = 8;
+  uint64 bound_secs = 9;
+  uint32 total_revoked = 10;    // registry size (both modes)
 }
