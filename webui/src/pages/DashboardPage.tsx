@@ -152,6 +152,8 @@ function LivePanel() {
 
   const [policy, setPolicy] = useState<PolicyBundleMessage | null>(null)
   const [policyError, setPolicyError] = useState<string | null>(null)
+  const [revocationSummary, setRevocationSummary] = useState<import("../gen/guardian_mesh_pb").RevocationStatusResponse | null>(null)
+  const [revocationError, setRevocationError] = useState<string | null>(null)
 
   const evalRef = useRef<HTMLElement | null>(null)
   const verifyRef = useRef<HTMLElement | null>(null)
@@ -293,6 +295,27 @@ function LivePanel() {
           setPolicyError(e instanceof Error ? e.message : String(e))
         }
       })
+    return () => {
+      cancelled = true
+    }
+  }, [client])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { getRevocationSummary } = await import("../lib/gmClient")
+        const summary = await getRevocationSummary(client)
+        if (!cancelled) {
+          setRevocationSummary(summary)
+          setRevocationError(null)
+        }
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setRevocationError(e instanceof Error ? e.message : String(e))
+        }
+      }
+    })()
     return () => {
       cancelled = true
     }
@@ -567,6 +590,30 @@ function LivePanel() {
             </div>
           ) : (
             <p className="hint">Loading policy…</p>
+          )}
+        </section>
+
+        <section className="dash-section">
+          <h2>Revocations</h2>
+          <p className="hint">
+            Dual-control revocation service for sessions, keys, and certificates.
+            Revocations propagate synchronously within the configured DC-14 bound.
+          </p>
+          {revocationError ? (
+            <div className="verdict-panel verdict-block">
+              <p className="verdict-word">Could not load revocations</p>
+              <p>{revocationError}</p>
+            </div>
+          ) : revocationSummary ? (
+            <div className="card">
+              <div className="audit-entry-body">
+                <p>
+                  <strong>Revocations:</strong> {revocationSummary.totalRevoked} recorded — propagation bound {revocationSummary.boundSecs} s
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="hint">Loading revocations…</p>
           )}
         </section>
 

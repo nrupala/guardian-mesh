@@ -775,6 +775,158 @@ export interface ApprovePolicyChangeResponse {
      */
     message: string; // refusal reason when not applied
 }
+// ── Revocation RPCs (WO-12) ───────────────
+
+/**
+ * @generated from protobuf message guardian_mesh.ProposeRevocationRequest
+ */
+export interface ProposeRevocationRequest {
+    /**
+     * @generated from protobuf field: string kind = 1
+     */
+    kind: string; // "SESSION" | "KEY" | "CERTIFICATE"
+    /**
+     * @generated from protobuf field: string target_id = 2
+     */
+    targetId: string; // session id hex | key fingerprint hex | certificate serial
+    /**
+     * @generated from protobuf field: string reason = 3
+     */
+    reason: string;
+    /**
+     * @generated from protobuf field: string proposer = 4
+     */
+    proposer: string;
+    /**
+     * @generated from protobuf field: bytes proposer_signature = 5
+     */
+    proposerSignature: Uint8Array; // proposer's ML-DSA-65 signature over the canonical revocation string
+}
+/**
+ * @generated from protobuf message guardian_mesh.ProposeRevocationResponse
+ */
+export interface ProposeRevocationResponse {
+    /**
+     * @generated from protobuf field: bool accepted = 1
+     */
+    accepted: boolean;
+    /**
+     * @generated from protobuf field: string change_id = 2
+     */
+    changeId: string; // SHA-256 of the canonical revocation string when accepted
+    /**
+     * @generated from protobuf field: string message = 3
+     */
+    message: string;
+}
+/**
+ * @generated from protobuf message guardian_mesh.ApproveRevocationRequest
+ */
+export interface ApproveRevocationRequest {
+    /**
+     * @generated from protobuf field: string change_id = 1
+     */
+    changeId: string;
+    /**
+     * @generated from protobuf field: string approver = 2
+     */
+    approver: string;
+    /**
+     * @generated from protobuf field: bytes approver_signature = 3
+     */
+    approverSignature: Uint8Array; // approver's ML-DSA-65 signature over the pending proposal's canonical string
+}
+/**
+ * @generated from protobuf message guardian_mesh.ApproveRevocationResponse
+ */
+export interface ApproveRevocationResponse {
+    /**
+     * @generated from protobuf field: bool applied = 1
+     */
+    applied: boolean;
+    /**
+     * @generated from protobuf field: string kind = 2
+     */
+    kind: string;
+    /**
+     * @generated from protobuf field: string target_id = 3
+     */
+    targetId: string;
+    /**
+     * @generated from protobuf field: uint32 effects = 4
+     */
+    effects: number; // sessions dropped by this revocation (0 for certificates / unknown sessions)
+    /**
+     * @generated from protobuf field: uint64 propagation_ms = 5
+     */
+    propagationMs: string; // measured time from approval start to effects applied
+    /**
+     * @generated from protobuf field: uint64 bound_secs = 6
+     */
+    boundSecs: string; // the configured DC-14 bound
+    /**
+     * @generated from protobuf field: string message = 7
+     */
+    message: string;
+}
+/**
+ * @generated from protobuf message guardian_mesh.RevocationStatusRequest
+ */
+export interface RevocationStatusRequest {
+    /**
+     * @generated from protobuf field: string kind = 1
+     */
+    kind: string; // empty kind+target = registry summary
+    /**
+     * @generated from protobuf field: string target_id = 2
+     */
+    targetId: string;
+}
+/**
+ * @generated from protobuf message guardian_mesh.RevocationStatusResponse
+ */
+export interface RevocationStatusResponse {
+    /**
+     * @generated from protobuf field: bool revoked = 1
+     */
+    revoked: boolean; // for a specific target; false in summary mode
+    /**
+     * @generated from protobuf field: string kind = 2
+     */
+    kind: string;
+    /**
+     * @generated from protobuf field: string target_id = 3
+     */
+    targetId: string;
+    /**
+     * @generated from protobuf field: string reason = 4
+     */
+    reason: string;
+    /**
+     * @generated from protobuf field: string proposer = 5
+     */
+    proposer: string;
+    /**
+     * @generated from protobuf field: string approver = 6
+     */
+    approver: string;
+    /**
+     * @generated from protobuf field: uint64 revoked_at = 7
+     */
+    revokedAt: string;
+    /**
+     * @generated from protobuf field: uint64 propagation_ms = 8
+     */
+    propagationMs: string;
+    /**
+     * @generated from protobuf field: uint64 bound_secs = 9
+     */
+    boundSecs: string;
+    /**
+     * @generated from protobuf field: uint32 total_revoked = 10
+     */
+    totalRevoked: number; // registry size (both modes)
+}
 // @generated message type with reflection information, may provide speed optimized methods
 class SealedEnvelope$Type extends MessageType<SealedEnvelope> {
     constructor() {
@@ -3096,6 +3248,427 @@ class ApprovePolicyChangeResponse$Type extends MessageType<ApprovePolicyChangeRe
  * @generated MessageType for protobuf message guardian_mesh.ApprovePolicyChangeResponse
  */
 export const ApprovePolicyChangeResponse = new ApprovePolicyChangeResponse$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class ProposeRevocationRequest$Type extends MessageType<ProposeRevocationRequest> {
+    constructor() {
+        super("guardian_mesh.ProposeRevocationRequest", [
+            { no: 1, name: "kind", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "target_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "reason", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 4, name: "proposer", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 5, name: "proposer_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ProposeRevocationRequest>): ProposeRevocationRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.kind = "";
+        message.targetId = "";
+        message.reason = "";
+        message.proposer = "";
+        message.proposerSignature = new Uint8Array(0);
+        if (value !== undefined)
+            reflectionMergePartial<ProposeRevocationRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ProposeRevocationRequest): ProposeRevocationRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    message.kind = reader.string();
+                    break;
+                case 2:
+                    message.targetId = reader.string();
+                    break;
+                case 3:
+                    message.reason = reader.string();
+                    break;
+                case 4:
+                    message.proposer = reader.string();
+                    break;
+                case 5:
+                    message.proposerSignature = reader.bytes();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ProposeRevocationRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        if (message.kind !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.kind);
+        if (message.targetId !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.targetId);
+        if (message.reason !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.reason);
+        if (message.proposer !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.proposer);
+        if (message.proposerSignature.length)
+            writer.tag(5, WireType.LengthDelimited).bytes(message.proposerSignature);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+export const ProposeRevocationRequest = new ProposeRevocationRequest$Type();
+class ProposeRevocationResponse$Type extends MessageType<ProposeRevocationResponse> {
+    constructor() {
+        super("guardian_mesh.ProposeRevocationResponse", [
+            { no: 1, name: "accepted", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 2, name: "change_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "message", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ProposeRevocationResponse>): ProposeRevocationResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.accepted = false;
+        message.changeId = "";
+        message.message = "";
+        if (value !== undefined)
+            reflectionMergePartial<ProposeRevocationResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ProposeRevocationResponse): ProposeRevocationResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    message.accepted = reader.bool();
+                    break;
+                case 2:
+                    message.changeId = reader.string();
+                    break;
+                case 3:
+                    message.message = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ProposeRevocationResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        if (message.accepted !== false)
+            writer.tag(1, WireType.Varint).bool(message.accepted);
+        if (message.changeId !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.changeId);
+        if (message.message !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.message);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+export const ProposeRevocationResponse = new ProposeRevocationResponse$Type();
+class ApproveRevocationRequest$Type extends MessageType<ApproveRevocationRequest> {
+    constructor() {
+        super("guardian_mesh.ApproveRevocationRequest", [
+            { no: 1, name: "change_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "approver", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "approver_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ApproveRevocationRequest>): ApproveRevocationRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.changeId = "";
+        message.approver = "";
+        message.approverSignature = new Uint8Array(0);
+        if (value !== undefined)
+            reflectionMergePartial<ApproveRevocationRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ApproveRevocationRequest): ApproveRevocationRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    message.changeId = reader.string();
+                    break;
+                case 2:
+                    message.approver = reader.string();
+                    break;
+                case 3:
+                    message.approverSignature = reader.bytes();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ApproveRevocationRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        if (message.changeId !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.changeId);
+        if (message.approver !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.approver);
+        if (message.approverSignature.length)
+            writer.tag(3, WireType.LengthDelimited).bytes(message.approverSignature);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+export const ApproveRevocationRequest = new ApproveRevocationRequest$Type();
+class ApproveRevocationResponse$Type extends MessageType<ApproveRevocationResponse> {
+    constructor() {
+        super("guardian_mesh.ApproveRevocationResponse", [
+            { no: 1, name: "applied", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 2, name: "kind", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "target_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 4, name: "effects", kind: "scalar", T: 13 /*ScalarType.UINT32*/ },
+            { no: 5, name: "propagation_ms", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 6, name: "bound_secs", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 7, name: "message", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<ApproveRevocationResponse>): ApproveRevocationResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.applied = false;
+        message.kind = "";
+        message.targetId = "";
+        message.effects = 0;
+        message.propagationMs = "0";
+        message.boundSecs = "0";
+        message.message = "";
+        if (value !== undefined)
+            reflectionMergePartial<ApproveRevocationResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: ApproveRevocationResponse): ApproveRevocationResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    message.applied = reader.bool();
+                    break;
+                case 2:
+                    message.kind = reader.string();
+                    break;
+                case 3:
+                    message.targetId = reader.string();
+                    break;
+                case 4:
+                    message.effects = reader.uint32();
+                    break;
+                case 5:
+                    message.propagationMs = reader.uint64().toString();
+                    break;
+                case 6:
+                    message.boundSecs = reader.uint64().toString();
+                    break;
+                case 7:
+                    message.message = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: ApproveRevocationResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        if (message.applied !== false)
+            writer.tag(1, WireType.Varint).bool(message.applied);
+        if (message.kind !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.kind);
+        if (message.targetId !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.targetId);
+        if (message.effects !== 0)
+            writer.tag(4, WireType.Varint).uint32(message.effects);
+        if (message.propagationMs !== "0")
+            writer.tag(5, WireType.Varint).uint64(message.propagationMs);
+        if (message.boundSecs !== "0")
+            writer.tag(6, WireType.Varint).uint64(message.boundSecs);
+        if (message.message !== "")
+            writer.tag(7, WireType.LengthDelimited).string(message.message);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+export const ApproveRevocationResponse = new ApproveRevocationResponse$Type();
+class RevocationStatusRequest$Type extends MessageType<RevocationStatusRequest> {
+    constructor() {
+        super("guardian_mesh.RevocationStatusRequest", [
+            { no: 1, name: "kind", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "target_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<RevocationStatusRequest>): RevocationStatusRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.kind = "";
+        message.targetId = "";
+        if (value !== undefined)
+            reflectionMergePartial<RevocationStatusRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: RevocationStatusRequest): RevocationStatusRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    message.kind = reader.string();
+                    break;
+                case 2:
+                    message.targetId = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: RevocationStatusRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        if (message.kind !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.kind);
+        if (message.targetId !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.targetId);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+export const RevocationStatusRequest = new RevocationStatusRequest$Type();
+class RevocationStatusResponse$Type extends MessageType<RevocationStatusResponse> {
+    constructor() {
+        super("guardian_mesh.RevocationStatusResponse", [
+            { no: 1, name: "revoked", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 2, name: "kind", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "target_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 4, name: "reason", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 5, name: "proposer", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 6, name: "approver", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 7, name: "revoked_at", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 8, name: "propagation_ms", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 9, name: "bound_secs", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 10, name: "total_revoked", kind: "scalar", T: 13 /*ScalarType.UINT32*/ }
+        ]);
+    }
+    create(value?: PartialMessage<RevocationStatusResponse>): RevocationStatusResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.revoked = false;
+        message.kind = "";
+        message.targetId = "";
+        message.reason = "";
+        message.proposer = "";
+        message.approver = "";
+        message.revokedAt = "0";
+        message.propagationMs = "0";
+        message.boundSecs = "0";
+        message.totalRevoked = 0;
+        if (value !== undefined)
+            reflectionMergePartial<RevocationStatusResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: RevocationStatusResponse): RevocationStatusResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    message.revoked = reader.bool();
+                    break;
+                case 2:
+                    message.kind = reader.string();
+                    break;
+                case 3:
+                    message.targetId = reader.string();
+                    break;
+                case 4:
+                    message.reason = reader.string();
+                    break;
+                case 5:
+                    message.proposer = reader.string();
+                    break;
+                case 6:
+                    message.approver = reader.string();
+                    break;
+                case 7:
+                    message.revokedAt = reader.uint64().toString();
+                    break;
+                case 8:
+                    message.propagationMs = reader.uint64().toString();
+                    break;
+                case 9:
+                    message.boundSecs = reader.uint64().toString();
+                    break;
+                case 10:
+                    message.totalRevoked = reader.uint32();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: RevocationStatusResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        if (message.revoked !== false)
+            writer.tag(1, WireType.Varint).bool(message.revoked);
+        if (message.kind !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.kind);
+        if (message.targetId !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.targetId);
+        if (message.reason !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.reason);
+        if (message.proposer !== "")
+            writer.tag(5, WireType.LengthDelimited).string(message.proposer);
+        if (message.approver !== "")
+            writer.tag(6, WireType.LengthDelimited).string(message.approver);
+        if (message.revokedAt !== "0")
+            writer.tag(7, WireType.Varint).uint64(message.revokedAt);
+        if (message.propagationMs !== "0")
+            writer.tag(8, WireType.Varint).uint64(message.propagationMs);
+        if (message.boundSecs !== "0")
+            writer.tag(9, WireType.Varint).uint64(message.boundSecs);
+        if (message.totalRevoked !== 0)
+            writer.tag(10, WireType.Varint).uint32(message.totalRevoked);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+export const RevocationStatusResponse = new RevocationStatusResponse$Type();
 /**
  * @generated ServiceType for protobuf service guardian_mesh.GuardianMesh
  */
@@ -3111,5 +3684,8 @@ export const GuardianMesh = new ServiceType("guardian_mesh.GuardianMesh", [
     { name: "CertificateStatus", options: {}, I: CertificateStatusRequest, O: CertificateStatusResponse },
     { name: "GetPolicy", options: {}, I: GetPolicyRequest, O: PolicyBundleMessage },
     { name: "ProposePolicyChange", options: {}, I: ProposePolicyChangeRequest, O: ProposePolicyChangeResponse },
-    { name: "ApprovePolicyChange", options: {}, I: ApprovePolicyChangeRequest, O: ApprovePolicyChangeResponse }
+    { name: "ApprovePolicyChange", options: {}, I: ApprovePolicyChangeRequest, O: ApprovePolicyChangeResponse },
+    { name: "ProposeRevocation", options: {}, I: ProposeRevocationRequest, O: ProposeRevocationResponse },
+    { name: "ApproveRevocation", options: {}, I: ApproveRevocationRequest, O: ApproveRevocationResponse },
+    { name: "RevocationStatus", options: {}, I: RevocationStatusRequest, O: RevocationStatusResponse }
 ]);

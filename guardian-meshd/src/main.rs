@@ -20,6 +20,7 @@ use guardian_meshd::sealed_envelope::{generate_keypair, SealedEnvelope, ML_DSA_6
 use guardian_meshd::sealed_envelope::{verify_proto_envelope, load_or_generate_signing_key, compute_fingerprint};
 use ml_dsa::Signer;
 use guardian_meshd::certificate::{CertificateRegistry, Tests, IssuanceResult, CertificateStatus as CertStatus};
+use guardian_meshd::revocation::{RevocationRegistry, RevocationKind, RevocationEntry, canonical_revocation_string, revocation_change_id, validate_revocation};
 use guardian_meshd::proto::{
     guardian_mesh_server::{GuardianMesh, GuardianMeshServer},
     EvaluateRequest, EvaluateResponse, AuditProof, StructuredReason,
@@ -37,6 +38,9 @@ use guardian_meshd::proto::{
     GetPolicyRequest, PolicyBundleMessage, PolicyRuleMessage,
     ProposePolicyChangeRequest, ProposePolicyChangeResponse,
     ApprovePolicyChangeRequest, ApprovePolicyChangeResponse,
+    ProposeRevocationRequest, ProposeRevocationResponse,
+    ApproveRevocationRequest, ApproveRevocationResponse,
+    RevocationStatusRequest, RevocationStatusResponse,
 };
 use prost::Message as _;
 use ml_dsa::{MlDsa65, SigningKey, VerifyingKey, Verifier, SignatureEncoding};
@@ -44,6 +48,15 @@ use ml_dsa::{MlDsa65, SigningKey, VerifyingKey, Verifier, SignatureEncoding};
 struct PendingPolicyChange {
     bundle: PolicyBundle,
     proposer: String,
+}
+
+struct PendingRevocation {
+    kind: RevocationKind,
+    target_id: String,
+    reason: String,
+    proposer: String,
+    canonical: String,
+    change_id: String,
 }
 
 pub struct GuardianMeshService {
@@ -58,6 +71,8 @@ pub struct GuardianMeshService {
     policy_admins: std::collections::HashMap<String, VerifyingKey<MlDsa65>>,
     pending_policy_change: Arc<RwLock<Option<PendingPolicyChange>>>,
     policy_principals: Arc<RwLock<(String, String)>>, // (proposer, approver)
+    revocations: Arc<RevocationRegistry>,
+    pending_revocation: Arc<RwLock<Option<PendingRevocation>>>,
 }
 
 impl GuardianMeshService {
@@ -88,6 +103,9 @@ impl GuardianMeshService {
             vault.clone(),
             &vk,
         )?;
+        
+        let revocations = RevocationRegistry::new(config.revocation_dir())?;
+        
         Ok(Self {
             bus: Arc::new(RwLock::new(HandshakeBus::new(&config.handshake_secret))),
             vault,
@@ -99,6 +117,8 @@ impl GuardianMeshService {
             policy_admins,
             pending_policy_change: Arc::new(RwLock::new(None)),
             policy_principals: Arc::new(RwLock::new((proposer, approver))),
+            revocations: Arc::new(revocations),
+            pending_revocation: Arc::new(RwLock::new(None)),
             config,
         })
     }
@@ -636,6 +656,15 @@ impl GuardianMesh for GuardianMeshService {
             )));
         }
 
+        // WO-12: Refuse handshake if the client key has been revoked
+        if !req.source_public_key.is_empty() {
+            use sha2::Digest;
+            let fingerprint = hex::encode(sha2::Sha256::digest(&req.source_public_key));
+            if self.revocations.is_revoked(RevocationKind::Key, &fingerprint) {
+                return Err(Status::permission_denied("handshake refused: client key has been revoked"));
+            }
+        }
+
         let source = if req.source_enclave.is_empty() {
             "unknown".to_string()
         } else {
@@ -759,6 +788,14 @@ impl GuardianMesh for GuardianMeshService {
         request: Request<RevokeCertificateRequest>,
     ) -> Result<Response<RevokeCertificateResponse>, Status> {
         let req = request.into_inner();
+
+        // WO-12: If an admin registry is configured, legacy RevokeCertificate is disabled
+        // in favor of the dual-control revocation service
+        if !self.policy_admins.is_empty() {
+            return Err(Status::failed_precondition(
+                "certificate revocation requires the dual-control revocation service (ProposeRevocation/ApproveRevocation) when an admin registry is configured"
+            ));
+        }
 
         match self.certificates.revoke_certificate(&req.serial, &req.reason) {
             Ok(msg) => Ok(Response::new(RevokeCertificateResponse {
@@ -1052,6 +1089,416 @@ impl GuardianMesh for GuardianMeshService {
             message: String::new(),
         }))
     }
+
+    async fn propose_revocation(
+        &self,
+        request: Request<ProposeRevocationRequest>,
+    ) -> Result<Response<ProposeRevocationResponse>, Status> {
+        let req = request.into_inner();
+        
+        // Check if proposer is a registered admin (the admin registry shared with policy governance)
+        let proposer_vk = match self.policy_admins.get(&req.proposer) {
+            Some(vk) => vk,
+            None => {
+                return Ok(Response::new(ProposeRevocationResponse {
+                    accepted: false,
+                    change_id: String::new(),
+                    message: "unknown policy admin".to_string(),
+                }));
+            }
+        };
+        
+        // Parse and validate kind/target/reason
+        let kind = match RevocationKind::parse(&req.kind) {
+            Ok(k) => k,
+            Err(e) => {
+                return Ok(Response::new(ProposeRevocationResponse {
+                    accepted: false,
+                    change_id: String::new(),
+                    message: e,
+                }));
+            }
+        };
+        
+        if let Err(e) = validate_revocation(kind, &req.target_id, &req.reason) {
+            return Ok(Response::new(ProposeRevocationResponse {
+                accepted: false,
+                change_id: String::new(),
+                message: e,
+            }));
+        }
+        
+        // CERTIFICATE kind: target must be a known certificate, not already revoked
+        if kind == RevocationKind::Certificate {
+            let (status, _) = self.certificates.get_status(&req.target_id);
+            match status {
+                CertStatus::Unknown => {
+                    return Ok(Response::new(ProposeRevocationResponse {
+                        accepted: false,
+                        change_id: String::new(),
+                        message: "certificate serial unknown".to_string(),
+                    }));
+                }
+                CertStatus::Revoked => {
+                    return Ok(Response::new(ProposeRevocationResponse {
+                        accepted: false,
+                        change_id: String::new(),
+                        message: "certificate already revoked".to_string(),
+                    }));
+                }
+                _ => {}
+            }
+        }
+        
+        // SESSION/KEY: already-revoked target is refused (no duplicate proposals)
+        if kind != RevocationKind::Certificate && self.revocations.is_revoked(kind, &req.target_id) {
+            return Ok(Response::new(ProposeRevocationResponse {
+                accepted: false,
+                change_id: String::new(),
+                message: "already revoked".to_string(),
+            }));
+        }
+        
+        // Build the canonical string for signature verification
+        let canonical = canonical_revocation_string(kind, &req.target_id, &req.reason, &req.proposer);
+        
+        // Verify proposer signature
+        let sig = match ml_dsa::Signature::<MlDsa65>::try_from(req.proposer_signature.as_slice()) {
+            Ok(s) => s,
+            Err(_) => {
+                return Ok(Response::new(ProposeRevocationResponse {
+                    accepted: false,
+                    change_id: String::new(),
+                    message: "signature verification failed".to_string(),
+                }));
+            }
+        };
+        
+        if let Err(_) = proposer_vk.verify(canonical.as_bytes(), &sig) {
+            return Ok(Response::new(ProposeRevocationResponse {
+                accepted: false,
+                change_id: String::new(),
+                message: "signature verification failed".to_string(),
+            }));
+        }
+        
+        // Check if a pending revocation already exists
+        {
+            let mut pending = self.pending_revocation.write().await;
+            if pending.is_some() {
+                return Ok(Response::new(ProposeRevocationResponse {
+                    accepted: false,
+                    change_id: String::new(),
+                    message: "a revocation is already pending".to_string(),
+                }));
+            }
+            
+            let change_id = revocation_change_id(kind, &req.target_id, &req.reason, &req.proposer);
+            *pending = Some(PendingRevocation {
+                kind,
+                target_id: req.target_id,
+                reason: req.reason,
+                proposer: req.proposer,
+                canonical,
+                change_id: change_id.clone(),
+            });
+            
+            Ok(Response::new(ProposeRevocationResponse {
+                accepted: true,
+                change_id,
+                message: String::new(),
+            }))
+        }
+    }
+
+    async fn approve_revocation(
+        &self,
+        request: Request<ApproveRevocationRequest>,
+    ) -> Result<Response<ApproveRevocationResponse>, Status> {
+        let req = request.into_inner();
+        
+        // Check if approver is a registered admin
+        let approver_vk = match self.policy_admins.get(&req.approver) {
+            Some(vk) => vk,
+            None => {
+                return Ok(Response::new(ApproveRevocationResponse {
+                    applied: false,
+                    kind: String::new(),
+                    target_id: String::new(),
+                    effects: 0,
+                    propagation_ms: 0,
+                    bound_secs: 0,
+                    message: "unknown policy admin".to_string(),
+                }));
+            }
+        };
+        
+        // Check if a pending revocation exists and change_id matches
+        let (pending_kind, pending_target, pending_reason, pending_proposer, pending_canonical) = {
+            let pending = self.pending_revocation.read().await;
+            match pending.as_ref() {
+                Some(p) => {
+                    if p.change_id != req.change_id {
+                        return Ok(Response::new(ApproveRevocationResponse {
+                            applied: false,
+                            kind: String::new(),
+                            target_id: String::new(),
+                            effects: 0,
+                            propagation_ms: 0,
+                            bound_secs: 0,
+                            message: "change_id mismatch".to_string(),
+                        }));
+                    }
+                    (p.kind, p.target_id.clone(), p.reason.clone(), p.proposer.clone(), p.canonical.clone())
+                }
+                None => {
+                    return Ok(Response::new(ApproveRevocationResponse {
+                        applied: false,
+                        kind: String::new(),
+                        target_id: String::new(),
+                        effects: 0,
+                        propagation_ms: 0,
+                        bound_secs: 0,
+                        message: "no pending revocation".to_string(),
+                    }));
+                }
+            }
+        };
+        
+        // Dual control: approver != proposer
+        if req.approver == pending_proposer {
+            return Ok(Response::new(ApproveRevocationResponse {
+                applied: false,
+                kind: String::new(),
+                target_id: String::new(),
+                effects: 0,
+                propagation_ms: 0,
+                bound_secs: 0,
+                message: "dual control violation: approver cannot be the same as proposer".to_string(),
+            }));
+        }
+        
+        // Verify approver signature
+        let sig = match ml_dsa::Signature::<MlDsa65>::try_from(req.approver_signature.as_slice()) {
+            Ok(s) => s,
+            Err(_) => {
+                return Ok(Response::new(ApproveRevocationResponse {
+                    applied: false,
+                    kind: String::new(),
+                    target_id: String::new(),
+                    effects: 0,
+                    propagation_ms: 0,
+                    bound_secs: 0,
+                    message: "signature verification failed".to_string(),
+                }));
+            }
+        };
+        
+        if let Err(_) = approver_vk.verify(pending_canonical.as_bytes(), &sig) {
+            return Ok(Response::new(ApproveRevocationResponse {
+                applied: false,
+                kind: String::new(),
+                target_id: String::new(),
+                effects: 0,
+                propagation_ms: 0,
+                bound_secs: 0,
+                message: "signature verification failed".to_string(),
+            }));
+        }
+        
+        // Start propagation timer
+        let t0 = std::time::Instant::now();
+        
+        // Record the revocation FIRST (persist-first discipline)
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        // We'll measure propagation_ms after effects are applied, but we need to
+        // persist with it. The task says to measure from approval start to effects
+        // applied, then persist with that value. If persist fails after effects,
+        // return applied=true with a warning.
+        // Order: record → apply effects → measure propagation_ms, update stored entry.
+        // Actually, re-reading the task: "measure propagation_ms as elapsed from
+        // approval start until effects are applied; persist the entry AFTER effects
+        // with that measured value."
+        // So: apply effects first, measure, then persist.
+        
+        // Apply effects synchronously
+        let effects = match pending_kind {
+            RevocationKind::Session => {
+                let bus = self.bus.read().await;
+                let existed = bus.session_exists(&pending_target);
+                if existed {
+                    drop(bus); // Release read lock before write operations
+                    let bus = self.bus.write().await;
+                    bus.remove_session(&pending_target);
+                    self.firewall.evict_session(&pending_target);
+                    1
+                } else {
+                    0
+                }
+            }
+            RevocationKind::Key => {
+                let bus = self.bus.read().await;
+                let session_ids = bus.sessions_bound_to_key(&pending_target);
+                let count = session_ids.len() as u32;
+                drop(bus); // Release read lock
+                if count > 0 {
+                    let bus = self.bus.write().await;
+                    for sid in &session_ids {
+                        bus.remove_session(sid);
+                        self.firewall.evict_session(sid);
+                    }
+                }
+                count
+            }
+            RevocationKind::Certificate => {
+                match self.certificates.revoke_certificate(&pending_target, &pending_reason) {
+                    Ok(_) => 0,
+                    Err(e) => {
+                        // If already revoked, that's fine (idempotent). Other errors are failures.
+                        if e.contains("already revoked") {
+                            0
+                        } else {
+                            return Ok(Response::new(ApproveRevocationResponse {
+                                applied: false,
+                                kind: pending_kind.as_str().to_string(),
+                                target_id: pending_target,
+                                effects: 0,
+                                propagation_ms: 0,
+                                bound_secs: 0,
+                                message: format!("certificate revocation failed: {}", e),
+                            }));
+                        }
+                    }
+                }
+            }
+        };
+        
+        // Measure propagation time
+        let propagation_ms = t0.elapsed().as_millis() as u64;
+        
+        // Build the RevocationEntry
+        let entry = RevocationEntry {
+            kind: pending_kind,
+            target_id: pending_target.clone(),
+            reason: pending_reason.clone(),
+            proposer: pending_proposer.clone(),
+            approver: req.approver.clone(),
+            revoked_at: now_secs,
+            propagation_ms,
+        };
+        
+        // Persist the entry (if this fails, effects are already applied)
+        let persist_result = self.revocations.record(entry);
+        let mut response_message = String::new();
+        if let Err(e) = persist_result {
+            response_message = format!("revocation applied but persistence failed: {}", e);
+        }
+        
+        // Audit log the revocation
+        let audit_reason = format!("\"{}\" proposer={} approver={}", pending_reason, pending_proposer, req.approver);
+        if let Err(e) = self.vault.record_revocation_event(
+            pending_kind.as_str(),
+            &pending_target,
+            "REVOCATION_APPLIED",
+            &audit_reason,
+        ) {
+            if response_message.is_empty() {
+                response_message = format!("revocation applied; audit record failed: {}", e);
+            } else {
+                response_message = format!("{}; audit record failed: {}", response_message, e);
+            }
+        }
+        
+        // Clear pending
+        {
+            let mut pending = self.pending_revocation.write().await;
+            *pending = None;
+        }
+        
+        Ok(Response::new(ApproveRevocationResponse {
+            applied: true,
+            kind: pending_kind.as_str().to_string(),
+            target_id: pending_target,
+            effects,
+            propagation_ms,
+            bound_secs: self.config.revocation_bound_secs,
+            message: response_message,
+        }))
+    }
+
+    async fn revocation_status(
+        &self,
+        request: Request<RevocationStatusRequest>,
+    ) -> Result<Response<RevocationStatusResponse>, Status> {
+        let req = request.into_inner();
+        
+        // If kind or target is empty, return summary
+        if req.kind.is_empty() || req.target_id.is_empty() {
+            return Ok(Response::new(RevocationStatusResponse {
+                revoked: false,
+                kind: String::new(),
+                target_id: String::new(),
+                reason: String::new(),
+                proposer: String::new(),
+                approver: String::new(),
+                revoked_at: 0,
+                propagation_ms: 0,
+                bound_secs: self.config.revocation_bound_secs,
+                total_revoked: self.revocations.count() as u32,
+            }));
+        }
+        
+        // Parse kind
+        let kind = match RevocationKind::parse(&req.kind) {
+            Ok(k) => k,
+            Err(_) => {
+                return Ok(Response::new(RevocationStatusResponse {
+                    revoked: false,
+                    kind: String::new(),
+                    target_id: String::new(),
+                    reason: String::new(),
+                    proposer: String::new(),
+                    approver: String::new(),
+                    revoked_at: 0,
+                    propagation_ms: 0,
+                    bound_secs: self.config.revocation_bound_secs,
+                    total_revoked: self.revocations.count() as u32,
+                }));
+            }
+        };
+        
+        // Query specific target
+        match self.revocations.get(kind, &req.target_id) {
+            Some(entry) => Ok(Response::new(RevocationStatusResponse {
+                revoked: true,
+                kind: entry.kind.as_str().to_string(),
+                target_id: entry.target_id,
+                reason: entry.reason,
+                proposer: entry.proposer,
+                approver: entry.approver,
+                revoked_at: entry.revoked_at,
+                propagation_ms: entry.propagation_ms,
+                bound_secs: self.config.revocation_bound_secs,
+                total_revoked: self.revocations.count() as u32,
+            })),
+            None => Ok(Response::new(RevocationStatusResponse {
+                revoked: false,
+                kind: String::new(),
+                target_id: String::new(),
+                reason: String::new(),
+                proposer: String::new(),
+                approver: String::new(),
+                revoked_at: 0,
+                propagation_ms: 0,
+                bound_secs: self.config.revocation_bound_secs,
+                total_revoked: self.revocations.count() as u32,
+            })),
+        }
+    }
 }
 
 fn real_main() {
@@ -1115,6 +1562,7 @@ mod tests {
     use super::*;
     use guardian_meshd::proto::{ActionDescriptor, FirewalledRequest};
     use ml_dsa::SignatureEncoding;
+    use sha2::Digest;
 
     // WO-2: PF-12 enforces the exact field set the shipped client uses (webui/src/lib/gmClient.ts).
     // The client sends: actionType, context, target, metadata (all camelCase).
@@ -2554,5 +3002,756 @@ mod tests {
         
         assert!(!resp.accepted);
         assert_eq!(resp.message, "unknown policy admin");
+    }
+
+    // ── WO-12 revocation tests ──
+
+    #[tokio::test]
+    async fn revocation_propose_by_unregistered_refused() {
+        let (service, _dir, _, _) = test_service_with_admins();
+        let (sk_eve, _) = generate_keypair();
+        
+        let canonical = canonical_revocation_string(
+            RevocationKind::Session,
+            "abc123def456abc123def456abc123de",
+            "test reason",
+            "eve",
+        );
+        let sig = sk_eve.sign(canonical.as_bytes());
+        
+        let resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            kind: "SESSION".to_string(),
+            target_id: "abc123def456abc123def456abc123de".to_string(),
+            reason: "test reason".to_string(),
+            proposer: "eve".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!resp.accepted);
+        assert_eq!(resp.message, "unknown policy admin");
+    }
+
+    #[tokio::test]
+    async fn revocation_propose_bad_signature_refused() {
+        let (service, _dir, _, _) = test_service_with_admins();
+        let (sk_wrong, _) = generate_keypair();
+        
+        let canonical = canonical_revocation_string(
+            RevocationKind::Session,
+            "abc123def456abc123def456abc123de",
+            "test reason",
+            "alice",
+        );
+        let sig = sk_wrong.sign(canonical.as_bytes());
+        
+        let resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            kind: "SESSION".to_string(),
+            target_id: "abc123def456abc123def456abc123de".to_string(),
+            reason: "test reason".to_string(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!resp.accepted);
+        assert_eq!(resp.message, "signature verification failed");
+    }
+
+    #[tokio::test]
+    async fn revocation_no_admins_configured_propose_refused() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut config = Config::default();
+        config.workspace_dir = dir.path().to_string_lossy().into_owned();
+        config.output_dir = dir.path().join("output").to_string_lossy().into_owned();
+        config.ensure_dirs().unwrap();
+        
+        let service = GuardianMeshService::new(config).unwrap();
+        
+        let (sk, _) = generate_keypair();
+        let canonical = canonical_revocation_string(
+            RevocationKind::Session,
+            "abc123def456abc123def456abc123de",
+            "test reason",
+            "alice",
+        );
+        let sig = sk.sign(canonical.as_bytes());
+        
+        let resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            kind: "SESSION".to_string(),
+            target_id: "abc123def456abc123def456abc123de".to_string(),
+            reason: "test reason".to_string(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!resp.accepted);
+        assert_eq!(resp.message, "unknown policy admin");
+        
+        // RevocationStatus should work even without admins
+        let status_resp = service.revocation_status(Request::new(RevocationStatusRequest {
+            kind: String::new(),
+            target_id: String::new(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert_eq!(status_resp.total_revoked, 0);
+    }
+
+    #[tokio::test]
+    async fn revocation_session_end_to_end() {
+        let (service, _dir, sk_alice, sk_bob) = test_service_with_admins();
+        
+        // Handshake and create a session
+        let (client_sk, client_vk) = generate_keypair();
+        let hs_resp = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test".to_string(),
+            source_public_key: client_vk.encode().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        let session_id = hs_resp.session_id.clone();
+        
+        // Session should work (Evaluate would ALLOW if properly constructed)
+        // For this test, just verify session exists
+        let bus = service.bus.read().await;
+        assert!(bus.session_exists(&session_id));
+        drop(bus);
+        
+        // Alice proposes SESSION revocation
+        let canonical = canonical_revocation_string(
+            RevocationKind::Session,
+            &session_id,
+            "compromised session",
+            "alice",
+        );
+        let sig_alice = sk_alice.sign(canonical.as_bytes());
+        
+        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            kind: "SESSION".to_string(),
+            target_id: session_id.clone(),
+            reason: "compromised session".to_string(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig_alice.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(prop_resp.accepted);
+        let change_id = prop_resp.change_id.clone();
+        
+        // Bob approves
+        let sig_bob = sk_bob.sign(canonical.as_bytes());
+        
+        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+            change_id,
+            approver: "bob".to_string(),
+            approver_signature: sig_bob.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(approve_resp.applied);
+        assert_eq!(approve_resp.kind, "SESSION");
+        assert_eq!(approve_resp.target_id, session_id);
+        assert_eq!(approve_resp.effects, 1);
+        assert!(approve_resp.propagation_ms < approve_resp.bound_secs * 1000);
+        
+        // Session should no longer exist
+        let bus = service.bus.read().await;
+        assert!(!bus.session_exists(&session_id));
+        drop(bus);
+        
+        // RevocationStatus should show it
+        let status_resp = service.revocation_status(Request::new(RevocationStatusRequest {
+            kind: "SESSION".to_string(),
+            target_id: session_id.clone(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(status_resp.revoked);
+        assert_eq!(status_resp.kind, "SESSION");
+        assert_eq!(status_resp.target_id, session_id);
+        assert_eq!(status_resp.reason, "compromised session");
+        assert_eq!(status_resp.proposer, "alice");
+        assert_eq!(status_resp.approver, "bob");
+        assert_eq!(status_resp.total_revoked, 1);
+    }
+
+    #[tokio::test]
+    async fn revocation_same_principal_approval_refused() {
+        let (service, _dir, sk_alice, _) = test_service_with_admins();
+        
+        let session_id = "abc123def456abc123def456abc123de";
+        let canonical = canonical_revocation_string(
+            RevocationKind::Session,
+            session_id,
+            "test reason",
+            "alice",
+        );
+        let sig = sk_alice.sign(canonical.as_bytes());
+        
+        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            kind: "SESSION".to_string(),
+            target_id: session_id.to_string(),
+            reason: "test reason".to_string(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(prop_resp.accepted);
+        let change_id = prop_resp.change_id;
+        
+        // Alice tries to approve her own proposal
+        let sig_approve = sk_alice.sign(canonical.as_bytes());
+        
+        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+            change_id,
+            approver: "alice".to_string(),
+            approver_signature: sig_approve.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!approve_resp.applied);
+        assert!(approve_resp.message.contains("dual control"));
+    }
+
+    #[tokio::test]
+    async fn revocation_approve_bad_signature_pending_survives() {
+        let (service, _dir, sk_alice, _) = test_service_with_admins();
+        let (sk_wrong, _) = generate_keypair();
+        
+        let session_id = "abc123def456abc123def456abc123de";
+        let canonical = canonical_revocation_string(
+            RevocationKind::Session,
+            session_id,
+            "test reason",
+            "alice",
+        );
+        let sig = sk_alice.sign(canonical.as_bytes());
+        
+        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            kind: "SESSION".to_string(),
+            target_id: session_id.to_string(),
+            reason: "test reason".to_string(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(prop_resp.accepted);
+        let change_id = prop_resp.change_id.clone();
+        
+        // Wrong signature
+        let sig_wrong = sk_wrong.sign(canonical.as_bytes());
+        
+        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+            change_id: change_id.clone(),
+            approver: "bob".to_string(),
+            approver_signature: sig_wrong.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!approve_resp.applied);
+        assert_eq!(approve_resp.message, "signature verification failed");
+        
+        // Pending should still exist (another proposal should fail)
+        let canonical2 = canonical_revocation_string(
+            RevocationKind::Session,
+            "deadbeefdeadbeefdeadbeefdeadbeef",
+            "another",
+            "alice",
+        );
+        let sig2 = sk_alice.sign(canonical2.as_bytes());
+        
+        let prop2_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            kind: "SESSION".to_string(),
+            target_id: "deadbeefdeadbeefdeadbeefdeadbeef".to_string(),
+            reason: "another".to_string(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig2.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!prop2_resp.accepted);
+        assert_eq!(prop2_resp.message, "a revocation is already pending");
+    }
+
+    #[tokio::test]
+    async fn revocation_second_proposal_while_pending_refused() {
+        let (service, _dir, sk_alice, _) = test_service_with_admins();
+        
+        let session_id = "abc123def456abc123def456abc123de";
+        let canonical = canonical_revocation_string(
+            RevocationKind::Session,
+            session_id,
+            "test reason",
+            "alice",
+        );
+        let sig = sk_alice.sign(canonical.as_bytes());
+        
+        let prop1 = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            kind: "SESSION".to_string(),
+            target_id: session_id.to_string(),
+            reason: "test reason".to_string(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(prop1.accepted);
+        
+        // Try to propose another
+        let session_id2 = "deadbeefdeadbeefdeadbeefdeadbeef";
+        let canonical2 = canonical_revocation_string(
+            RevocationKind::Session,
+            session_id2,
+            "another reason",
+            "alice",
+        );
+        let sig2 = sk_alice.sign(canonical2.as_bytes());
+        
+        let prop2 = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            kind: "SESSION".to_string(),
+            target_id: session_id2.to_string(),
+            reason: "another reason".to_string(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig2.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(!prop2.accepted);
+        assert_eq!(prop2.message, "a revocation is already pending");
+    }
+
+    #[tokio::test]
+    async fn revocation_key_end_to_end() {
+        let (service, _dir, sk_alice, sk_bob) = test_service_with_admins();
+        
+        // Create a client keypair and handshake
+        let (client_sk, client_vk) = generate_keypair();
+        let client_key_bytes = client_vk.encode().to_vec();
+        let key_fingerprint = hex::encode(sha2::Sha256::digest(&client_key_bytes));
+        
+        let hs_resp = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test".to_string(),
+            source_public_key: client_key_bytes.clone(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        let session_id = hs_resp.session_id.clone();
+        
+        // Verify session exists
+        let bus = service.bus.read().await;
+        assert!(bus.session_exists(&session_id));
+        drop(bus);
+        
+        // Propose KEY revocation
+        let canonical = canonical_revocation_string(
+            RevocationKind::Key,
+            &key_fingerprint,
+            "compromised key",
+            "alice",
+        );
+        let sig_alice = sk_alice.sign(canonical.as_bytes());
+        
+        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            kind: "KEY".to_string(),
+            target_id: key_fingerprint.clone(),
+            reason: "compromised key".to_string(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig_alice.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(prop_resp.accepted);
+        
+        // Bob approves
+        let sig_bob = sk_bob.sign(canonical.as_bytes());
+        
+        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+            change_id: prop_resp.change_id,
+            approver: "bob".to_string(),
+            approver_signature: sig_bob.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(approve_resp.applied);
+        assert_eq!(approve_resp.kind, "KEY");
+        assert_eq!(approve_resp.target_id, key_fingerprint);
+        assert_eq!(approve_resp.effects, 1); // The one session we created
+        
+        // Session should be dropped
+        let bus = service.bus.read().await;
+        assert!(!bus.session_exists(&session_id));
+        drop(bus);
+        
+        // New handshake with the same key should be refused
+        let hs_err = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test".to_string(),
+            source_public_key: client_key_bytes.clone(),
+        }))
+        .await;
+        
+        assert!(hs_err.is_err());
+        let err = hs_err.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+        assert!(err.message().contains("revoked"));
+        
+        // A different key should still work
+        let (_, different_vk) = generate_keypair();
+        let hs_ok = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test".to_string(),
+            source_public_key: different_vk.encode().to_vec(),
+        }))
+        .await;
+        
+        assert!(hs_ok.is_ok());
+    }
+
+    #[tokio::test]
+    async fn revocation_certificate_end_to_end() {
+        let (service, _dir, sk_alice, sk_bob) = test_service_with_admins();
+        
+        // Issue a certificate
+        let evidence = b"test evidence".to_vec();
+        let evidence_hash = hex::encode(sha2::Sha256::digest(&evidence));
+        
+        let issue_resp = service.issue_certificate(Request::new(IssueCertificateRequest {
+            product: "test-product".to_string(),
+            version: "1.0.0".to_string(),
+            verdict: "PASS".to_string(),
+            evidence: evidence.clone(),
+            evidence_hash: evidence_hash.clone(),
+            evidence_scope: "working-tree".to_string(),
+            tests: Some(guardian_meshd::proto::TestCounts {
+                passed: 10,
+                failed: 0,
+                total: 10,
+            }),
+            policy: "v1".to_string(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(issue_resp.issued);
+        let serial = issue_resp.serial.clone();
+        
+        // Propose CERTIFICATE revocation
+        let canonical = canonical_revocation_string(
+            RevocationKind::Certificate,
+            &serial,
+            "fraudulent certificate",
+            "alice",
+        );
+        let sig_alice = sk_alice.sign(canonical.as_bytes());
+        
+        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            kind: "CERTIFICATE".to_string(),
+            target_id: serial.clone(),
+            reason: "fraudulent certificate".to_string(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig_alice.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(prop_resp.accepted);
+        
+        // Bob approves
+        let sig_bob = sk_bob.sign(canonical.as_bytes());
+        
+        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+            change_id: prop_resp.change_id,
+            approver: "bob".to_string(),
+            approver_signature: sig_bob.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(approve_resp.applied);
+        assert_eq!(approve_resp.kind, "CERTIFICATE");
+        assert_eq!(approve_resp.effects, 0); // Certificates don't have "effects" count
+        
+        // Certificate status should be REVOKED
+        let cert_status = service.certificate_status(Request::new(CertificateStatusRequest {
+            serial: serial.clone(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert_eq!(cert_status.status(), ProtoStatus::Revoked);
+    }
+
+    #[tokio::test]
+    async fn revocation_legacy_revoke_refuses_when_admins_configured() {
+        let (service, _dir, _, _) = test_service_with_admins();
+        
+        // Issue a certificate first
+        let evidence = b"test".to_vec();
+        let evidence_hash = hex::encode(sha2::Sha256::digest(&evidence));
+        
+        let issue_resp = service.issue_certificate(Request::new(IssueCertificateRequest {
+            product: "test".to_string(),
+            version: "1.0".to_string(),
+            verdict: "PASS".to_string(),
+            evidence,
+            evidence_hash,
+            evidence_scope: "working-tree".to_string(),
+            tests: Some(guardian_meshd::proto::TestCounts {
+                passed: 5,
+                failed: 0,
+                total: 5,
+            }),
+            policy: "v1".to_string(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        let serial = issue_resp.serial;
+        
+        // Legacy RevokeCertificate should refuse
+        let revoke_err = service.revoke_certificate(Request::new(RevokeCertificateRequest {
+            serial: serial.clone(),
+            reason: "test".to_string(),
+        }))
+        .await;
+        
+        assert!(revoke_err.is_err());
+        let err = revoke_err.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+        assert!(err.message().contains("dual-control"));
+        
+        // Without admins, it should work
+        let dir2 = tempfile::TempDir::new().unwrap();
+        let mut config2 = Config::default();
+        config2.workspace_dir = dir2.path().to_string_lossy().into_owned();
+        config2.output_dir = dir2.path().join("output").to_string_lossy().into_owned();
+        config2.ensure_dirs().unwrap();
+        
+        let service2 = GuardianMeshService::new(config2).unwrap();
+        
+        // Issue a certificate
+        let evidence = b"test2".to_vec();
+        let evidence_hash = hex::encode(sha2::Sha256::digest(&evidence));
+        
+        let issue_resp2 = service2.issue_certificate(Request::new(IssueCertificateRequest {
+            product: "test2".to_string(),
+            version: "1.0".to_string(),
+            verdict: "PASS".to_string(),
+            evidence,
+            evidence_hash,
+            evidence_scope: "working-tree".to_string(),
+            tests: Some(guardian_meshd::proto::TestCounts {
+                passed: 5,
+                failed: 0,
+                total: 5,
+            }),
+            policy: "v1".to_string(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        let serial2 = issue_resp2.serial;
+        
+        // Should work
+        let revoke_ok = service2.revoke_certificate(Request::new(RevokeCertificateRequest {
+            serial: serial2,
+            reason: "test".to_string(),
+        }))
+        .await;
+        
+        assert!(revoke_ok.is_ok());
+    }
+
+    #[tokio::test]
+    async fn revocation_persistence_survives_restart() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let admin_keys_dir = dir.path().join("admin_keys");
+        std::fs::create_dir_all(&admin_keys_dir).unwrap();
+        
+        let (sk_alice, vk_alice) = generate_keypair();
+        let (sk_bob, vk_bob) = generate_keypair();
+        
+        std::fs::write(admin_keys_dir.join("alice.vk"), vk_alice.encode().to_vec()).unwrap();
+        std::fs::write(admin_keys_dir.join("bob.vk"), vk_bob.encode().to_vec()).unwrap();
+        
+        let (client_sk, client_vk) = generate_keypair();
+        let client_key_bytes = client_vk.encode().to_vec();
+        let key_fingerprint = hex::encode(sha2::Sha256::digest(&client_key_bytes));
+        
+        // First service: apply a revocation
+        {
+            let mut config = Config::default();
+            config.workspace_dir = dir.path().to_string_lossy().into_owned();
+            config.output_dir = dir.path().join("output").to_string_lossy().into_owned();
+            config.policy_admin_keys_dir = Some(admin_keys_dir.to_string_lossy().into_owned());
+            config.ensure_dirs().unwrap();
+            
+            let service = GuardianMeshService::new(config).unwrap();
+            
+            let canonical = canonical_revocation_string(
+                RevocationKind::Key,
+                &key_fingerprint,
+                "persistent test",
+                "alice",
+            );
+            let sig_alice = sk_alice.sign(canonical.as_bytes());
+            let sig_bob = sk_bob.sign(canonical.as_bytes());
+            
+            let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+                kind: "KEY".to_string(),
+                target_id: key_fingerprint.clone(),
+                reason: "persistent test".to_string(),
+                proposer: "alice".to_string(),
+                proposer_signature: sig_alice.to_bytes().to_vec(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+            
+            let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+                change_id: prop_resp.change_id,
+                approver: "bob".to_string(),
+                approver_signature: sig_bob.to_bytes().to_vec(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+            
+            assert!(approve_resp.applied);
+        }
+        
+        // Second service: verify persistence
+        {
+            let mut config = Config::default();
+            config.workspace_dir = dir.path().to_string_lossy().into_owned();
+            config.output_dir = dir.path().join("output").to_string_lossy().into_owned();
+            config.policy_admin_keys_dir = Some(admin_keys_dir.to_string_lossy().into_owned());
+            config.ensure_dirs().unwrap();
+            
+            let service2 = GuardianMeshService::new(config).unwrap();
+            
+            // Status should still show revoked
+            let status_resp = service2.revocation_status(Request::new(RevocationStatusRequest {
+                kind: "KEY".to_string(),
+                target_id: key_fingerprint.clone(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+            
+            assert!(status_resp.revoked);
+            assert_eq!(status_resp.reason, "persistent test");
+            
+            // Handshake with revoked key should still fail
+            let hs_err = service2.handshake(Request::new(HandshakeRequest {
+                source_enclave: "test".to_string(),
+                source_public_key: client_key_bytes,
+            }))
+            .await;
+            
+            assert!(hs_err.is_err());
+            assert_eq!(hs_err.unwrap_err().code(), tonic::Code::PermissionDenied);
+        }
+    }
+
+    #[tokio::test]
+    async fn revocation_audit_event_recorded() {
+        let (service, _dir, sk_alice, sk_bob) = test_service_with_admins();
+        
+        let session_id = "abc123def456abc123def456abc123de";
+        let canonical = canonical_revocation_string(
+            RevocationKind::Session,
+            session_id,
+            "audit test",
+            "alice",
+        );
+        
+        let sig_alice = sk_alice.sign(canonical.as_bytes());
+        let sig_bob = sk_bob.sign(canonical.as_bytes());
+        
+        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            kind: "SESSION".to_string(),
+            target_id: session_id.to_string(),
+            reason: "audit test".to_string(),
+            proposer: "alice".to_string(),
+            proposer_signature: sig_alice.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+            change_id: prop_resp.change_id,
+            approver: "bob".to_string(),
+            approver_signature: sig_bob.to_bytes().to_vec(),
+        }))
+        .await
+        .unwrap()
+        .into_inner();
+        
+        assert!(approve_resp.applied);
+        
+        // Read audit log
+        let audit_resp = service.read_audit_log(Request::new(ReadAuditLogRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        
+        // Find the revocation entry
+        let revocation_entry = audit_resp.entries.iter().find(|e| {
+            e.action_id == hex::encode("REVOCATION".as_bytes())
+        });
+        
+        assert!(revocation_entry.is_some());
+        let entry = revocation_entry.unwrap();
+        assert_eq!(entry.verdict, "REVOCATION_APPLIED");
+        assert!(entry.reason.contains("kind=SESSION"));
+        assert!(entry.reason.contains(&format!("target={}", session_id)));
+        assert!(entry.reason.contains("proposer=alice"));
+        assert!(entry.reason.contains("approver=bob"));
     }
 }

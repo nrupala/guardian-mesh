@@ -159,6 +159,36 @@ impl HandshakeBus {
         let mut sessions = self.sessions.lock().unwrap();
         sessions.remove(session_id);
     }
+
+    /// Return the IDs of all unexpired sessions bound to a given ML-DSA-65
+    /// verifying key (by fingerprint). Only sessions with non-empty keys
+    /// are considered. Used by key revocation to find sessions to drop.
+    pub fn sessions_bound_to_key(&self, fingerprint: &str) -> Vec<String> {
+        use sha2::Digest;
+        let sessions = self.sessions.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        sessions
+            .iter()
+            .filter(|(_, s)| {
+                // Only unexpired sessions
+                if now.saturating_sub(s.created_at) >= SESSION_TTL_SECS {
+                    return false;
+                }
+                // Only sessions with a bound key
+                if s.source_public_key.is_empty() {
+                    return false;
+                }
+                // Compute the key fingerprint (hex SHA-256 of the raw key bytes)
+                let key_fp = hex::encode(Sha256::digest(&s.source_public_key));
+                key_fp == fingerprint
+            })
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -260,5 +290,41 @@ mod tests {
         assert_eq!(evicted.len(), 1);
         assert_eq!(evicted[0], sid);
         assert!(!bus.session_exists(&sid));
+    }
+
+    #[test]
+    fn sessions_bound_to_key_returns_matching_unexpired_sessions() {
+        use sha2::Digest;
+        let bus = HandshakeBus::new(b"test-secret");
+        
+        // Create three sessions with different keys
+        let key_a = vec![1u8; 1952];
+        let key_b = vec![2u8; 1952];
+        let fp_a = hex::encode(Sha256::digest(&key_a));
+        let fp_b = hex::encode(Sha256::digest(&key_b));
+        
+        let session_a1 = bus.create_session_full("enclave1", &key_a);
+        let session_a2 = bus.create_session_full("enclave2", &key_a);
+        let session_b = bus.create_session_full("enclave3", &key_b);
+        let session_no_key = bus.create_session_full("enclave4", &[]);
+        
+        // sessions_bound_to_key should find only the two sessions with key_a
+        let bound = bus.sessions_bound_to_key(&fp_a);
+        assert_eq!(bound.len(), 2);
+        assert!(bound.contains(&session_a1.session_id));
+        assert!(bound.contains(&session_a2.session_id));
+        
+        // sessions_bound_to_key should find only the one session with key_b
+        let bound_b = bus.sessions_bound_to_key(&fp_b);
+        assert_eq!(bound_b.len(), 1);
+        assert!(bound_b.contains(&session_b.session_id));
+        
+        // No sessions bound to a non-existent key
+        let bound_none = bus.sessions_bound_to_key(&"0".repeat(64));
+        assert_eq!(bound_none.len(), 0);
+        
+        // session_no_key should not appear in any result
+        assert!(!bound.contains(&session_no_key.session_id));
+        assert!(!bound_b.contains(&session_no_key.session_id));
     }
 }

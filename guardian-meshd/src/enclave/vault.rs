@@ -265,6 +265,71 @@ impl VaultEnclave {
         Ok(())
     }
 
+    /// Record a revocation event in the hash-chained audit log
+    pub fn record_revocation_event(&self, kind: &str, target_id: &str, event: &str, reason: &str) -> Result<(), String> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // action_id = hex of "REVOCATION"
+        let action_id = hex::encode("REVOCATION".as_bytes());
+        
+        // verdict = the event string (REVOCATION_APPLIED)
+        let verdict = event.to_string();
+        
+        // reason carries kind, target, proposer and approver
+        let full_reason = format!("kind={} target={} {}", kind, target_id, reason);
+        
+        let chain_str = "Sentinel→Gatekeeper→Witness→Arbiter→Vault";
+        
+        // CRITICAL SECTION: Hold lock for entire chain append to prevent concurrent writers
+        // from interleaving on the same predecessor hash (fixes GMSI-69 / issue #50).
+        // Predecessor read + digest computation + persist + predecessor update must be atomic.
+        let mut chain_lock = self.last_chain_hash.lock().unwrap();
+        
+        // Hash chain: hash(prev_hash || timestamp || action_id || verdict || enclave_chain || reason)
+        let prev_hash = chain_lock.clone();
+        let mut hasher = Sha256::new();
+        hasher.update(prev_hash.as_bytes());
+        hasher.update(now.to_le_bytes());
+        hasher.update(action_id.as_bytes());
+        hasher.update(verdict.as_bytes());
+        hasher.update(chain_str.as_bytes());
+        hasher.update(full_reason.as_bytes());
+        let digest = hex::encode(hasher.finalize());
+
+        let entry = AuditEntry {
+            action_id: action_id.clone(),
+            verdict: verdict.clone(),
+            reason: full_reason.clone(),
+            enclave_chain: chain_str.into(),
+            timestamp: now,
+            digest: digest.clone(),
+        };
+
+        // Persist to disk while holding the chain lock. On failure
+        // the chain hash is NOT advanced and no trail entry is added:
+        // the append simply did not happen.
+        self.persist_entry(&entry, action_id, verdict, full_reason)
+            .map_err(|e| format!("Failed to persist revocation event: {}", e))?;
+
+        // Update the last chain hash before releasing the lock
+        *chain_lock = digest.clone();
+
+        // Update the in-memory audit trail inside the same critical
+        // section, so trail order always matches file/chain order.
+        {
+            let mut trail = self.audit_trail.lock().unwrap();
+            if trail.len() >= self.max_entries {
+                trail.pop_front();
+            }
+            trail.push_back(entry);
+        }
+
+        Ok(())
+    }
+
     fn persist_entry(&self, entry: &AuditEntry, action_id: String, verdict: String, reason: String) -> std::io::Result<()> {
         let today = chrono_now_date();
         let file_path = self.audit_path.join(format!("audit_{}.jsonl", today));

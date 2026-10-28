@@ -17,6 +17,7 @@ pub struct Config {
     pub policy_throttle_rate: usize,
     pub policy_escalate_actions: Vec<String>,
     pub policy_admin_keys_dir: Option<String>,
+    pub revocation_bound_secs: u64,
 }
 
 impl Config {
@@ -34,6 +35,10 @@ impl Config {
 
     pub fn policy_dir(&self) -> PathBuf {
         Path::new(&self.workspace_dir).join("policy")
+    }
+
+    pub fn revocation_dir(&self) -> PathBuf {
+        Path::new(&self.workspace_dir).join("revocation")
     }
 
     pub fn project_output_dir(&self, project_name: &str) -> PathBuf {
@@ -63,6 +68,7 @@ impl Config {
         std::fs::create_dir_all(self.sessions_dir())?;
         std::fs::create_dir_all(self.keys_dir())?;
         std::fs::create_dir_all(self.policy_dir())?;
+        std::fs::create_dir_all(self.revocation_dir())?;
         Ok(())
     }
 
@@ -118,6 +124,12 @@ impl Default for Config {
         
         let policy_admin_keys_dir = std::env::var("GUARDIAN_MESH_POLICY_ADMIN_KEYS_DIR").ok();
         
+        let revocation_bound_secs = std::env::var("GUARDIAN_MESH_REVOCATION_BOUND_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(60);
+        let revocation_bound_secs = if revocation_bound_secs == 0 { 60 } else { revocation_bound_secs };
+        
         Self {
             bind_addr: std::env::var("GUARDIAN_MESH_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".into()),
             bind_port: std::env::var("GUARDIAN_MESH_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or_else(find_free_port),
@@ -132,6 +144,7 @@ impl Default for Config {
             policy_throttle_rate,
             policy_escalate_actions,
             policy_admin_keys_dir,
+            revocation_bound_secs,
         }
     }
 }
