@@ -24,8 +24,8 @@ export const RELEASES: Release[] = [
       "AuthenticatorStatus RPC and WebUI Boundary Authenticators summary",
       "Not in v1: SPIFFE trust-bundle chain verification and mTLS transport termination"
     ],
-    gateVerdict: "PENDING",
-    tests: "PENDING",
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-10-28",
+    tests: "185 Rust tests passing (128 library + 57 binary) · WebUI build + lint · wire proof 24/24",
     status: "Release candidate"
   },
   {

@@ -28,7 +28,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Wright-verified counts and wire proof are recorded in the gate verdict section below (the lane's original section misstated its own test state; see the gate record).
 
 ### Gate Verdict
-Gate verdict: PENDING — recorded by Wright.
+**PASS WITH FINDINGS** — Release Gate, 2026-10-28 (verdict record: `~/workspace/release-gate-runs/guardian-mesh-wo14-2026-10-28/`). Wright-verified on the gated tree: Rust tests **185/185** (128 library + 57 binary; baseline 160 at v0.11.0), WebUI build and lint pass (13-version drift-guard parity), wire proof through the shipped TS client **24/24** (AuthenticatorStatus, default + attested handshakes, refusal legs, PGP policy and revocation flows, required-SPIFFE mode). Findings: F1 block-buffer advisory dispositioned (no custom compress callbacks; no in-ecosystem fix; digest-0.11 migration fodder); F2 the lane's shipped commit did not compile its bin tests and its authenticators tests failed — the lane's result claims were not used as evidence; F3 three production defects found and fixed in Wright's carry (civil-date math ≈93 days off, OpenPGP EdDSA signs the digest bytes, signature R MPI form); F4 gmClient handshake caller updated for the new fields. Spec inputs filed: GMSI-93, GMSI-94, GMSI-95.
 
 ## [0.11.0] - 2026-10-27
 
