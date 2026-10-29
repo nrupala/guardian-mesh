@@ -547,5 +547,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-29T01:08:46-06:00",
     "message": "Merge pull request #73 from nrupala/wright/wo14-boundary-authenticators"
+  },
+  {
+    "release": 66,
+    "tag": "release/v66",
+    "previous_tag": "release/v65",
+    "sha": "4ebc25bc1a05e64020c70a6f75fb4728274f5539",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-29T01:28:03-06:00",
+    "message": "Merge pull request #74 from nrupala/wright/ledger-wo14-gmsi93-95-20261028"
   }
 ]
