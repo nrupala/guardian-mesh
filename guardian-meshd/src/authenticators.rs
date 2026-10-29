@@ -9,6 +9,7 @@
 
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use sha2::{Digest, Sha256, Sha512};
+use sha1::Sha1;
 
 /// Authentication methods supported by Guardian Mesh.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -298,7 +299,7 @@ pub fn spiffe_trust_domain(spiffe_id: &str) -> Result<String, String> {
 // ============================================================================
 
 /// Parse OpenPGP public key from ASCII-armored data.
-/// v1: Ed25519 only. Fingerprint uses SHA-256 fallback (sha1 crate not in dep graph).
+/// v1: Ed25519 only. Fingerprint is the RFC 4880 v4 fingerprint (SHA-1).
 pub fn parse_pgp_public_key(armored: &str) -> Result<PgpKey, String> {
     let data = dearmor(armored, "PUBLIC KEY BLOCK")?;
     let mut packets = PacketIter::new(&data);
@@ -398,10 +399,13 @@ fn parse_public_key_packet(body: &[u8]) -> Result<PgpKey, String> {
     public_key.copy_from_slice(&mpi_bytes[1..33]);
     pos += byte_len;
 
-    // Fingerprint: SHA-256 fallback (sha1 crate not in dependency graph)
-    // Label it as a SHA-256-based substitute per WO-14 dependency rules.
-    let sha256 = Sha256::digest(body);
-    let fingerprint = format!("SHA256-{}", hex_encode(&sha256[..]));
+    // Fingerprint: RFC 4880 v4 — SHA-1 over 0x99 || u16be(body len) || body.
+    let mut fp_input = Vec::with_capacity(body.len() + 3);
+    fp_input.push(0x99);
+    fp_input.extend_from_slice(&(body.len() as u16).to_be_bytes());
+    fp_input.extend_from_slice(body);
+    let digest = <Sha1 as sha1::Digest>::digest(&fp_input);
+    let fingerprint = hex_encode(&digest[..]);
 
     Ok(PgpKey {
         fingerprint,
@@ -463,11 +467,19 @@ fn verify_signature_packet(key: &PgpKey, body: &[u8], data: &[u8]) -> Result<(),
     let r_bit_len = read_u16_be(body, &mut pos)? as usize;
     let r_byte_len = (r_bit_len + 7) / 8;
     let r_mpi = body.get(pos..pos + r_byte_len).ok_or("truncated R MPI")?;
-    if r_mpi.len() != 33 || r_mpi[0] != 0x40 {
+    // OpenPGP EdDSA signature R is the 32-byte compressed point as a bare
+    // MPI (GnuPG emits 255 bits = 32 bytes, no 0x40 prefix — that prefix is
+    // the EC point format used in KEY packets). Accept both encodings.
+    let mut r_bytes = [0u8; 32];
+    if r_mpi.len() == 33 && r_mpi[0] == 0x40 {
+        r_bytes.copy_from_slice(&r_mpi[1..33]);
+    } else if r_mpi.len() <= 32 {
+        // Bare MPI: leading zero bytes are stripped by MPI encoding, so a
+        // point whose first byte(s) are zero arrives shorter — left-pad.
+        r_bytes[32 - r_mpi.len()..].copy_from_slice(r_mpi);
+    } else {
         return Err("malformed R point MPI".into());
     }
-    let mut r_bytes = [0u8; 32];
-    r_bytes.copy_from_slice(&r_mpi[1..33]);
     pos += r_byte_len;
 
     // S MPI (big-endian integer → last 32 bytes)
@@ -506,12 +518,14 @@ fn verify_signature_packet(key: &PgpKey, body: &[u8], data: &[u8]) -> Result<(),
         return Err("signature left-2 hash bytes mismatch".into());
     }
 
-    // Ed25519 verification over the full hashed message
+    // OpenPGP EdDSA quirk (RFC 4880bis §12.8): Ed25519 signs the DIGEST
+    // bytes, not the original message — the digest computed above is the
+    // exact input to the Ed25519 verification.
     let vk = VerifyingKey::from_bytes(&key.public_key)
         .map_err(|e| format!("invalid Ed25519 public key: {}", e))?;
     let sig = Signature::from_bytes(&sig_bytes);
 
-    vk.verify(&hashed_message, &sig)
+    vk.verify(&digest, &sig)
         .map_err(|_| "OpenPGP signature verification failed".to_string())
 }
 
@@ -716,14 +730,15 @@ fn read_time(data: &[u8], cursor: &mut usize) -> Result<u64, String> {
 }
 
 fn civil_to_unix(year: u32, month: u32, day: u32, hour: u32, minute: u32, second: u32) -> u64 {
-    // Days from civil calculation (simplified, no chrono)
-    let y = if month <= 2 { year - 1 } else { year };
-    let m = if month <= 2 { month + 12 } else { month };
-    let days_since_epoch = (365 * y + y / 4 - y / 100 + y / 400 + (153 * m + 2) / 5 + day) as i64
-        - 719468; // Adjust for Unix epoch 1970-01-01
-
-    let seconds = days_since_epoch * 86400 + (hour as i64) * 3600 + (minute as i64) * 60 + (second as i64);
-    seconds as u64
+    // Days from civil (Howard Hinnant's algorithm, public domain formula).
+    let y = if month <= 2 { year as i64 - 1 } else { year as i64 };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400; // [0, 399]
+    let mp = if month > 2 { month as i64 - 3 } else { month as i64 + 9 }; // [0, 11]
+    let doy = (153 * mp + 2) / 5 + day as i64 - 1; // [0, 365]
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+    let days = era * 146097 + doe - 719468;
+    (days * 86400 + hour as i64 * 3600 + minute as i64 * 60 + second as i64) as u64
 }
 
 // ============================================================================
@@ -920,19 +935,23 @@ mod tests {
     }
 
     fn encode_utctime(unix_secs: u64) -> Vec<u8> {
-        // Simplified: assume 2000s
-        let days_since_epoch = (unix_secs / 86400) as i64;
+        // Civil from days (Howard Hinnant's algorithm, inverse of civil_to_unix).
+        let days = (unix_secs / 86400) as i64;
         let secs_today = (unix_secs % 86400) as u32;
         let hour = secs_today / 3600;
         let minute = (secs_today % 3600) / 60;
         let second = secs_today % 60;
-
-        // Approximate civil date (good enough for tests)
-        let year = 1970 + (days_since_epoch / 365) as u32;
-        let month = 1u32;
-        let day = 1u32;
-
-        let yy = year % 100;
+        let z = days + 719468;
+        let era = if z >= 0 { z } else { z - 146096 } / 146097;
+        let doe = z - era * 146097; // [0, 146096]
+        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365; // [0, 399]
+        let mut year = yoe + era * 400;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+        let mp = (5 * doy + 2) / 153; // [0, 11]
+        let day = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+        let month = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+        if month <= 2 { year += 1; }
+        let yy = (year % 100) as u32;
         let time_str = format!("{:02}{:02}{:02}{:02}{:02}{:02}Z", yy, month, day, hour, minute, second);
         let mut out = vec![0x17];
         out.extend_from_slice(&encode_length(time_str.len()));
@@ -999,16 +1018,13 @@ mod tests {
 
     #[test]
     fn test_svid_non_ed25519_refused() {
-        // Build a cert with a different SPKI OID (e.g., RSA 1.2.840.113549.1.1.1)
-        let mut svid = build_test_svid("spiffe://test/w", &SigningKey::from_bytes(&[0x42; 32]), 1700000000 - 10, 1700000000 + 10);
-        // Hack: find and replace the Ed25519 OID bytes 2B 65 70 with RSA OID bytes
-        // For simplicity, we just assert the error message when we try to parse a known bad cert.
-        // In practice we'd need to rebuild the cert, but let's just verify the error path exists.
-        // We'll skip this integration and trust the code path is correct.
-        // Instead, let's build a minimal invalid SPKI in a synthetic test:
-
-        // Simplified: we can't easily re-encode without a full builder, so we trust the code.
-        // We'll add a simpler synthetic test below or rely on integration.
+        let now = 1700000000;
+        let mut svid = build_test_svid("spiffe://test/w", &SigningKey::from_bytes(&[0x42; 32]), now - 10, now + 10);
+        // Patch the Ed25519 SPKI OID (06 03 2B 65 70) — same length, different algorithm.
+        let pos = svid.windows(5).position(|w| w == [0x06, 0x03, 0x2B, 0x65, 0x70]).expect("OID present in test SVID");
+        svid[pos + 4] = 0x71;
+        let err = parse_svid(&svid, now).unwrap_err();
+        assert!(err.contains("unsupported SVID public key algorithm"), "got: {}", err);
     }
 
     #[test]
@@ -1075,9 +1091,8 @@ mod tests {
     #[test]
     fn test_pgp_fixture_parse() {
         let key = parse_pgp_public_key(FIXTURE_PUB).unwrap();
-        // v1 uses SHA-256 fallback; fingerprint won't match the real SHA-1 fingerprint
-        // but should be a valid SHA256-prefixed string.
-        assert!(key.fingerprint.starts_with("SHA256-"));
+        // Real GnuPG 2.4.4 fixture key: RFC 4880 v4 fingerprint must match exactly.
+        assert_eq!(key.fingerprint, "51680CA8C8B8713930FEA6D9C92DE79CBCE9D55F");
     }
 
     #[test]
@@ -1098,19 +1113,18 @@ mod tests {
     #[test]
     fn test_pgp_tamper_signature() {
         let key = parse_pgp_public_key(FIXTURE_PUB).unwrap();
-        let mut tampered_sig = FIXTURE_SIG.to_string();
-        // Flip one base64 character in the middle
-        let bytes = tampered_sig.as_bytes().to_vec();
-        let mut new_bytes = bytes.clone();
-        for (i, &b) in bytes.iter().enumerate() {
-            if (b as char).is_ascii_alphanumeric() {
-                new_bytes[i] = if b == b'A' { b'B' } else { b'A' };
-                break;
-            }
-        }
-        tampered_sig = String::from_utf8(new_bytes).unwrap();
+        // Flip one base64 character inside the signature body (after the
+        // header blank line), keeping the armor structure intact.
+        let mut bytes = FIXTURE_SIG.as_bytes().to_vec();
+        // The CRC24 line starts with "\n="; flip the last base64 body
+        // character just before it (inside the S MPI of the signature).
+        let crc_line = FIXTURE_SIG.rfind("\n=").unwrap();
+        let mut i = crc_line - 1;
+        while !(bytes[i] as char).is_ascii_alphanumeric() { i -= 1; }
+        bytes[i] = if bytes[i] == b'A' { b'B' } else { b'A' };
+        let tampered_sig = String::from_utf8(bytes).unwrap();
         let err = verify_pgp_detached(&key, &tampered_sig, FIXTURE_MSG).unwrap_err();
-        assert!(err.contains("verification failed") || err.contains("left-2") || err.contains("base64"));
+        assert!(err.contains("verification failed") || err.contains("left-2") || err.contains("malformed") || err.contains("unsupported"), "got: {}", err);
     }
 
     #[test]

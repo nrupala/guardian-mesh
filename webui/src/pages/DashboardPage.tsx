@@ -154,6 +154,8 @@ function LivePanel() {
   const [policyError, setPolicyError] = useState<string | null>(null)
   const [revocationSummary, setRevocationSummary] = useState<import("../gen/guardian_mesh_pb").RevocationStatusResponse | null>(null)
   const [revocationError, setRevocationError] = useState<string | null>(null)
+  const [authSummary, setAuthSummary] = useState<import("../gen/guardian_mesh_pb").AuthenticatorStatusResponse | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   const evalRef = useRef<HTMLElement | null>(null)
   const verifyRef = useRef<HTMLElement | null>(null)
@@ -313,6 +315,27 @@ function LivePanel() {
       } catch (e: unknown) {
         if (!cancelled) {
           setRevocationError(e instanceof Error ? e.message : String(e))
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [client])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { getAuthenticatorSummary } = await import("../lib/gmClient")
+        const summary = await getAuthenticatorSummary(client)
+        if (!cancelled) {
+          setAuthSummary(summary)
+          setAuthError(null)
+        }
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setAuthError(e instanceof Error ? e.message : String(e))
         }
       }
     })()
@@ -614,6 +637,39 @@ function LivePanel() {
             </div>
           ) : (
             <p className="hint">Loading revocations…</p>
+          )}
+        </section>
+
+        <section className="dash-section">
+          <h2>Boundary Authenticators</h2>
+          <p className="hint">
+            Second-factor framework for boundary crossings (BM-9): SPIFFE/X.509
+            workload attestation at the handshake and OpenPGP administrator
+            authorization on policy and revocation changes.
+          </p>
+          {authError ? (
+            <div className="verdict-panel verdict-block">
+              <p className="verdict-word">Could not load authenticators</p>
+              <p>{authError}</p>
+            </div>
+          ) : authSummary ? (
+            <div className="card">
+              <div className="audit-entry-body">
+                {authSummary.authenticators.map((a) => (
+                  <p key={a.method}>
+                    <strong>{a.method}:</strong> {a.factorType} factor — {a.configured ? "configured" : "not configured"} — {a.detail}
+                  </p>
+                ))}
+                {authSummary.spiffeRequired ? (
+                  <p><strong>Workload identity:</strong> SPIFFE attestation required at handshake</p>
+                ) : null}
+                {authSummary.pgpAdminPrincipals.length > 0 ? (
+                  <p><strong>OpenPGP-enrolled admins:</strong> {authSummary.pgpAdminPrincipals.join(", ")}</p>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <p className="hint">Loading authenticators…</p>
           )}
         </section>
 
