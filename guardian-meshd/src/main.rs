@@ -18,6 +18,7 @@ use guardian_meshd::policy::{PolicyEngine, PolicyBundle, PolicyRule};
 use guardian_meshd::protocol_firewall::ProtocolFirewall;
 use guardian_meshd::sealed_envelope::{generate_keypair, SealedEnvelope, ML_DSA_65_VERIFYING_KEY_LEN, verifying_key_from_bytes};
 use guardian_meshd::sealed_envelope::{verify_proto_envelope, load_or_generate_signing_key, compute_fingerprint};
+use guardian_meshd::authenticators::{AuthMethod, PgpKey, parse_pgp_public_key, verify_pgp_detached, parse_svid, verify_spiffe_possession, canonical_spiffe_string, spiffe_trust_domain};
 use ml_dsa::Signer;
 use guardian_meshd::certificate::{CertificateRegistry, Tests, IssuanceResult, CertificateStatus as CertStatus};
 use guardian_meshd::revocation::{RevocationRegistry, RevocationKind, RevocationEntry, canonical_revocation_string, revocation_change_id, validate_revocation};
@@ -41,6 +42,7 @@ use guardian_meshd::proto::{
     ProposeRevocationRequest, ProposeRevocationResponse,
     ApproveRevocationRequest, ApproveRevocationResponse,
     RevocationStatusRequest, RevocationStatusResponse,
+    AuthenticatorStatusRequest, AuthenticatorStatusResponse, AuthenticatorInfo,
 };
 use prost::Message as _;
 use ml_dsa::{MlDsa65, SigningKey, VerifyingKey, Verifier, SignatureEncoding};
@@ -73,6 +75,7 @@ pub struct GuardianMeshService {
     policy_principals: Arc<RwLock<(String, String)>>, // (proposer, approver)
     revocations: Arc<RevocationRegistry>,
     pending_revocation: Arc<RwLock<Option<PendingRevocation>>>,
+    pgp_admins: std::collections::HashMap<String, PgpKey>,
 }
 
 impl GuardianMeshService {
@@ -82,6 +85,9 @@ impl GuardianMeshService {
         
         // Load policy admins from the configured directory
         let policy_admins = Self::load_policy_admins(&config)?;
+        
+        // Load PGP admins from the configured directory
+        let pgp_admins = Self::load_pgp_admins(&config)?;
         
         // Load or create genesis policy
         let (policy, proposer, approver) = match PolicyEngine::load_from_file(&config.policy_dir())? {
@@ -119,6 +125,7 @@ impl GuardianMeshService {
             policy_principals: Arc::new(RwLock::new((proposer, approver))),
             revocations: Arc::new(revocations),
             pending_revocation: Arc::new(RwLock::new(None)),
+            pgp_admins,
             config,
         })
     }
@@ -187,6 +194,63 @@ impl GuardianMeshService {
         }
         
         chars.iter().all(|&c| matches!(c, 'a'..='z' | '0'..='9' | '_' | '-'))
+    }
+
+    fn load_pgp_admins(config: &Config) -> Result<std::collections::HashMap<String, PgpKey>, String> {
+        let mut admins = std::collections::HashMap::new();
+        
+        let keys_dir = match &config.pgp_admin_keys_dir {
+            Some(dir) => dir,
+            None => return Ok(admins),
+        };
+        
+        let dir_path = std::path::Path::new(keys_dir);
+        if !dir_path.exists() {
+            return Ok(admins);
+        }
+        
+        let entries = std::fs::read_dir(dir_path)
+            .map_err(|e| format!("failed to read PGP admin keys directory: {}", e))?;
+        
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("failed to read directory entry: {}", e))?;
+            let path = entry.path();
+            
+            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                if !file_name.ends_with(".asc") {
+                    continue;
+                }
+                
+                let principal = file_name.strip_suffix(".asc").unwrap();
+                
+                if !Self::is_valid_principal_name(principal) {
+                    return Err(format!("invalid principal name in PGP file: {}", file_name));
+                }
+                
+                let armored = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("failed to read PGP key file {}: {}", file_name, e))?;
+                
+                let key = parse_pgp_public_key(&armored)
+                    .map_err(|e| format!("failed to parse PGP key from {}: {}", file_name, e))?;
+                
+                admins.insert(principal.to_string(), key);
+            }
+        }
+        
+        Ok(admins)
+    }
+
+    fn check_pgp_factor(&self, principal: &str, canonical: &[u8], armored_sig: &str) -> Result<(), String> {
+        let enrolled = self.pgp_admins.get(principal);
+        
+        match (enrolled, armored_sig.is_empty()) {
+            (None, true) => Ok(()),
+            (None, false) => Err(format!("PGP signature presented but no PGP key is enrolled for principal {}", principal)),
+            (Some(key), true) => Err(format!("PGP second factor required for principal {} (AZ-4): enrolled OpenPGP key {}", principal, key.fingerprint)),
+            (Some(key), false) => {
+                verify_pgp_detached(key, armored_sig, canonical)
+            }
+        }
     }
 
     fn sweep_expired_sessions(&self, bus: &HandshakeBus) {
@@ -671,14 +735,64 @@ impl GuardianMesh for GuardianMeshService {
             req.source_enclave
         };
 
+        // WO-14: SPIFFE attestation (AZ-3)
+        let spiffe_present = !req.spiffe_id.is_empty() || !req.svid_leaf_der.is_empty() || !req.svid_signature.is_empty();
+        let spiffe_complete = !req.spiffe_id.is_empty() && !req.svid_leaf_der.is_empty() && !req.svid_signature.is_empty();
+
+        if spiffe_present && !spiffe_complete {
+            return Err(Status::invalid_argument("incomplete SPIFFE attestation: spiffe_id, svid_leaf_der and svid_signature are all required"));
+        }
+
+        let mut auth_factors = vec!["ML_DSA_65".to_string(), "HMAC_SESSION".to_string()];
+        let mut workload_id = String::new();
+
+        if spiffe_complete {
+            if self.config.spiffe_trust_domains.is_empty() {
+                return Err(Status::permission_denied("SPIFFE attestation presented but no trust domains are configured"));
+            }
+
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            let info = parse_svid(&req.svid_leaf_der, now)
+                .map_err(|e| Status::permission_denied(format!("SPIFFE attestation refused: {}", e)))?;
+
+            if info.spiffe_id != req.spiffe_id {
+                return Err(Status::permission_denied(format!("SPIFFE ID mismatch: SVID contains {}, request claims {}", info.spiffe_id, req.spiffe_id)));
+            }
+
+            let domain = spiffe_trust_domain(&info.spiffe_id)
+                .map_err(|e| Status::permission_denied(format!("SPIFFE attestation refused: {}", e)))?;
+
+            if !self.config.spiffe_trust_domains.contains(&domain) {
+                return Err(Status::permission_denied(format!("SPIFFE trust domain {} is not in allowlist", domain)));
+            }
+
+            use sha2::Digest;
+            let ml_dsa_hash = hex::encode(sha2::Sha256::digest(&req.source_public_key));
+            let canonical = canonical_spiffe_string(&info.spiffe_id, &ml_dsa_hash);
+
+            verify_spiffe_possession(&info, &canonical, &req.svid_signature)
+                .map_err(|e| Status::permission_denied(format!("SPIFFE possession verification failed: {}", e)))?;
+
+            auth_factors.push("SPIFFE_X509".to_string());
+            workload_id = info.spiffe_id.clone();
+        } else if self.config.spiffe_required {
+            return Err(Status::permission_denied("handshake refused: missing required confirmation SPIFFE_X509 (BM-9/BM-11)"));
+        }
+
         let bus = self.bus.read().await;
         self.sweep_expired_sessions(&bus);
-        let session = bus.create_session_full(&source, &req.source_public_key);
+        let session = bus.create_session_attested(&source, &req.source_public_key, auth_factors.clone(), workload_id.clone());
 
         Ok(Response::new(HandshakeResponse {
             session_id: session.session_id,
             session_key: session.session_key.to_vec(),
             ttl_seconds: SESSION_TTL_SECS,
+            auth_factors,
+            workload_id,
         }))
     }
 
@@ -918,6 +1032,15 @@ impl GuardianMesh for GuardianMeshService {
             }));
         }
         
+        // WO-14: Check PGP second factor (AZ-4)
+        if let Err(e) = self.check_pgp_factor(&req.proposer, canonical.as_bytes(), &req.pgp_signature) {
+            return Ok(Response::new(ProposePolicyChangeResponse {
+                accepted: false,
+                change_id: String::new(),
+                message: e,
+            }));
+        }
+        
         // Validate against current policy
         {
             let policy = self.policy.read().await;
@@ -1030,6 +1153,16 @@ impl GuardianMesh for GuardianMeshService {
                 version: 0,
                 content_hash: String::new(),
                 message: "signature verification failed".to_string(),
+            }));
+        }
+        
+        // WO-14: Check PGP second factor (AZ-4)
+        if let Err(e) = self.check_pgp_factor(&req.approver, canonical.as_bytes(), &req.pgp_signature) {
+            return Ok(Response::new(ApprovePolicyChangeResponse {
+                applied: false,
+                version: 0,
+                content_hash: String::new(),
+                message: e,
             }));
         }
         
@@ -1182,6 +1315,15 @@ impl GuardianMesh for GuardianMeshService {
             }));
         }
         
+        // WO-14: Check PGP second factor (AZ-4)
+        if let Err(e) = self.check_pgp_factor(&req.proposer, canonical.as_bytes(), &req.pgp_signature) {
+            return Ok(Response::new(ProposeRevocationResponse {
+                accepted: false,
+                change_id: String::new(),
+                message: e,
+            }));
+        }
+        
         // Check if a pending revocation already exists
         {
             let mut pending = self.pending_revocation.write().await;
@@ -1303,6 +1445,19 @@ impl GuardianMesh for GuardianMeshService {
                 propagation_ms: 0,
                 bound_secs: 0,
                 message: "signature verification failed".to_string(),
+            }));
+        }
+        
+        // WO-14: Check PGP second factor (AZ-4)
+        if let Err(e) = self.check_pgp_factor(&req.approver, pending_canonical.as_bytes(), &req.pgp_signature) {
+            return Ok(Response::new(ApproveRevocationResponse {
+                applied: false,
+                kind: String::new(),
+                target_id: String::new(),
+                effects: 0,
+                propagation_ms: 0,
+                bound_secs: 0,
+                message: e,
             }));
         }
         
@@ -1499,6 +1654,76 @@ impl GuardianMesh for GuardianMeshService {
             })),
         }
     }
+
+    async fn authenticator_status(
+        &self,
+        _request: Request<AuthenticatorStatusRequest>,
+    ) -> Result<Response<AuthenticatorStatusResponse>, Status> {
+        let mut authenticators = Vec::new();
+        
+        // ML_DSA_65
+        authenticators.push(AuthenticatorInfo {
+            method: AuthMethod::MlDsa65.as_str().to_string(),
+            factor_type: AuthMethod::MlDsa65.factor_type().to_string(),
+            assurance: AuthMethod::MlDsa65.assurance().to_string(),
+            configured: true,
+            detail: "session-bound signing key".to_string(),
+        });
+        
+        // HMAC_SESSION
+        authenticators.push(AuthenticatorInfo {
+            method: AuthMethod::HmacSession.as_str().to_string(),
+            factor_type: AuthMethod::HmacSession.factor_type().to_string(),
+            assurance: AuthMethod::HmacSession.assurance().to_string(),
+            configured: true,
+            detail: "handshake-issued session proof".to_string(),
+        });
+        
+        // SPIFFE_X509
+        let spiffe_configured = !self.config.spiffe_trust_domains.is_empty();
+        let spiffe_detail = if spiffe_configured {
+            let domains = self.config.spiffe_trust_domains.join(", ");
+            if self.config.spiffe_required {
+                format!("trust domains: {}; required", domains)
+            } else {
+                format!("trust domains: {}", domains)
+            }
+        } else {
+            "no trust domains configured".to_string()
+        };
+        authenticators.push(AuthenticatorInfo {
+            method: AuthMethod::SpiffeX509.as_str().to_string(),
+            factor_type: AuthMethod::SpiffeX509.factor_type().to_string(),
+            assurance: AuthMethod::SpiffeX509.assurance().to_string(),
+            configured: spiffe_configured,
+            detail: spiffe_detail,
+        });
+        
+        // OPENPGP
+        let pgp_configured = !self.pgp_admins.is_empty();
+        let pgp_detail = if pgp_configured {
+            format!("{} admin keys enrolled", self.pgp_admins.len())
+        } else {
+            "no admin keys enrolled".to_string()
+        };
+        authenticators.push(AuthenticatorInfo {
+            method: AuthMethod::OpenPgp.as_str().to_string(),
+            factor_type: AuthMethod::OpenPgp.factor_type().to_string(),
+            assurance: AuthMethod::OpenPgp.assurance().to_string(),
+            configured: pgp_configured,
+            detail: pgp_detail,
+        });
+        
+        let mut pgp_principals: Vec<String> = self.pgp_admins.keys().cloned().collect();
+        pgp_principals.sort();
+        
+        Ok(Response::new(AuthenticatorStatusResponse {
+            authenticators,
+            spiffe_trust_domains: self.config.spiffe_trust_domains.clone(),
+            spiffe_required: self.config.spiffe_required,
+            pgp_admin_principals: pgp_principals,
+        }))
+    }
 }
 
 fn real_main() {
@@ -1582,7 +1807,7 @@ mod tests {
         vk: &VerifyingKey<MlDsa65>,
     ) -> HandshakeResponse {
         service
-            .handshake(Request::new(HandshakeRequest {
+            .handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
                 source_enclave: "webui".into(),
                 source_public_key: vk.encode().to_vec(),
             }))
@@ -1631,7 +1856,7 @@ mod tests {
     async fn handshake_without_a_full_public_key_is_invalid_argument() {
         let (service, _dir) = test_service();
         let err = service
-            .handshake(Request::new(HandshakeRequest {
+            .handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
                 source_enclave: "webui".into(),
                 source_public_key: vec![1, 2, 3],
             }))
@@ -2511,7 +2736,7 @@ mod tests {
         let canonical = proposed.to_canonical_string();
         let sig = sk_eve.sign(canonical.as_bytes());
         
-        let resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+        let resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest { pgp_signature: String::new(),
             version: 2,
             rules: new_rules,
             escalate_actions: vec![],
@@ -2553,7 +2778,7 @@ mod tests {
         let canonical = proposed.to_canonical_string();
         let sig = sk_wrong.sign(canonical.as_bytes());
         
-        let resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+        let resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest { pgp_signature: String::new(),
             version: 2,
             rules: new_rules,
             escalate_actions: vec![],
@@ -2594,7 +2819,7 @@ mod tests {
         let canonical = proposed.to_canonical_string();
         let sig = sk_alice.sign(canonical.as_bytes());
         
-        let resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+        let resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest { pgp_signature: String::new(),
             version: 3,
             rules: new_rules,
             escalate_actions: vec![],
@@ -2636,7 +2861,7 @@ mod tests {
         let sig = sk_alice.sign(canonical.as_bytes());
         
         // Propose by alice
-        let propose_resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+        let propose_resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest { pgp_signature: String::new(),
             version: 2,
             rules: new_rules.clone(),
             escalate_actions: vec![],
@@ -2652,7 +2877,7 @@ mod tests {
         let change_id = propose_resp.change_id;
         
         // Try to approve by alice (same person)
-        let approve_resp = service.approve_policy_change(Request::new(ApprovePolicyChangeRequest {
+        let approve_resp = service.approve_policy_change(Request::new(ApprovePolicyChangeRequest { pgp_signature: String::new(),
             change_id,
             approver: "alice".to_string(),
             approver_signature: sig.to_bytes().to_vec(),
@@ -2692,7 +2917,7 @@ mod tests {
         let sig_alice = sk_alice.sign(canonical.as_bytes());
         
         // Propose by alice
-        let propose_resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+        let propose_resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest { pgp_signature: String::new(),
             version: 2,
             rules: new_rules,
             escalate_actions: vec![],
@@ -2708,7 +2933,7 @@ mod tests {
         
         // Try to approve with wrong signature
         let bad_sig = sk_wrong.sign(canonical.as_bytes());
-        let approve_resp = service.approve_policy_change(Request::new(ApprovePolicyChangeRequest {
+        let approve_resp = service.approve_policy_change(Request::new(ApprovePolicyChangeRequest { pgp_signature: String::new(),
             change_id: propose_resp.change_id,
             approver: "bob".to_string(),
             approver_signature: bad_sig.to_bytes().to_vec(),
@@ -2756,7 +2981,7 @@ mod tests {
         let sig_alice = sk_alice.sign(canonical.as_bytes());
         
         // Propose by alice
-        let propose_resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+        let propose_resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest { pgp_signature: String::new(),
             version: 2,
             rules: new_rules,
             escalate_actions: vec![],
@@ -2772,7 +2997,7 @@ mod tests {
         
         // Approve by bob
         let sig_bob = sk_bob.sign(canonical.as_bytes());
-        let approve_resp = service.approve_policy_change(Request::new(ApprovePolicyChangeRequest {
+        let approve_resp = service.approve_policy_change(Request::new(ApprovePolicyChangeRequest { pgp_signature: String::new(),
             change_id: propose_resp.change_id,
             approver: "bob".to_string(),
             approver_signature: sig_bob.to_bytes().to_vec(),
@@ -2834,7 +3059,7 @@ mod tests {
         let sig = sk_alice.sign(canonical.as_bytes());
         
         // First proposal
-        let resp1 = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+        let resp1 = service.propose_policy_change(Request::new(ProposePolicyChangeRequest { pgp_signature: String::new(),
             version: 2,
             rules: new_rules.clone(),
             escalate_actions: vec![],
@@ -2849,7 +3074,7 @@ mod tests {
         assert!(resp1.accepted);
         
         // Second proposal while first is pending
-        let resp2 = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+        let resp2 = service.propose_policy_change(Request::new(ProposePolicyChangeRequest { pgp_signature: String::new(),
             version: 2,
             rules: new_rules,
             escalate_actions: vec![],
@@ -2906,7 +3131,7 @@ mod tests {
             let sig_alice = sk_alice.sign(canonical.as_bytes());
             let sig_bob = sk_bob.sign(canonical.as_bytes());
             
-            let propose_resp = service1.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+            let propose_resp = service1.propose_policy_change(Request::new(ProposePolicyChangeRequest { pgp_signature: String::new(),
                 version: 2,
                 rules: vec![PolicyRuleMessage {
                     action_type: "TOOL_CALL".to_string(),
@@ -2924,7 +3149,7 @@ mod tests {
             
             assert!(propose_resp.accepted);
             
-            let approve_resp = service1.approve_policy_change(Request::new(ApprovePolicyChangeRequest {
+            let approve_resp = service1.approve_policy_change(Request::new(ApprovePolicyChangeRequest { pgp_signature: String::new(),
                 change_id: propose_resp.change_id,
                 approver: "bob".to_string(),
                 approver_signature: sig_bob.to_bytes().to_vec(),
@@ -2984,7 +3209,7 @@ mod tests {
         let canonical = proposed.to_canonical_string();
         let sig = sk.sign(canonical.as_bytes());
         
-        let resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+        let resp = service.propose_policy_change(Request::new(ProposePolicyChangeRequest { pgp_signature: String::new(),
             version: 2,
             rules: vec![PolicyRuleMessage {
                 action_type: "TOOL_CALL".to_string(),
@@ -3019,7 +3244,7 @@ mod tests {
         );
         let sig = sk_eve.sign(canonical.as_bytes());
         
-        let resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+        let resp = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
             kind: "SESSION".to_string(),
             target_id: "abc123def456abc123def456abc123de".to_string(),
             reason: "test reason".to_string(),
@@ -3047,7 +3272,7 @@ mod tests {
         );
         let sig = sk_wrong.sign(canonical.as_bytes());
         
-        let resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+        let resp = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
             kind: "SESSION".to_string(),
             target_id: "abc123def456abc123def456abc123de".to_string(),
             reason: "test reason".to_string(),
@@ -3081,7 +3306,7 @@ mod tests {
         );
         let sig = sk.sign(canonical.as_bytes());
         
-        let resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+        let resp = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
             kind: "SESSION".to_string(),
             target_id: "abc123def456abc123def456abc123de".to_string(),
             reason: "test reason".to_string(),
@@ -3113,7 +3338,7 @@ mod tests {
         
         // Handshake and create a session
         let (client_sk, client_vk) = generate_keypair();
-        let hs_resp = service.handshake(Request::new(HandshakeRequest {
+        let hs_resp = service.handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
             source_enclave: "test".to_string(),
             source_public_key: client_vk.encode().to_vec(),
         }))
@@ -3138,7 +3363,7 @@ mod tests {
         );
         let sig_alice = sk_alice.sign(canonical.as_bytes());
         
-        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
             kind: "SESSION".to_string(),
             target_id: session_id.clone(),
             reason: "compromised session".to_string(),
@@ -3155,7 +3380,7 @@ mod tests {
         // Bob approves
         let sig_bob = sk_bob.sign(canonical.as_bytes());
         
-        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest { pgp_signature: String::new(),
             change_id,
             approver: "bob".to_string(),
             approver_signature: sig_bob.to_bytes().to_vec(),
@@ -3206,7 +3431,7 @@ mod tests {
         );
         let sig = sk_alice.sign(canonical.as_bytes());
         
-        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
             kind: "SESSION".to_string(),
             target_id: session_id.to_string(),
             reason: "test reason".to_string(),
@@ -3223,7 +3448,7 @@ mod tests {
         // Alice tries to approve her own proposal
         let sig_approve = sk_alice.sign(canonical.as_bytes());
         
-        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest { pgp_signature: String::new(),
             change_id,
             approver: "alice".to_string(),
             approver_signature: sig_approve.to_bytes().to_vec(),
@@ -3250,7 +3475,7 @@ mod tests {
         );
         let sig = sk_alice.sign(canonical.as_bytes());
         
-        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
             kind: "SESSION".to_string(),
             target_id: session_id.to_string(),
             reason: "test reason".to_string(),
@@ -3267,7 +3492,7 @@ mod tests {
         // Wrong signature
         let sig_wrong = sk_wrong.sign(canonical.as_bytes());
         
-        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest { pgp_signature: String::new(),
             change_id: change_id.clone(),
             approver: "bob".to_string(),
             approver_signature: sig_wrong.to_bytes().to_vec(),
@@ -3288,7 +3513,7 @@ mod tests {
         );
         let sig2 = sk_alice.sign(canonical2.as_bytes());
         
-        let prop2_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+        let prop2_resp = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
             kind: "SESSION".to_string(),
             target_id: "deadbeefdeadbeefdeadbeefdeadbeef".to_string(),
             reason: "another".to_string(),
@@ -3316,7 +3541,7 @@ mod tests {
         );
         let sig = sk_alice.sign(canonical.as_bytes());
         
-        let prop1 = service.propose_revocation(Request::new(ProposeRevocationRequest {
+        let prop1 = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
             kind: "SESSION".to_string(),
             target_id: session_id.to_string(),
             reason: "test reason".to_string(),
@@ -3339,7 +3564,7 @@ mod tests {
         );
         let sig2 = sk_alice.sign(canonical2.as_bytes());
         
-        let prop2 = service.propose_revocation(Request::new(ProposeRevocationRequest {
+        let prop2 = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
             kind: "SESSION".to_string(),
             target_id: session_id2.to_string(),
             reason: "another reason".to_string(),
@@ -3363,7 +3588,7 @@ mod tests {
         let client_key_bytes = client_vk.encode().to_vec();
         let key_fingerprint = hex::encode(sha2::Sha256::digest(&client_key_bytes));
         
-        let hs_resp = service.handshake(Request::new(HandshakeRequest {
+        let hs_resp = service.handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
             source_enclave: "test".to_string(),
             source_public_key: client_key_bytes.clone(),
         }))
@@ -3387,7 +3612,7 @@ mod tests {
         );
         let sig_alice = sk_alice.sign(canonical.as_bytes());
         
-        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
             kind: "KEY".to_string(),
             target_id: key_fingerprint.clone(),
             reason: "compromised key".to_string(),
@@ -3403,7 +3628,7 @@ mod tests {
         // Bob approves
         let sig_bob = sk_bob.sign(canonical.as_bytes());
         
-        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest { pgp_signature: String::new(),
             change_id: prop_resp.change_id,
             approver: "bob".to_string(),
             approver_signature: sig_bob.to_bytes().to_vec(),
@@ -3423,7 +3648,7 @@ mod tests {
         drop(bus);
         
         // New handshake with the same key should be refused
-        let hs_err = service.handshake(Request::new(HandshakeRequest {
+        let hs_err = service.handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
             source_enclave: "test".to_string(),
             source_public_key: client_key_bytes.clone(),
         }))
@@ -3436,7 +3661,7 @@ mod tests {
         
         // A different key should still work
         let (_, different_vk) = generate_keypair();
-        let hs_ok = service.handshake(Request::new(HandshakeRequest {
+        let hs_ok = service.handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
             source_enclave: "test".to_string(),
             source_public_key: different_vk.encode().to_vec(),
         }))
@@ -3483,7 +3708,7 @@ mod tests {
         );
         let sig_alice = sk_alice.sign(canonical.as_bytes());
         
-        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
             kind: "CERTIFICATE".to_string(),
             target_id: serial.clone(),
             reason: "fraudulent certificate".to_string(),
@@ -3499,7 +3724,7 @@ mod tests {
         // Bob approves
         let sig_bob = sk_bob.sign(canonical.as_bytes());
         
-        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest { pgp_signature: String::new(),
             change_id: prop_resp.change_id,
             approver: "bob".to_string(),
             approver_signature: sig_bob.to_bytes().to_vec(),
@@ -3641,7 +3866,7 @@ mod tests {
             let sig_alice = sk_alice.sign(canonical.as_bytes());
             let sig_bob = sk_bob.sign(canonical.as_bytes());
             
-            let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+            let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
                 kind: "KEY".to_string(),
                 target_id: key_fingerprint.clone(),
                 reason: "persistent test".to_string(),
@@ -3652,7 +3877,7 @@ mod tests {
             .unwrap()
             .into_inner();
             
-            let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+            let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest { pgp_signature: String::new(),
                 change_id: prop_resp.change_id,
                 approver: "bob".to_string(),
                 approver_signature: sig_bob.to_bytes().to_vec(),
@@ -3687,7 +3912,7 @@ mod tests {
             assert_eq!(status_resp.reason, "persistent test");
             
             // Handshake with revoked key should still fail
-            let hs_err = service2.handshake(Request::new(HandshakeRequest {
+            let hs_err = service2.handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
                 source_enclave: "test".to_string(),
                 source_public_key: client_key_bytes,
             }))
@@ -3713,7 +3938,7 @@ mod tests {
         let sig_alice = sk_alice.sign(canonical.as_bytes());
         let sig_bob = sk_bob.sign(canonical.as_bytes());
         
-        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest {
+        let prop_resp = service.propose_revocation(Request::new(ProposeRevocationRequest { pgp_signature: String::new(),
             kind: "SESSION".to_string(),
             target_id: session_id.to_string(),
             reason: "audit test".to_string(),
@@ -3724,7 +3949,7 @@ mod tests {
         .unwrap()
         .into_inner();
         
-        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest {
+        let approve_resp = service.approve_revocation(Request::new(ApproveRevocationRequest { pgp_signature: String::new(),
             change_id: prop_resp.change_id,
             approver: "bob".to_string(),
             approver_signature: sig_bob.to_bytes().to_vec(),
@@ -3754,4 +3979,338 @@ mod tests {
         assert!(entry.reason.contains("proposer=alice"));
         assert!(entry.reason.contains("approver=bob"));
     }
+    // ── WO-14 integration tests (Wright carry) ─────────────────────
+    // The lane shipped no integration tests; these are Wright's, built
+    // on the same helpers as the WO-11/WO-12 suites.
+
+    fn wo14_b64_encode(data: &[u8]) -> String {
+        const ALPHA: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for chunk in data.chunks(3) {
+            let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+            let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+            out.push(ALPHA[(n >> 18) as usize & 63] as char);
+            out.push(ALPHA[(n >> 12) as usize & 63] as char);
+            out.push(if chunk.len() > 1 { ALPHA[(n >> 6) as usize & 63] as char } else { '=' });
+            out.push(if chunk.len() > 2 { ALPHA[n as usize & 63] as char } else { '=' });
+        }
+        out.chars().collect::<Vec<_>>().chunks(64).map(|c| c.iter().collect::<String>()).collect::<Vec<_>>().join("\n")
+    }
+
+    fn wo14_armor(label: &str, data: &[u8]) -> String {
+        format!("-----BEGIN PGP {}-----\n\n{}\n-----END PGP {}-----\n", label, wo14_b64_encode(data), label)
+    }
+
+    fn wo14_mpi(data: &[u8]) -> Vec<u8> {
+        let mut start = 0;
+        while start + 1 < data.len() && data[start] == 0 { start += 1; }
+        let trimmed = &data[start..];
+        let bitlen = (trimmed.len() - 1) * 8 + (8 - trimmed[0].leading_zeros() as usize);
+        let mut out = Vec::new();
+        out.extend_from_slice(&(bitlen as u16).to_be_bytes());
+        out.extend_from_slice(trimmed);
+        out
+    }
+
+    fn wo14_pgp_key_armor(sk: &ed25519_dalek::SigningKey) -> String {
+        let mut body = vec![4u8];
+        body.extend_from_slice(&1_700_000_000u32.to_be_bytes());
+        body.push(22);
+        let oid: [u8; 9] = [0x2B, 0x06, 0x01, 0x04, 0x01, 0xDA, 0x47, 0x0F, 0x01];
+        body.push(oid.len() as u8);
+        body.extend_from_slice(&oid);
+        let mut point = vec![0x40u8];
+        point.extend_from_slice(&sk.verifying_key().to_bytes());
+        body.extend_from_slice(&wo14_mpi(&point));
+        let mut packet = vec![0xC6u8, body.len() as u8];
+        packet.extend_from_slice(&body);
+        wo14_armor("PUBLIC KEY BLOCK", &packet)
+    }
+
+    fn wo14_pgp_sig_armor(sk: &ed25519_dalek::SigningKey, data: &[u8]) -> String {
+        use sha2::Digest as _;
+        let trailer: [u8; 6] = [4, 0, 22, 8, 0, 0];
+        let mut hashed = Vec::new();
+        hashed.extend_from_slice(data);
+        hashed.extend_from_slice(&trailer);
+        hashed.extend_from_slice(&[0x04, 0xFF]);
+        hashed.extend_from_slice(&6u32.to_be_bytes());
+        let digest = sha2::Sha256::digest(&hashed);
+        let sig = ed25519_dalek::Signer::sign(sk, &digest);
+        let sb = sig.to_bytes();
+        let mut body = Vec::new();
+        body.extend_from_slice(&trailer);
+        body.extend_from_slice(&[0, 0]); // unhashed area length
+        body.extend_from_slice(&digest[0..2]);
+        body.extend_from_slice(&wo14_mpi(&sb[0..32]));
+        body.extend_from_slice(&wo14_mpi(&sb[32..64]));
+        let mut packet = vec![0xC2u8, body.len() as u8];
+        packet.extend_from_slice(&body);
+        wo14_armor("SIGNATURE", &packet)
+    }
+
+    fn wo14_enc_len(len: usize) -> Vec<u8> {
+        if len < 128 { vec![len as u8] } else if len < 256 { vec![0x81, len as u8] } else { vec![0x82, (len >> 8) as u8, (len & 0xFF) as u8] }
+    }
+    fn wo14_enc_tlv(tag: u8, parts: &[&[u8]]) -> Vec<u8> {
+        let body: Vec<u8> = parts.iter().flat_map(|p| p.iter().copied()).collect();
+        let mut out = vec![tag];
+        out.extend_from_slice(&wo14_enc_len(body.len()));
+        out.extend_from_slice(&body);
+        out
+    }
+    fn wo14_enc_utctime(unix_secs: u64) -> Vec<u8> {
+        let days = (unix_secs / 86400) as i64;
+        let secs = (unix_secs % 86400) as u32;
+        let z = days + 719468;
+        let era = if z >= 0 { z } else { z - 146096 } / 146097;
+        let doe = z - era * 146097;
+        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        let mut year = yoe + era * 400;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let day = doy - (153 * mp + 2) / 5 + 1;
+        let month = if mp < 10 { mp + 3 } else { mp - 9 };
+        if month <= 2 { year += 1; }
+        let s = format!("{:02}{:02}{:02}{:02}{:02}{:02}Z", (year % 100) as u32, month, day, secs / 3600, (secs % 3600) / 60, secs % 60);
+        wo14_enc_tlv(0x17, &[s.as_bytes()])
+    }
+
+    fn wo14_build_svid(spiffe_id: &str, sk: &ed25519_dalek::SigningKey, not_before: u64, not_after: u64) -> Vec<u8> {
+        let sig_alg = wo14_enc_tlv(0x30, &[&[0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x0B], &[0x05, 0x00]]);
+        let name = |cn: &str| wo14_enc_tlv(0x30, &[&wo14_enc_tlv(0x31, &[&wo14_enc_tlv(0x30, &[&[0x06, 0x03, 0x55, 0x04, 0x03], &wo14_enc_tlv(0x0C, &[cn.as_bytes()])])])]);
+        let validity = wo14_enc_tlv(0x30, &[&wo14_enc_utctime(not_before), &wo14_enc_utctime(not_after)]);
+        let spki_alg = wo14_enc_tlv(0x30, &[&[0x06, 0x03, 0x2B, 0x65, 0x70]]);
+        let mut bs = vec![0x00u8];
+        bs.extend_from_slice(&sk.verifying_key().to_bytes());
+        let spki = wo14_enc_tlv(0x30, &[&spki_alg, &wo14_enc_tlv(0x03, &[&bs])]);
+        let mut san_val = vec![0x86u8, spiffe_id.len() as u8];
+        san_val.extend_from_slice(spiffe_id.as_bytes());
+        let gn = wo14_enc_tlv(0x30, &[&san_val]);
+        let san_ext = wo14_enc_tlv(0x30, &[&[0x06, 0x03, 0x55, 0x1D, 0x11], &wo14_enc_tlv(0x04, &[&gn])]);
+        let exts_seq = wo14_enc_tlv(0x30, &[&san_ext]);
+        let exts = wo14_enc_tlv(0xA3, &[&exts_seq]);
+        let version = vec![0xA0, 0x03, 0x02, 0x01, 0x02];
+        let serial = wo14_enc_tlv(0x02, &[&[0x01, 0x23, 0x45, 0x67, 0x89]]);
+        let tbs = wo14_enc_tlv(0x30, &[&version, &serial, &sig_alg, &name("Test CA"), &validity, &name("Test Workload"), &spki, &exts]);
+        let mut sig_bs = vec![0x00u8];
+        sig_bs.extend_from_slice(&[0u8; 64]);
+        let cert = wo14_enc_tlv(0x30, &[&tbs, &sig_alg, &wo14_enc_tlv(0x03, &[&sig_bs])]);
+        cert
+    }
+
+    fn test_service_wo14(domains: Vec<String>, required: bool, pgp_alice: bool)
+        -> (GuardianMeshService, tempfile::TempDir, SigningKey<MlDsa65>, SigningKey<MlDsa65>, ed25519_dalek::SigningKey)
+    {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = Config::default();
+        config.workspace_dir = dir.path().join("ws").to_string_lossy().into_owned();
+        config.output_dir = dir.path().join("out").to_string_lossy().into_owned();
+        let admin_keys_dir = dir.path().join("admin_keys");
+        std::fs::create_dir_all(&admin_keys_dir).unwrap();
+        let (sk_alice, vk_alice) = generate_keypair();
+        let (sk_bob, vk_bob) = generate_keypair();
+        std::fs::write(admin_keys_dir.join("alice.vk"), vk_alice.encode().to_vec()).unwrap();
+        std::fs::write(admin_keys_dir.join("bob.vk"), vk_bob.encode().to_vec()).unwrap();
+        config.policy_admin_keys_dir = Some(admin_keys_dir.to_string_lossy().into_owned());
+        config.spiffe_trust_domains = domains;
+        config.spiffe_required = required;
+        let pgp_sk = ed25519_dalek::SigningKey::from_bytes(&[0x51; 32]);
+        if pgp_alice {
+            let pgp_dir = dir.path().join("pgp_keys");
+            std::fs::create_dir_all(&pgp_dir).unwrap();
+            std::fs::write(pgp_dir.join("alice.asc"), wo14_pgp_key_armor(&pgp_sk)).unwrap();
+            config.pgp_admin_keys_dir = Some(pgp_dir.to_string_lossy().into_owned());
+        }
+        config.ensure_dirs().unwrap();
+        (GuardianMeshService::new(config).unwrap(), dir, sk_alice, sk_bob, pgp_sk)
+    }
+
+    fn wo14_now() -> u64 {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
+    }
+
+    #[tokio::test]
+    async fn wo14_handshake_default_factors() {
+        let (service, _dir) = test_service();
+        let (_sk, vk) = generate_keypair();
+        let resp = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "wo14-test".to_string(),
+            source_public_key: vk.encode().to_vec(),
+            spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+        })).await.unwrap().into_inner();
+        assert_eq!(resp.auth_factors, vec!["ML_DSA_65".to_string(), "HMAC_SESSION".to_string()]);
+        assert_eq!(resp.workload_id, "");
+    }
+
+    #[tokio::test]
+    async fn wo14_handshake_valid_svid_attests_and_evaluates() {
+        let (service, _dir, _a, _b, _p) = test_service_wo14(vec!["cluster.local".to_string()], false, false);
+        let (client_sk, client_vk) = generate_keypair();
+        let svid_sk = ed25519_dalek::SigningKey::from_bytes(&[0x37; 32]);
+        let now = wo14_now();
+        let spiffe_id = "spiffe://cluster.local/workload";
+        let der = wo14_build_svid(spiffe_id, &svid_sk, now - 3600, now + 3600);
+        use sha2::Digest as _;
+        let ml_hash = hex::encode(sha2::Sha256::digest(&client_vk.encode().to_vec()));
+        let canonical = guardian_meshd::authenticators::canonical_spiffe_string(spiffe_id, &ml_hash);
+        let sig = ed25519_dalek::Signer::sign(&svid_sk, canonical.as_bytes());
+        let resp = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "wo14-svid".to_string(),
+            source_public_key: client_vk.encode().to_vec(),
+            spiffe_id: spiffe_id.to_string(), svid_leaf_der: der, svid_signature: sig.to_bytes().to_vec(),
+        })).await.unwrap().into_inner();
+        assert!(resp.auth_factors.contains(&"SPIFFE_X509".to_string()), "factors: {:?}", resp.auth_factors);
+        assert_eq!(resp.workload_id, spiffe_id);
+        // The attested session evaluates normally.
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &client_sk);
+        let req = evaluate_request(&service, &resp.session_id, &sealed).await;
+        let eval_resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(eval_resp.verdict, "ALLOW");
+    }
+
+    #[tokio::test]
+    async fn wo14_handshake_untrusted_domain_and_bad_possession_refused() {
+        let (service, _dir, _a, _b, _p) = test_service_wo14(vec!["cluster.local".to_string()], false, false);
+        let (_csk, client_vk) = generate_keypair();
+        let svid_sk = ed25519_dalek::SigningKey::from_bytes(&[0x37; 32]);
+        let now = wo14_now();
+        use sha2::Digest as _;
+        let ml_hash = hex::encode(sha2::Sha256::digest(&client_vk.encode().to_vec()));
+        // Untrusted domain
+        let id1 = "spiffe://evil.example/workload";
+        let der1 = wo14_build_svid(id1, &svid_sk, now - 3600, now + 3600);
+        let canon1 = guardian_meshd::authenticators::canonical_spiffe_string(id1, &ml_hash);
+        let sig1 = ed25519_dalek::Signer::sign(&svid_sk, canon1.as_bytes());
+        let err = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "wo14".to_string(), source_public_key: client_vk.encode().to_vec(),
+            spiffe_id: id1.to_string(), svid_leaf_der: der1, svid_signature: sig1.to_bytes().to_vec(),
+        })).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+        assert!(err.message().contains("not in allowlist"), "got: {}", err.message());
+        // Bad possession signature on a trusted-domain SVID
+        let id2 = "spiffe://cluster.local/workload";
+        let der2 = wo14_build_svid(id2, &svid_sk, now - 3600, now + 3600);
+        let mut bad_sig = ed25519_dalek::Signer::sign(&svid_sk, b"different message").to_bytes();
+        bad_sig[0] ^= 0x01;
+        let err2 = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "wo14".to_string(), source_public_key: client_vk.encode().to_vec(),
+            spiffe_id: id2.to_string(), svid_leaf_der: der2, svid_signature: bad_sig.to_vec(),
+        })).await.unwrap_err();
+        assert_eq!(err2.code(), tonic::Code::PermissionDenied);
+    }
+
+    #[tokio::test]
+    async fn wo14_handshake_required_mode_and_partial_attestation() {
+        let (service, _dir, _a, _b, _p) = test_service_wo14(vec!["cluster.local".to_string()], true, false);
+        let (_csk, client_vk) = generate_keypair();
+        // No SVID while required → refused naming the missing confirmation
+        let err = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "wo14".to_string(), source_public_key: client_vk.encode().to_vec(),
+            spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+        })).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+        assert!(err.message().contains("SPIFFE_X509"), "got: {}", err.message());
+        // Partial attestation → invalid_argument
+        let err2 = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "wo14".to_string(), source_public_key: client_vk.encode().to_vec(),
+            spiffe_id: "spiffe://cluster.local/workload".to_string(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+        })).await.unwrap_err();
+        assert_eq!(err2.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn wo14_pgp_policy_second_factor_enforced() {
+        let (service, _dir, sk_alice, sk_bob, pgp_sk) = test_service_wo14(vec![], false, true);
+        let current = service.policy.read().await;
+        let proposed = PolicyBundle {
+            version: 2,
+            rules: vec![PolicyRule { action_type: "TOOL_CALL".to_string(), allow: false, priority: 100 }],
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+        };
+        drop(current);
+        let canonical = proposed.to_canonical_string();
+        let rules_msg = vec![PolicyRuleMessage { action_type: "TOOL_CALL".to_string(), allow: false, priority: 100 }];
+        let sig_alice = sk_alice.sign(canonical.as_bytes());
+        let mk_propose = |pgp: String| ProposePolicyChangeRequest {
+            version: 2, rules: rules_msg.clone(), escalate_actions: vec![],
+            prev_hash: proposed.prev_hash.clone(), proposer: "alice".to_string(),
+            proposer_signature: sig_alice.to_bytes().to_vec(), pgp_signature: pgp,
+        };
+        // Missing PGP factor → refused
+        let r = service.propose_policy_change(Request::new(mk_propose(String::new()))).await.unwrap().into_inner();
+        assert!(!r.accepted && r.message.contains("PGP second factor required"), "got: {}", r.message);
+        // Bad PGP signature → refused
+        let bad = wo14_pgp_sig_armor(&pgp_sk, b"some other bytes");
+        let r = service.propose_policy_change(Request::new(mk_propose(bad))).await.unwrap().into_inner();
+        assert!(!r.accepted, "bad pgp sig must refuse");
+        // Valid PGP signature → accepted; bob (unenrolled) approves without one
+        let good = wo14_pgp_sig_armor(&pgp_sk, canonical.as_bytes());
+        let r = service.propose_policy_change(Request::new(mk_propose(good))).await.unwrap().into_inner();
+        assert!(r.accepted, "got: {}", r.message);
+        let sig_bob = sk_bob.sign(canonical.as_bytes());
+        let a = service.approve_policy_change(Request::new(ApprovePolicyChangeRequest {
+            change_id: r.change_id, approver: "bob".to_string(),
+            approver_signature: sig_bob.to_bytes().to_vec(), pgp_signature: String::new(),
+        })).await.unwrap().into_inner();
+        assert!(a.applied && a.version == 2, "got: {}", a.message);
+    }
+
+    #[tokio::test]
+    async fn wo14_pgp_revocation_second_factor_enforced() {
+        let (service, _dir, sk_alice, _sk_bob, pgp_sk) = test_service_wo14(vec![], false, true);
+        let (_csk, client_vk) = generate_keypair();
+        let session = open_session(&service, &client_vk).await;
+        let canonical = canonical_revocation_string(RevocationKind::Session, &session.session_id, "wo14 pgp test", "alice");
+        let sig_alice = sk_alice.sign(canonical.as_bytes());
+        let mk = |pgp: String| ProposeRevocationRequest {
+            kind: "SESSION".to_string(), target_id: session.session_id.clone(),
+            reason: "wo14 pgp test".to_string(), proposer: "alice".to_string(),
+            proposer_signature: sig_alice.to_bytes().to_vec(), pgp_signature: pgp,
+        };
+        let r = service.propose_revocation(Request::new(mk(String::new()))).await.unwrap().into_inner();
+        assert!(!r.accepted && r.message.contains("PGP second factor required"), "got: {}", r.message);
+        let good = wo14_pgp_sig_armor(&pgp_sk, canonical.as_bytes());
+        let r = service.propose_revocation(Request::new(mk(good))).await.unwrap().into_inner();
+        assert!(r.accepted, "got: {}", r.message);
+    }
+
+    #[tokio::test]
+    async fn wo14_unenrolled_principal_pgp_signature_refused() {
+        let (service, _dir, _sk_alice, sk_bob) = test_service_with_admins();
+        let current = service.policy.read().await;
+        let proposed = PolicyBundle {
+            version: 2,
+            rules: vec![PolicyRule { action_type: "TOOL_CALL".to_string(), allow: false, priority: 100 }],
+            escalate_actions: vec![],
+            prev_hash: current.content_hash(),
+        };
+        drop(current);
+        let canonical = proposed.to_canonical_string();
+        let sig_bob = sk_bob.sign(canonical.as_bytes());
+        let r = service.propose_policy_change(Request::new(ProposePolicyChangeRequest {
+            version: 2,
+            rules: vec![PolicyRuleMessage { action_type: "TOOL_CALL".to_string(), allow: false, priority: 100 }],
+            escalate_actions: vec![], prev_hash: proposed.prev_hash.clone(),
+            proposer: "bob".to_string(), proposer_signature: sig_bob.to_bytes().to_vec(),
+            pgp_signature: "-----BEGIN PGP SIGNATURE-----\n\nAAAA\n-----END PGP SIGNATURE-----\n".to_string(),
+        })).await.unwrap().into_inner();
+        assert!(!r.accepted && r.message.contains("no PGP key is enrolled"), "got: {}", r.message);
+    }
+
+    #[tokio::test]
+    async fn wo14_authenticator_status_reports_framework() {
+        let (service, _dir, _a, _b, _p) = test_service_wo14(vec!["cluster.local".to_string()], true, true);
+        let resp = service.authenticator_status(Request::new(AuthenticatorStatusRequest {})).await.unwrap().into_inner();
+        assert_eq!(resp.authenticators.len(), 4);
+        assert_eq!(resp.spiffe_trust_domains, vec!["cluster.local".to_string()]);
+        assert!(resp.spiffe_required);
+        assert_eq!(resp.pgp_admin_principals, vec!["alice".to_string()]);
+        let spiffe_row = resp.authenticators.iter().find(|a| a.method == "SPIFFE_X509").unwrap();
+        assert!(spiffe_row.configured && spiffe_row.factor_type == "workload-attestation");
+        let pgp_row = resp.authenticators.iter().find(|a| a.method == "OPENPGP").unwrap();
+        assert!(pgp_row.configured);
+    }
+
 }

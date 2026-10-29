@@ -17,6 +17,8 @@ import type { ProposePolicyChangeResponse } from "./guardian_mesh_pb";
 import type { ProposePolicyChangeRequest } from "./guardian_mesh_pb";
 import type { RevocationStatusResponse } from "./guardian_mesh_pb";
 import type { RevocationStatusRequest } from "./guardian_mesh_pb";
+import type { AuthenticatorStatusResponse } from "./guardian_mesh_pb";
+import type { AuthenticatorStatusRequest } from "./guardian_mesh_pb";
 import type { ApproveRevocationResponse } from "./guardian_mesh_pb";
 import type { ApproveRevocationRequest } from "./guardian_mesh_pb";
 import type { ProposeRevocationResponse } from "./guardian_mesh_pb";
@@ -148,6 +150,12 @@ export interface IGuardianMeshClient {
      * @generated from protobuf rpc: RevocationStatus
      */
     revocationStatus(input: RevocationStatusRequest, options?: RpcOptions): UnaryCall<RevocationStatusRequest, RevocationStatusResponse>;
+    /**
+     * Query authenticator status (AZ-11/AZ-14)
+     *
+     * @generated from protobuf rpc: AuthenticatorStatus
+     */
+    authenticatorStatus(input: AuthenticatorStatusRequest, options?: RpcOptions): UnaryCall<AuthenticatorStatusRequest, AuthenticatorStatusResponse>;
 }
 // ──────────────────────────────────────────
 //  Guardian Mesh — gRPC Service Definitions
@@ -306,5 +314,14 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
     revocationStatus(input: RevocationStatusRequest, options?: RpcOptions): UnaryCall<RevocationStatusRequest, RevocationStatusResponse> {
         const method = this.methods[14], opt = this._transport.mergeOptions(options);
         return stackIntercept<RevocationStatusRequest, RevocationStatusResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Query authenticator status (AZ-11/AZ-14)
+     *
+     * @generated from protobuf rpc: AuthenticatorStatus
+     */
+    authenticatorStatus(input: AuthenticatorStatusRequest, options?: RpcOptions): UnaryCall<AuthenticatorStatusRequest, AuthenticatorStatusResponse> {
+        const method = this.methods[15], opt = this._transport.mergeOptions(options);
+        return stackIntercept<AuthenticatorStatusRequest, AuthenticatorStatusResponse>("unary", this._transport, method, opt, input);
     }
 }

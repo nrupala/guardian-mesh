@@ -222,6 +222,18 @@ export interface HandshakeRequest {
      * @generated from protobuf field: bytes source_public_key = 3
      */
     sourcePublicKey: Uint8Array;
+    /**
+     * @generated from protobuf field: string spiffe_id = 4
+     */
+    spiffeId: string;
+    /**
+     * @generated from protobuf field: bytes svid_leaf_der = 5
+     */
+    svidLeafDer: Uint8Array;
+    /**
+     * @generated from protobuf field: bytes svid_signature = 6
+     */
+    svidSignature: Uint8Array;
 }
 /**
  * @generated from protobuf message guardian_mesh.HandshakeResponse
@@ -239,6 +251,14 @@ export interface HandshakeResponse {
      * @generated from protobuf field: uint64 ttl_seconds = 3
      */
     ttlSeconds: string; // Session lifetime from creation
+    /**
+     * @generated from protobuf field: repeated string auth_factors = 4
+     */
+    authFactors: string[];
+    /**
+     * @generated from protobuf field: string workload_id = 5
+     */
+    workloadId: string;
 }
 /**
  * @generated from protobuf message guardian_mesh.HealthResponse
@@ -719,6 +739,10 @@ export interface ProposePolicyChangeRequest {
      * @generated from protobuf field: bytes proposer_signature = 6
      */
     proposerSignature: Uint8Array; // proposer's ML-DSA-65 signature over the canonical bundle bytes of the proposed bundle
+    /**
+     * @generated from protobuf field: string pgp_signature = 7
+     */
+    pgpSignature: string;
 }
 /**
  * @generated from protobuf message guardian_mesh.ProposePolicyChangeResponse
@@ -753,6 +777,10 @@ export interface ApprovePolicyChangeRequest {
      * @generated from protobuf field: bytes approver_signature = 3
      */
     approverSignature: Uint8Array; // approver's ML-DSA-65 signature over the canonical bundle bytes of the pending bundle
+    /**
+     * @generated from protobuf field: string pgp_signature = 4
+     */
+    pgpSignature: string;
 }
 /**
  * @generated from protobuf message guardian_mesh.ApprovePolicyChangeResponse
@@ -801,6 +829,10 @@ export interface ProposeRevocationRequest {
      * @generated from protobuf field: bytes proposer_signature = 5
      */
     proposerSignature: Uint8Array; // proposer's ML-DSA-65 signature over the canonical revocation string
+    /**
+     * @generated from protobuf field: string pgp_signature = 6
+     */
+    pgpSignature: string;
 }
 /**
  * @generated from protobuf message guardian_mesh.ProposeRevocationResponse
@@ -835,6 +867,10 @@ export interface ApproveRevocationRequest {
      * @generated from protobuf field: bytes approver_signature = 3
      */
     approverSignature: Uint8Array; // approver's ML-DSA-65 signature over the pending proposal's canonical string
+    /**
+     * @generated from protobuf field: string pgp_signature = 4
+     */
+    pgpSignature: string;
 }
 /**
  * @generated from protobuf message guardian_mesh.ApproveRevocationResponse
@@ -926,6 +962,59 @@ export interface RevocationStatusResponse {
      * @generated from protobuf field: uint32 total_revoked = 10
      */
     totalRevoked: number; // registry size (both modes)
+}
+// ── AuthenticatorStatus RPC (WO-14) ──────────
+
+/**
+ * @generated from protobuf message guardian_mesh.AuthenticatorStatusRequest
+ */
+export interface AuthenticatorStatusRequest {
+}
+/**
+ * @generated from protobuf message guardian_mesh.AuthenticatorInfo
+ */
+export interface AuthenticatorInfo {
+    /**
+     * @generated from protobuf field: string method = 1
+     */
+    method: string; // ML_DSA_65 | HMAC_SESSION | SPIFFE_X509 | OPENPGP
+    /**
+     * @generated from protobuf field: string factor_type = 2
+     */
+    factorType: string; // possession | workload-attestation
+    /**
+     * @generated from protobuf field: string assurance = 3
+     */
+    assurance: string;
+    /**
+     * @generated from protobuf field: bool configured = 4
+     */
+    configured: boolean;
+    /**
+     * @generated from protobuf field: string detail = 5
+     */
+    detail: string; // e.g. trust domains, enrolled principals count, fingerprint(s) — never secrets
+}
+/**
+ * @generated from protobuf message guardian_mesh.AuthenticatorStatusResponse
+ */
+export interface AuthenticatorStatusResponse {
+    /**
+     * @generated from protobuf field: repeated guardian_mesh.AuthenticatorInfo authenticators = 1
+     */
+    authenticators: AuthenticatorInfo[];
+    /**
+     * @generated from protobuf field: repeated string spiffe_trust_domains = 2
+     */
+    spiffeTrustDomains: string[];
+    /**
+     * @generated from protobuf field: bool spiffe_required = 3
+     */
+    spiffeRequired: boolean;
+    /**
+     * @generated from protobuf field: repeated string pgp_admin_principals = 4
+     */
+    pgpAdminPrincipals: string[]; // sorted
 }
 // @generated message type with reflection information, may provide speed optimized methods
 class SealedEnvelope$Type extends MessageType<SealedEnvelope> {
@@ -1539,13 +1628,19 @@ class HandshakeRequest$Type extends MessageType<HandshakeRequest> {
     constructor() {
         super("guardian_mesh.HandshakeRequest", [
             { no: 1, name: "source_enclave", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 3, name: "source_public_key", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+            { no: 3, name: "source_public_key", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
+            { no: 4, name: "spiffe_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 5, name: "svid_leaf_der", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
+            { no: 6, name: "svid_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
         ]);
     }
     create(value?: PartialMessage<HandshakeRequest>): HandshakeRequest {
         const message = globalThis.Object.create((this.messagePrototype!));
         message.sourceEnclave = "";
         message.sourcePublicKey = new Uint8Array(0);
+        message.spiffeId = "";
+        message.svidLeafDer = new Uint8Array(0);
+        message.svidSignature = new Uint8Array(0);
         if (value !== undefined)
             reflectionMergePartial<HandshakeRequest>(this, message, value);
         return message;
@@ -1560,6 +1655,15 @@ class HandshakeRequest$Type extends MessageType<HandshakeRequest> {
                     break;
                 case /* bytes source_public_key */ 3:
                     message.sourcePublicKey = reader.bytes();
+                    break;
+                case /* string spiffe_id */ 4:
+                    message.spiffeId = reader.string();
+                    break;
+                case /* bytes svid_leaf_der */ 5:
+                    message.svidLeafDer = reader.bytes();
+                    break;
+                case /* bytes svid_signature */ 6:
+                    message.svidSignature = reader.bytes();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -1579,6 +1683,15 @@ class HandshakeRequest$Type extends MessageType<HandshakeRequest> {
         /* bytes source_public_key = 3; */
         if (message.sourcePublicKey.length)
             writer.tag(3, WireType.LengthDelimited).bytes(message.sourcePublicKey);
+        /* string spiffe_id = 4; */
+        if (message.spiffeId !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.spiffeId);
+        /* bytes svid_leaf_der = 5; */
+        if (message.svidLeafDer.length)
+            writer.tag(5, WireType.LengthDelimited).bytes(message.svidLeafDer);
+        /* bytes svid_signature = 6; */
+        if (message.svidSignature.length)
+            writer.tag(6, WireType.LengthDelimited).bytes(message.svidSignature);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -1595,7 +1708,9 @@ class HandshakeResponse$Type extends MessageType<HandshakeResponse> {
         super("guardian_mesh.HandshakeResponse", [
             { no: 1, name: "session_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 2, name: "session_key", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
-            { no: 3, name: "ttl_seconds", kind: "scalar", T: 4 /*ScalarType.UINT64*/ }
+            { no: 3, name: "ttl_seconds", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 4, name: "auth_factors", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
+            { no: 5, name: "workload_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<HandshakeResponse>): HandshakeResponse {
@@ -1603,6 +1718,8 @@ class HandshakeResponse$Type extends MessageType<HandshakeResponse> {
         message.sessionId = "";
         message.sessionKey = new Uint8Array(0);
         message.ttlSeconds = "0";
+        message.authFactors = [];
+        message.workloadId = "";
         if (value !== undefined)
             reflectionMergePartial<HandshakeResponse>(this, message, value);
         return message;
@@ -1620,6 +1737,12 @@ class HandshakeResponse$Type extends MessageType<HandshakeResponse> {
                     break;
                 case /* uint64 ttl_seconds */ 3:
                     message.ttlSeconds = reader.uint64().toString();
+                    break;
+                case /* repeated string auth_factors */ 4:
+                    message.authFactors.push(reader.string());
+                    break;
+                case /* string workload_id */ 5:
+                    message.workloadId = reader.string();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -1642,6 +1765,12 @@ class HandshakeResponse$Type extends MessageType<HandshakeResponse> {
         /* uint64 ttl_seconds = 3; */
         if (message.ttlSeconds !== "0")
             writer.tag(3, WireType.Varint).uint64(message.ttlSeconds);
+        /* repeated string auth_factors = 4; */
+        for (let i = 0; i < message.authFactors.length; i++)
+            writer.tag(4, WireType.LengthDelimited).string(message.authFactors[i]);
+        /* string workload_id = 5; */
+        if (message.workloadId !== "")
+            writer.tag(5, WireType.LengthDelimited).string(message.workloadId);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -2973,7 +3102,8 @@ class ProposePolicyChangeRequest$Type extends MessageType<ProposePolicyChangeReq
             { no: 3, name: "escalate_actions", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
             { no: 4, name: "prev_hash", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 5, name: "proposer", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 6, name: "proposer_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+            { no: 6, name: "proposer_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
+            { no: 7, name: "pgp_signature", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<ProposePolicyChangeRequest>): ProposePolicyChangeRequest {
@@ -2984,6 +3114,7 @@ class ProposePolicyChangeRequest$Type extends MessageType<ProposePolicyChangeReq
         message.prevHash = "";
         message.proposer = "";
         message.proposerSignature = new Uint8Array(0);
+        message.pgpSignature = "";
         if (value !== undefined)
             reflectionMergePartial<ProposePolicyChangeRequest>(this, message, value);
         return message;
@@ -3010,6 +3141,9 @@ class ProposePolicyChangeRequest$Type extends MessageType<ProposePolicyChangeReq
                     break;
                 case /* bytes proposer_signature */ 6:
                     message.proposerSignature = reader.bytes();
+                    break;
+                case /* string pgp_signature */ 7:
+                    message.pgpSignature = reader.string();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -3041,6 +3175,9 @@ class ProposePolicyChangeRequest$Type extends MessageType<ProposePolicyChangeReq
         /* bytes proposer_signature = 6; */
         if (message.proposerSignature.length)
             writer.tag(6, WireType.LengthDelimited).bytes(message.proposerSignature);
+        /* string pgp_signature = 7; */
+        if (message.pgpSignature !== "")
+            writer.tag(7, WireType.LengthDelimited).string(message.pgpSignature);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -3120,7 +3257,8 @@ class ApprovePolicyChangeRequest$Type extends MessageType<ApprovePolicyChangeReq
         super("guardian_mesh.ApprovePolicyChangeRequest", [
             { no: 1, name: "change_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 2, name: "approver", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 3, name: "approver_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+            { no: 3, name: "approver_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
+            { no: 4, name: "pgp_signature", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<ApprovePolicyChangeRequest>): ApprovePolicyChangeRequest {
@@ -3128,6 +3266,7 @@ class ApprovePolicyChangeRequest$Type extends MessageType<ApprovePolicyChangeReq
         message.changeId = "";
         message.approver = "";
         message.approverSignature = new Uint8Array(0);
+        message.pgpSignature = "";
         if (value !== undefined)
             reflectionMergePartial<ApprovePolicyChangeRequest>(this, message, value);
         return message;
@@ -3145,6 +3284,9 @@ class ApprovePolicyChangeRequest$Type extends MessageType<ApprovePolicyChangeReq
                     break;
                 case /* bytes approver_signature */ 3:
                     message.approverSignature = reader.bytes();
+                    break;
+                case /* string pgp_signature */ 4:
+                    message.pgpSignature = reader.string();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -3167,6 +3309,9 @@ class ApprovePolicyChangeRequest$Type extends MessageType<ApprovePolicyChangeReq
         /* bytes approver_signature = 3; */
         if (message.approverSignature.length)
             writer.tag(3, WireType.LengthDelimited).bytes(message.approverSignature);
+        /* string pgp_signature = 4; */
+        if (message.pgpSignature !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.pgpSignature);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -3256,7 +3401,8 @@ class ProposeRevocationRequest$Type extends MessageType<ProposeRevocationRequest
             { no: 2, name: "target_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 3, name: "reason", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 4, name: "proposer", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 5, name: "proposer_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+            { no: 5, name: "proposer_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
+            { no: 6, name: "pgp_signature", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<ProposeRevocationRequest>): ProposeRevocationRequest {
@@ -3266,6 +3412,7 @@ class ProposeRevocationRequest$Type extends MessageType<ProposeRevocationRequest
         message.reason = "";
         message.proposer = "";
         message.proposerSignature = new Uint8Array(0);
+        message.pgpSignature = "";
         if (value !== undefined)
             reflectionMergePartial<ProposeRevocationRequest>(this, message, value);
         return message;
@@ -3290,6 +3437,9 @@ class ProposeRevocationRequest$Type extends MessageType<ProposeRevocationRequest
                 case 5:
                     message.proposerSignature = reader.bytes();
                     break;
+                case 6:
+                    message.pgpSignature = reader.string();
+                    break;
                 default:
                     let u = options.readUnknownField;
                     if (u === "throw")
@@ -3312,6 +3462,8 @@ class ProposeRevocationRequest$Type extends MessageType<ProposeRevocationRequest
             writer.tag(4, WireType.LengthDelimited).string(message.proposer);
         if (message.proposerSignature.length)
             writer.tag(5, WireType.LengthDelimited).bytes(message.proposerSignature);
+        if (message.pgpSignature !== "")
+            writer.tag(6, WireType.LengthDelimited).string(message.pgpSignature);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -3380,7 +3532,8 @@ class ApproveRevocationRequest$Type extends MessageType<ApproveRevocationRequest
         super("guardian_mesh.ApproveRevocationRequest", [
             { no: 1, name: "change_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 2, name: "approver", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 3, name: "approver_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+            { no: 3, name: "approver_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
+            { no: 4, name: "pgp_signature", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<ApproveRevocationRequest>): ApproveRevocationRequest {
@@ -3388,6 +3541,7 @@ class ApproveRevocationRequest$Type extends MessageType<ApproveRevocationRequest
         message.changeId = "";
         message.approver = "";
         message.approverSignature = new Uint8Array(0);
+        message.pgpSignature = "";
         if (value !== undefined)
             reflectionMergePartial<ApproveRevocationRequest>(this, message, value);
         return message;
@@ -3405,6 +3559,9 @@ class ApproveRevocationRequest$Type extends MessageType<ApproveRevocationRequest
                     break;
                 case 3:
                     message.approverSignature = reader.bytes();
+                    break;
+                case 4:
+                    message.pgpSignature = reader.string();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -3424,6 +3581,8 @@ class ApproveRevocationRequest$Type extends MessageType<ApproveRevocationRequest
             writer.tag(2, WireType.LengthDelimited).string(message.approver);
         if (message.approverSignature.length)
             writer.tag(3, WireType.LengthDelimited).bytes(message.approverSignature);
+        if (message.pgpSignature !== "")
+            writer.tag(4, WireType.LengthDelimited).string(message.pgpSignature);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -3669,6 +3828,163 @@ class RevocationStatusResponse$Type extends MessageType<RevocationStatusResponse
     }
 }
 export const RevocationStatusResponse = new RevocationStatusResponse$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class AuthenticatorStatusRequest$Type extends MessageType<AuthenticatorStatusRequest> {
+    constructor() {
+        super("guardian_mesh.AuthenticatorStatusRequest", []);
+    }
+    create(value?: PartialMessage<AuthenticatorStatusRequest>): AuthenticatorStatusRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        if (value !== undefined)
+            reflectionMergePartial<AuthenticatorStatusRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: AuthenticatorStatusRequest): AuthenticatorStatusRequest {
+        return target ?? this.create();
+    }
+    internalBinaryWrite(message: AuthenticatorStatusRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+export const AuthenticatorStatusRequest = new AuthenticatorStatusRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class AuthenticatorInfo$Type extends MessageType<AuthenticatorInfo> {
+    constructor() {
+        super("guardian_mesh.AuthenticatorInfo", [
+            { no: 1, name: "method", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "factor_type", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "assurance", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 4, name: "configured", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 5, name: "detail", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<AuthenticatorInfo>): AuthenticatorInfo {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.method = "";
+        message.factorType = "";
+        message.assurance = "";
+        message.configured = false;
+        message.detail = "";
+        if (value !== undefined)
+            reflectionMergePartial<AuthenticatorInfo>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: AuthenticatorInfo): AuthenticatorInfo {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    message.method = reader.string();
+                    break;
+                case 2:
+                    message.factorType = reader.string();
+                    break;
+                case 3:
+                    message.assurance = reader.string();
+                    break;
+                case 4:
+                    message.configured = reader.bool();
+                    break;
+                case 5:
+                    message.detail = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: AuthenticatorInfo, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        if (message.method !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.method);
+        if (message.factorType !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.factorType);
+        if (message.assurance !== "")
+            writer.tag(3, WireType.LengthDelimited).string(message.assurance);
+        if (message.configured !== false)
+            writer.tag(4, WireType.Varint).bool(message.configured);
+        if (message.detail !== "")
+            writer.tag(5, WireType.LengthDelimited).string(message.detail);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+export const AuthenticatorInfo = new AuthenticatorInfo$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class AuthenticatorStatusResponse$Type extends MessageType<AuthenticatorStatusResponse> {
+    constructor() {
+        super("guardian_mesh.AuthenticatorStatusResponse", [
+            { no: 1, name: "authenticators", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => AuthenticatorInfo },
+            { no: 2, name: "spiffe_trust_domains", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "spiffe_required", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 4, name: "pgp_admin_principals", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<AuthenticatorStatusResponse>): AuthenticatorStatusResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.authenticators = [];
+        message.spiffeTrustDomains = [];
+        message.spiffeRequired = false;
+        message.pgpAdminPrincipals = [];
+        if (value !== undefined)
+            reflectionMergePartial<AuthenticatorStatusResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: AuthenticatorStatusResponse): AuthenticatorStatusResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case 1:
+                    message.authenticators.push(AuthenticatorInfo.internalBinaryRead(reader, reader.uint32(), options));
+                    break;
+                case 2:
+                    message.spiffeTrustDomains.push(reader.string());
+                    break;
+                case 3:
+                    message.spiffeRequired = reader.bool();
+                    break;
+                case 4:
+                    message.pgpAdminPrincipals.push(reader.string());
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: AuthenticatorStatusResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        for (let i = 0; i < message.authenticators.length; i++)
+            AuthenticatorInfo.internalBinaryWrite(message.authenticators[i], writer.tag(1, WireType.LengthDelimited).fork(), options).join();
+        for (let i = 0; i < message.spiffeTrustDomains.length; i++)
+            writer.tag(2, WireType.LengthDelimited).string(message.spiffeTrustDomains[i]);
+        if (message.spiffeRequired !== false)
+            writer.tag(3, WireType.Varint).bool(message.spiffeRequired);
+        for (let i = 0; i < message.pgpAdminPrincipals.length; i++)
+            writer.tag(4, WireType.LengthDelimited).string(message.pgpAdminPrincipals[i]);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+export const AuthenticatorStatusResponse = new AuthenticatorStatusResponse$Type();
 /**
  * @generated ServiceType for protobuf service guardian_mesh.GuardianMesh
  */
@@ -3687,5 +4003,6 @@ export const GuardianMesh = new ServiceType("guardian_mesh.GuardianMesh", [
     { name: "ApprovePolicyChange", options: {}, I: ApprovePolicyChangeRequest, O: ApprovePolicyChangeResponse },
     { name: "ProposeRevocation", options: {}, I: ProposeRevocationRequest, O: ProposeRevocationResponse },
     { name: "ApproveRevocation", options: {}, I: ApproveRevocationRequest, O: ApproveRevocationResponse },
-    { name: "RevocationStatus", options: {}, I: RevocationStatusRequest, O: RevocationStatusResponse }
+    { name: "RevocationStatus", options: {}, I: RevocationStatusRequest, O: RevocationStatusResponse },
+    { name: "AuthenticatorStatus", options: {}, I: AuthenticatorStatusRequest, O: AuthenticatorStatusResponse }
 ]);

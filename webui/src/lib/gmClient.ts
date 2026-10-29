@@ -20,6 +20,7 @@ import type {
   ReadAuditLogResponse,
   PolicyBundleMessage,
   RevocationStatusResponse,
+  AuthenticatorStatusResponse,
 } from "../gen/guardian_mesh_pb"
 
 export const DAEMON_ENDPOINT: string | null =
@@ -132,6 +133,11 @@ async function ensureSession(client: GuardianMeshClient): Promise<Session> {
   const res = await client.handshake({
     sourceEnclave: "webui",
     sourcePublicKey: keyPair.publicKey,
+    // WO-14: the WebUI does not present a SPIFFE SVID in v1; the fields
+    // are sent empty (attestation stays a workload-to-daemon capability).
+    spiffeId: "",
+    svidLeafDer: new Uint8Array(),
+    svidSignature: new Uint8Array(),
   }).response
   const ttlMs = Number(res.ttlSeconds || "300") * 1000
   session = {
@@ -297,4 +303,10 @@ export async function getRevocationSummary(
   client: GuardianMeshClient,
 ): Promise<RevocationStatusResponse> {
   return client.revocationStatus({ kind: "", targetId: "" }).response
+}
+
+export async function getAuthenticatorSummary(
+  client: GuardianMeshClient,
+): Promise<AuthenticatorStatusResponse> {
+  return client.authenticatorStatus({}).response
 }

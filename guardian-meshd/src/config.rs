@@ -18,6 +18,9 @@ pub struct Config {
     pub policy_escalate_actions: Vec<String>,
     pub policy_admin_keys_dir: Option<String>,
     pub revocation_bound_secs: u64,
+    pub spiffe_trust_domains: Vec<String>,
+    pub spiffe_required: bool,
+    pub pgp_admin_keys_dir: Option<String>,
 }
 
 impl Config {
@@ -130,6 +133,18 @@ impl Default for Config {
             .unwrap_or(60);
         let revocation_bound_secs = if revocation_bound_secs == 0 { 60 } else { revocation_bound_secs };
         
+        let spiffe_trust_domains = std::env::var("GUARDIAN_MESH_SPIFFE_TRUST_DOMAINS")
+            .ok()
+            .map(|s| s.split(',').map(|d| d.trim().to_string()).filter(|d| !d.is_empty()).collect())
+            .unwrap_or_default();
+        
+        let spiffe_required = std::env::var("GUARDIAN_MESH_REQUIRE_SPIFFE")
+            .ok()
+            .map(|s| s == "1" || s.to_lowercase() == "true")
+            .unwrap_or(false);
+        
+        let pgp_admin_keys_dir = std::env::var("GUARDIAN_MESH_PGP_ADMIN_KEYS_DIR").ok();
+        
         Self {
             bind_addr: std::env::var("GUARDIAN_MESH_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".into()),
             bind_port: std::env::var("GUARDIAN_MESH_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or_else(find_free_port),
@@ -145,6 +160,9 @@ impl Default for Config {
             policy_escalate_actions,
             policy_admin_keys_dir,
             revocation_bound_secs,
+            spiffe_trust_domains,
+            spiffe_required,
+            pgp_admin_keys_dir,
         }
     }
 }

@@ -13,6 +13,22 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.12.0",
+    date: "2026-10-28",
+    summary: "Boundary authenticators: SPIFFE SVID workload attestation at the handshake and OpenPGP administrator second factor on policy and revocation crossings. Second-factor framework for BM-9 (spec AZ-3, AZ-4, AZ-11, AZ-14).",
+    highlights: [
+      "Authenticator framework with factor classification for ML-DSA-65, HMAC session, SPIFFE/X.509, and OpenPGP methods",
+      "SPIFFE SVID attestation at handshake: DER validation, trust-domain allowlist, validity window, possession proof bound to the session ML-DSA key",
+      "Required-SPIFFE mode fails closed and names the missing confirmation (BM-11)",
+      "OpenPGP (Ed25519) second factor enforced for enrolled admins on policy and revocation propose/approve",
+      "AuthenticatorStatus RPC and WebUI Boundary Authenticators summary",
+      "Not in v1: SPIFFE trust-bundle chain verification and mTLS transport termination"
+    ],
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-10-28",
+    tests: "185 Rust tests passing (128 library + 57 binary) · WebUI build + lint · wire proof 24/24",
+    status: "Release candidate"
+  },
+  {
     version: "0.11.0",
     date: "2026-10-27",
     summary: "Dual-control revocation service for sessions, keys, and certificates with DC-14 propagation bound. Closes specs DC-14, EV-4, BM-12.",
