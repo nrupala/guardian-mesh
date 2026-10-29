@@ -1,0 +1,3 @@
+guardian-mesh-policy-v1
+version=99
+proposer=pgpfixture

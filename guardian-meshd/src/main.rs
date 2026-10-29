@@ -16,8 +16,9 @@ use guardian_meshd::enclave::vault::VaultEnclave;
 use guardian_meshd::handshake_bus::{HandshakeBus, SESSION_TTL_SECS};
 use guardian_meshd::policy::{PolicyEngine, PolicyBundle, PolicyRule};
 use guardian_meshd::protocol_firewall::ProtocolFirewall;
-use guardian_meshd::sealed_envelope::{generate_keypair, SealedEnvelope, ML_DSA_65_VERIFYING_KEY_LEN, verifying_key_from_bytes};
+use guardian_meshd::sealed_envelope::{SealedEnvelope, ML_DSA_65_VERIFYING_KEY_LEN, verifying_key_from_bytes};
 use guardian_meshd::sealed_envelope::{verify_proto_envelope, load_or_generate_signing_key, compute_fingerprint};
+use guardian_meshd::authenticators::{AuthMethod, PgpKey, parse_pgp_public_key, verify_pgp_detached, parse_svid, verify_spiffe_possession, canonical_spiffe_string, spiffe_trust_domain};
 use ml_dsa::Signer;
 use guardian_meshd::certificate::{CertificateRegistry, Tests, IssuanceResult, CertificateStatus as CertStatus};
 use guardian_meshd::revocation::{RevocationRegistry, RevocationKind, RevocationEntry, canonical_revocation_string, revocation_change_id, validate_revocation};
@@ -41,6 +42,7 @@ use guardian_meshd::proto::{
     ProposeRevocationRequest, ProposeRevocationResponse,
     ApproveRevocationRequest, ApproveRevocationResponse,
     RevocationStatusRequest, RevocationStatusResponse,
+    AuthenticatorStatusRequest, AuthenticatorStatusResponse, AuthenticatorInfo,
 };
 use prost::Message as _;
 use ml_dsa::{MlDsa65, SigningKey, VerifyingKey, Verifier, SignatureEncoding};
@@ -73,6 +75,7 @@ pub struct GuardianMeshService {
     policy_principals: Arc<RwLock<(String, String)>>, // (proposer, approver)
     revocations: Arc<RevocationRegistry>,
     pending_revocation: Arc<RwLock<Option<PendingRevocation>>>,
+    pgp_admins: std::collections::HashMap<String, PgpKey>,
 }
 
 impl GuardianMeshService {
@@ -82,6 +85,9 @@ impl GuardianMeshService {
         
         // Load policy admins from the configured directory
         let policy_admins = Self::load_policy_admins(&config)?;
+        
+        // Load PGP admins from the configured directory
+        let pgp_admins = Self::load_pgp_admins(&config)?;
         
         // Load or create genesis policy
         let (policy, proposer, approver) = match PolicyEngine::load_from_file(&config.policy_dir())? {
@@ -119,6 +125,7 @@ impl GuardianMeshService {
             policy_principals: Arc::new(RwLock::new((proposer, approver))),
             revocations: Arc::new(revocations),
             pending_revocation: Arc::new(RwLock::new(None)),
+            pgp_admins,
             config,
         })
     }
@@ -187,6 +194,63 @@ impl GuardianMeshService {
         }
         
         chars.iter().all(|&c| matches!(c, 'a'..='z' | '0'..='9' | '_' | '-'))
+    }
+
+    fn load_pgp_admins(config: &Config) -> Result<std::collections::HashMap<String, PgpKey>, String> {
+        let mut admins = std::collections::HashMap::new();
+        
+        let keys_dir = match &config.pgp_admin_keys_dir {
+            Some(dir) => dir,
+            None => return Ok(admins),
+        };
+        
+        let dir_path = std::path::Path::new(keys_dir);
+        if !dir_path.exists() {
+            return Ok(admins);
+        }
+        
+        let entries = std::fs::read_dir(dir_path)
+            .map_err(|e| format!("failed to read PGP admin keys directory: {}", e))?;
+        
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("failed to read directory entry: {}", e))?;
+            let path = entry.path();
+            
+            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                if !file_name.ends_with(".asc") {
+                    continue;
+                }
+                
+                let principal = file_name.strip_suffix(".asc").unwrap();
+                
+                if !Self::is_valid_principal_name(principal) {
+                    return Err(format!("invalid principal name in PGP file: {}", file_name));
+                }
+                
+                let armored = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("failed to read PGP key file {}: {}", file_name, e))?;
+                
+                let key = parse_pgp_public_key(&armored)
+                    .map_err(|e| format!("failed to parse PGP key from {}: {}", file_name, e))?;
+                
+                admins.insert(principal.to_string(), key);
+            }
+        }
+        
+        Ok(admins)
+    }
+
+    fn check_pgp_factor(&self, principal: &str, canonical: &[u8], armored_sig: &str) -> Result<(), String> {
+        let enrolled = self.pgp_admins.get(principal);
+        
+        match (enrolled, armored_sig.is_empty()) {
+            (None, true) => Ok(()),
+            (None, false) => Err(format!("PGP signature presented but no PGP key is enrolled for principal {}", principal)),
+            (Some(key), true) => Err(format!("PGP second factor required for principal {} (AZ-4): enrolled OpenPGP key {}", principal, key.fingerprint)),
+            (Some(key), false) => {
+                verify_pgp_detached(key, armored_sig, canonical)
+            }
+        }
     }
 
     fn sweep_expired_sessions(&self, bus: &HandshakeBus) {
@@ -671,14 +735,64 @@ impl GuardianMesh for GuardianMeshService {
             req.source_enclave
         };
 
+        // WO-14: SPIFFE attestation (AZ-3)
+        let spiffe_present = !req.spiffe_id.is_empty() || !req.svid_leaf_der.is_empty() || !req.svid_signature.is_empty();
+        let spiffe_complete = !req.spiffe_id.is_empty() && !req.svid_leaf_der.is_empty() && !req.svid_signature.is_empty();
+
+        if spiffe_present && !spiffe_complete {
+            return Err(Status::invalid_argument("incomplete SPIFFE attestation: spiffe_id, svid_leaf_der and svid_signature are all required"));
+        }
+
+        let mut auth_factors = vec!["ML_DSA_65".to_string(), "HMAC_SESSION".to_string()];
+        let mut workload_id = String::new();
+
+        if spiffe_complete {
+            if self.config.spiffe_trust_domains.is_empty() {
+                return Err(Status::permission_denied("SPIFFE attestation presented but no trust domains are configured"));
+            }
+
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            let info = parse_svid(&req.svid_leaf_der, now)
+                .map_err(|e| Status::permission_denied(format!("SPIFFE attestation refused: {}", e)))?;
+
+            if info.spiffe_id != req.spiffe_id {
+                return Err(Status::permission_denied(format!("SPIFFE ID mismatch: SVID contains {}, request claims {}", info.spiffe_id, req.spiffe_id)));
+            }
+
+            let domain = spiffe_trust_domain(&info.spiffe_id)
+                .map_err(|e| Status::permission_denied(format!("SPIFFE attestation refused: {}", e)))?;
+
+            if !self.config.spiffe_trust_domains.contains(&domain) {
+                return Err(Status::permission_denied(format!("SPIFFE trust domain {} is not in allowlist", domain)));
+            }
+
+            use sha2::Digest;
+            let ml_dsa_hash = hex::encode(sha2::Sha256::digest(&req.source_public_key));
+            let canonical = canonical_spiffe_string(&info.spiffe_id, &ml_dsa_hash);
+
+            verify_spiffe_possession(&info, &canonical, &req.svid_signature)
+                .map_err(|e| Status::permission_denied(format!("SPIFFE possession verification failed: {}", e)))?;
+
+            auth_factors.push("SPIFFE_X509".to_string());
+            workload_id = info.spiffe_id.clone();
+        } else if self.config.spiffe_required {
+            return Err(Status::permission_denied("handshake refused: missing required confirmation SPIFFE_X509 (BM-9/BM-11)"));
+        }
+
         let bus = self.bus.read().await;
         self.sweep_expired_sessions(&bus);
-        let session = bus.create_session_full(&source, &req.source_public_key);
+        let session = bus.create_session_attested(&source, &req.source_public_key, auth_factors.clone(), workload_id.clone());
 
         Ok(Response::new(HandshakeResponse {
             session_id: session.session_id,
             session_key: session.session_key.to_vec(),
             ttl_seconds: SESSION_TTL_SECS,
+            auth_factors,
+            workload_id,
         }))
     }
 
@@ -918,6 +1032,15 @@ impl GuardianMesh for GuardianMeshService {
             }));
         }
         
+        // WO-14: Check PGP second factor (AZ-4)
+        if let Err(e) = self.check_pgp_factor(&req.proposer, canonical.as_bytes(), &req.pgp_signature) {
+            return Ok(Response::new(ProposePolicyChangeResponse {
+                accepted: false,
+                change_id: String::new(),
+                message: e,
+            }));
+        }
+        
         // Validate against current policy
         {
             let policy = self.policy.read().await;
@@ -1030,6 +1153,16 @@ impl GuardianMesh for GuardianMeshService {
                 version: 0,
                 content_hash: String::new(),
                 message: "signature verification failed".to_string(),
+            }));
+        }
+        
+        // WO-14: Check PGP second factor (AZ-4)
+        if let Err(e) = self.check_pgp_factor(&req.approver, canonical.as_bytes(), &req.pgp_signature) {
+            return Ok(Response::new(ApprovePolicyChangeResponse {
+                applied: false,
+                version: 0,
+                content_hash: String::new(),
+                message: e,
             }));
         }
         
@@ -1182,6 +1315,15 @@ impl GuardianMesh for GuardianMeshService {
             }));
         }
         
+        // WO-14: Check PGP second factor (AZ-4)
+        if let Err(e) = self.check_pgp_factor(&req.proposer, canonical.as_bytes(), &req.pgp_signature) {
+            return Ok(Response::new(ProposeRevocationResponse {
+                accepted: false,
+                change_id: String::new(),
+                message: e,
+            }));
+        }
+        
         // Check if a pending revocation already exists
         {
             let mut pending = self.pending_revocation.write().await;
@@ -1303,6 +1445,19 @@ impl GuardianMesh for GuardianMeshService {
                 propagation_ms: 0,
                 bound_secs: 0,
                 message: "signature verification failed".to_string(),
+            }));
+        }
+        
+        // WO-14: Check PGP second factor (AZ-4)
+        if let Err(e) = self.check_pgp_factor(&req.approver, pending_canonical.as_bytes(), &req.pgp_signature) {
+            return Ok(Response::new(ApproveRevocationResponse {
+                applied: false,
+                kind: String::new(),
+                target_id: String::new(),
+                effects: 0,
+                propagation_ms: 0,
+                bound_secs: 0,
+                message: e,
             }));
         }
         
@@ -1498,6 +1653,76 @@ impl GuardianMesh for GuardianMeshService {
                 total_revoked: self.revocations.count() as u32,
             })),
         }
+    }
+
+    async fn authenticator_status(
+        &self,
+        _request: Request<AuthenticatorStatusRequest>,
+    ) -> Result<Response<AuthenticatorStatusResponse>, Status> {
+        let mut authenticators = Vec::new();
+        
+        // ML_DSA_65
+        authenticators.push(AuthenticatorInfo {
+            method: AuthMethod::MlDsa65.as_str().to_string(),
+            factor_type: AuthMethod::MlDsa65.factor_type().to_string(),
+            assurance: AuthMethod::MlDsa65.assurance().to_string(),
+            configured: true,
+            detail: "session-bound signing key".to_string(),
+        });
+        
+        // HMAC_SESSION
+        authenticators.push(AuthenticatorInfo {
+            method: AuthMethod::HmacSession.as_str().to_string(),
+            factor_type: AuthMethod::HmacSession.factor_type().to_string(),
+            assurance: AuthMethod::HmacSession.assurance().to_string(),
+            configured: true,
+            detail: "handshake-issued session proof".to_string(),
+        });
+        
+        // SPIFFE_X509
+        let spiffe_configured = !self.config.spiffe_trust_domains.is_empty();
+        let spiffe_detail = if spiffe_configured {
+            let domains = self.config.spiffe_trust_domains.join(", ");
+            if self.config.spiffe_required {
+                format!("trust domains: {}; required", domains)
+            } else {
+                format!("trust domains: {}", domains)
+            }
+        } else {
+            "no trust domains configured".to_string()
+        };
+        authenticators.push(AuthenticatorInfo {
+            method: AuthMethod::SpiffeX509.as_str().to_string(),
+            factor_type: AuthMethod::SpiffeX509.factor_type().to_string(),
+            assurance: AuthMethod::SpiffeX509.assurance().to_string(),
+            configured: spiffe_configured,
+            detail: spiffe_detail,
+        });
+        
+        // OPENPGP
+        let pgp_configured = !self.pgp_admins.is_empty();
+        let pgp_detail = if pgp_configured {
+            format!("{} admin keys enrolled", self.pgp_admins.len())
+        } else {
+            "no admin keys enrolled".to_string()
+        };
+        authenticators.push(AuthenticatorInfo {
+            method: AuthMethod::OpenPgp.as_str().to_string(),
+            factor_type: AuthMethod::OpenPgp.factor_type().to_string(),
+            assurance: AuthMethod::OpenPgp.assurance().to_string(),
+            configured: pgp_configured,
+            detail: pgp_detail,
+        });
+        
+        let mut pgp_principals: Vec<String> = self.pgp_admins.keys().cloned().collect();
+        pgp_principals.sort();
+        
+        Ok(Response::new(AuthenticatorStatusResponse {
+            authenticators,
+            spiffe_trust_domains: self.config.spiffe_trust_domains.clone(),
+            spiffe_required: self.config.spiffe_required,
+            pgp_admin_principals: pgp_principals,
+        }))
     }
 }
 

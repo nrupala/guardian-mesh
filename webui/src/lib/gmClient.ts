@@ -20,6 +20,7 @@ import type {
   ReadAuditLogResponse,
   PolicyBundleMessage,
   RevocationStatusResponse,
+  AuthenticatorStatusResponse,
 } from "../gen/guardian_mesh_pb"
 
 export const DAEMON_ENDPOINT: string | null =
@@ -297,4 +298,10 @@ export async function getRevocationSummary(
   client: GuardianMeshClient,
 ): Promise<RevocationStatusResponse> {
   return client.revocationStatus({ kind: "", targetId: "" }).response
+}
+
+export async function getAuthenticatorSummary(
+  client: GuardianMeshClient,
+): Promise<AuthenticatorStatusResponse> {
+  return client.authenticatorStatus({}).response
 }

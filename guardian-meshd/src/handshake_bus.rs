@@ -21,6 +21,8 @@ pub struct HandshakeSession {
     /// verify against this key. Empty for legacy sessions created
     /// without a key — those fail closed at Evaluate.
     pub source_public_key: Vec<u8>,
+    pub auth_factors: Vec<String>,
+    pub workload_id: String,
 }
 
 pub struct HandshakeBus {
@@ -76,6 +78,21 @@ impl HandshakeBus {
         source_enclave: &str,
         source_public_key: &[u8],
     ) -> HandshakeSession {
+        let auth_factors = if source_public_key.is_empty() {
+            vec![]
+        } else {
+            vec!["ML_DSA_65".to_string(), "HMAC_SESSION".to_string()]
+        };
+        self.create_session_attested(source_enclave, source_public_key, auth_factors, String::new())
+    }
+
+    pub fn create_session_attested(
+        &self,
+        source_enclave: &str,
+        source_public_key: &[u8],
+        auth_factors: Vec<String>,
+        workload_id: String,
+    ) -> HandshakeSession {
         let mut session_id_bytes = [0u8; 16];
         let _ = SysRng.try_fill_bytes(&mut session_id_bytes);
         let session_id = hex::encode(session_id_bytes);
@@ -94,6 +111,8 @@ impl HandshakeBus {
             source_enclave: source_enclave.to_string(),
             created_at: now,
             source_public_key: source_public_key.to_vec(),
+            auth_factors,
+            workload_id,
         };
 
         let mut sessions = self.sessions.lock().unwrap();
@@ -188,6 +207,20 @@ impl HandshakeBus {
             })
             .map(|(id, _)| id.clone())
             .collect()
+    }
+
+    /// Get auth factors and workload_id for a session (unexpired only).
+    pub fn session_auth(&self, session_id: &str) -> Option<(Vec<String>, String)> {
+        let sessions = self.sessions.lock().unwrap();
+        let session = sessions.get(session_id)?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        if now.saturating_sub(session.created_at) >= SESSION_TTL_SECS {
+            return None;
+        }
+        Some((session.auth_factors.clone(), session.workload_id.clone()))
     }
 }
 
@@ -326,5 +359,27 @@ mod tests {
         // session_no_key should not appear in any result
         assert!(!bound.contains(&session_no_key.session_id));
         assert!(!bound_b.contains(&session_no_key.session_id));
+    }
+
+    #[test]
+    fn session_auth_returns_factors_and_workload() {
+        let bus = HandshakeBus::new(b"test-secret");
+        
+        // Attested session
+        let factors = vec!["ML_DSA_65".to_string(), "SPIFFE_X509".to_string()];
+        let workload_id = "spiffe://cluster.local/workload".to_string();
+        let session = bus.create_session_attested("test", &[1u8; 1952], factors.clone(), workload_id.clone());
+        
+        let (auth_factors, wid) = bus.session_auth(&session.session_id).unwrap();
+        assert_eq!(auth_factors, factors);
+        assert_eq!(wid, workload_id);
+        
+        // Expired session returns None
+        assert_eq!(bus.session_auth("nonexistent"), None);
+        
+        // Unknown session returns None
+        let expired_time = session.created_at + SESSION_TTL_SECS + 1;
+        bus.evict_expired_at(expired_time);
+        assert_eq!(bus.session_auth(&session.session_id), None);
     }
 }

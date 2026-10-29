@@ -62,6 +62,8 @@ service GuardianMesh {
   rpc ApproveRevocation (ApproveRevocationRequest) returns (ApproveRevocationResponse);
   // Query revocation status for one target, or the registry summary.
   rpc RevocationStatus (RevocationStatusRequest) returns (RevocationStatusResponse);
+  // Query authenticator status (AZ-11/AZ-14)
+  rpc AuthenticatorStatus (AuthenticatorStatusRequest) returns (AuthenticatorStatusResponse);
 }
 
 // ── Message Types ─────────────────────────
@@ -143,12 +145,17 @@ message HandshakeRequest {
   // session must carry a signature that verifies against this key;
   // anything else is denied. (Field 2 is unused.)
   bytes source_public_key = 3;
+  string spiffe_id = 4;
+  bytes svid_leaf_der = 5;
+  bytes svid_signature = 6;
 }
 
 message HandshakeResponse {
   string session_id = 1;
   bytes session_key = 2;   // HMAC-SHA256 key for this session
   uint64 ttl_seconds = 3;  // Session lifetime from creation
+  repeated string auth_factors = 4;
+  string workload_id = 5;
 }
 
 message HealthResponse {
@@ -305,6 +312,7 @@ message ProposePolicyChangeRequest {
   string prev_hash = 4;
   string proposer = 5;
   bytes proposer_signature = 6;    // proposer's ML-DSA-65 signature over the canonical bundle bytes of the proposed bundle
+  string pgp_signature = 7;
 }
 
 message ProposePolicyChangeResponse {
@@ -317,6 +325,7 @@ message ApprovePolicyChangeRequest {
   string change_id = 1;             // content_hash of the pending bundle
   string approver = 2;
   bytes approver_signature = 3;     // approver's ML-DSA-65 signature over the canonical bundle bytes of the pending bundle
+  string pgp_signature = 4;
 }
 
 message ApprovePolicyChangeResponse {
@@ -334,6 +343,7 @@ message ProposeRevocationRequest {
   string reason = 3;
   string proposer = 4;
   bytes proposer_signature = 5; // proposer's ML-DSA-65 signature over the canonical revocation string
+  string pgp_signature = 6;
 }
 
 message ProposeRevocationResponse {
@@ -346,6 +356,7 @@ message ApproveRevocationRequest {
   string change_id = 1;
   string approver = 2;
   bytes approver_signature = 3; // approver's ML-DSA-65 signature over the pending proposal's canonical string
+  string pgp_signature = 4;
 }
 
 message ApproveRevocationResponse {
@@ -374,4 +385,23 @@ message RevocationStatusResponse {
   uint64 propagation_ms = 8;
   uint64 bound_secs = 9;
   uint32 total_revoked = 10;    // registry size (both modes)
+}
+
+// ── AuthenticatorStatus RPC (WO-14) ──────────
+
+message AuthenticatorStatusRequest {}
+
+message AuthenticatorInfo {
+  string method = 1;        // ML_DSA_65 | HMAC_SESSION | SPIFFE_X509 | OPENPGP
+  string factor_type = 2;   // possession | workload-attestation
+  string assurance = 3;
+  bool configured = 4;
+  string detail = 5;        // e.g. trust domains, enrolled principals count, fingerprint(s) — never secrets
+}
+
+message AuthenticatorStatusResponse {
+  repeated AuthenticatorInfo authenticators = 1;
+  repeated string spiffe_trust_domains = 2;
+  bool spiffe_required = 3;
+  repeated string pgp_admin_principals = 4;   // sorted
 }

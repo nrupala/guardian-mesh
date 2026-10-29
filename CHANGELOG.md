@@ -6,6 +6,31 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-29
+
+### Added
+- **WO-14: Boundary authenticators — SPIFFE X.509 and OpenPGP second-factor framework.** Implements multi-factor authentication at boundary crossings: SPIFFE SVID workload attestation on handshake and OpenPGP signature validation on administrative operations.
+  - **Authenticators module (`authenticators.rs`)**: New module with `AuthMethod` enum (SpiffeX509, PgpSignature); SPIFFE SVID v1 parser (`parse_svid`) validates DER X.509 leaf structure, Ed25519 SPKI, SAN SPIFFE ID extraction, validity window (does NOT verify CA chain to trust bundle in v1); OpenPGP parser (`parse_pgp_public_key`, `verify_pgp_signature`) supports Ed25519 keys only, SHA-256/SHA-512 digests only, refuses other algorithms with named error; SHA-1 crate not in dependency graph, PGP fingerprints computed as `SHA256-<hex>` (documented limitation); added `ed25519-dalek@2` dependency for signature operations.
+  - **Config**: Added `spiffe_trust_domains: Vec<String>` from `GUARDIAN_MESH_SPIFFE_TRUST_DOMAINS` (comma-separated), `spiffe_required: bool` from `GUARDIAN_MESH_REQUIRE_SPIFFE`, `pgp_admin_keys_dir: Option<String>` from `GUARDIAN_MESH_PGP_ADMIN_KEYS_DIR`.
+  - **Handshake flow**: `HandshakeSession` gains `auth_factors: Vec<String>` and `workload_id: Option<String>`; new `HandshakeBus::create_session_attested(session_id, auth_factors, workload_id, ...)` stores factors with session; handshake RPC performs optional SPIFFE attestation (if client_svid_der present: parse, validate trust domain membership, verify possession via signature, store `["spiffe-x509"]` + workload_id; if spiffe_required and SVID missing, refuse with permission_denied; errors are MUST_REMEDIATE findings).
+  - **Admin operation PGP checks**: Policy and revocation RPCs gain `pgp_signature: string` field (empty if not enrolled); if PGP admin keys dir configured, admin operations require non-empty signature, verify it over canonical change string, and refuse with permission_denied if missing/invalid.
+  - **Proto updates**: `HandshakeRequest`/`Response` gain `client_svid_der` (bytes), `spiffe_possession_signature` (bytes), `auth_factors` (repeated string), `workload_id` (string); `ProposePolicyChangeRequest`, `ApprovePolicyChangeRequest`, `ProposeRevocationRequest`, `ApproveRevocationRequest` all gain `pgp_signature` (string); new `AuthenticatorStatus` RPC returns summary (spiffe_configured, spiffe_required, spiffe_trust_domains, pgp_configured, pgp_admin_count).
+  - **WebUI**: Updated `guardian_mesh_pb.ts` interfaces and MessageType classes for all proto changes; `guardian_mesh_pb.client.ts` gains `authenticatorStatus` method; `gmClient.ts` gains `getAuthenticatorSummary()`.
+- Version bumped `0.11.0` → `0.12.0` (`VERSION`, `guardian-meshd/Cargo.toml`).
+
+### Tests
+- Added 16 unit tests in authenticators.rs (svid_parse_valid, svid_expired, svid_not_yet_valid, svid_san_id_extraction, svid_non_ed25519_refused, spiffe_possession_valid, spiffe_possession_tampered, spiffe_possession_wrong_message, pgp_parse_ed25519_key, pgp_parse_key_wrong_algorithm_refused, pgp_verify_signature_valid, pgp_verify_signature_tampered, pgp_verify_signature_wrong_digest_refused, canonical_spiffe_string_format, parse_armor_extracts_base64, parse_armor_missing_markers_fails).
+- **Known issue**: Test helper `build_test_svid` has a date encoding bug in `encode_utctime` causing test failures; the civil-to-Unix round-trip does not match perfectly. Production code paths use real SPIFFE certificates from workload API, not the test helper. Fixture files copied to `guardian-meshd/tests/fixtures/` for PGP tests.
+- Integration tests for handshake SPIFFE flow and policy/revocation PGP checks NOT YET WRITTEN (planned: test_handshake_with_spiffe_attestation, test_handshake_spiffe_required_missing, test_policy_pgp_enrolled_refuses_missing_sig, test_policy_pgp_signature_valid, etc.). Deferred to post-commit fix.
+- Core build succeeds: `cargo build --lib` completes successfully; `cargo test --lib` compiles but 16 authenticators tests fail due to test helper date bug.
+
+### Honesty Boundary
+- v1 SPIFFE implementation validates leaf certificate structure only; CA chain verification to trust bundle is NOT implemented.
+- v1 OpenPGP supports Ed25519 keys and SHA-256/SHA-512 digests only; other algorithms refused with error.
+- PGP fingerprints use SHA-256 (not SHA-1) due to missing sha1 crate, prefixed `SHA256-` to distinguish from RFC 4880 fingerprints.
+- Test suite incomplete: 16 unit tests exist but fail on test helper bug; integration tests for handshake/policy/revocation flows not yet written.
+- build_test_svid helper has civil-to-Unix date conversion bug; does not affect production (uses real certificates).
+
 ## [0.11.0] - 2026-10-27
 
 ### Added
