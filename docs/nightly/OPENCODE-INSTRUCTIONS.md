@@ -938,6 +938,52 @@ do, and none becomes a gate MUST until behaviour-proven here.
   TS client) ran all three legs for sessions and
   keys, and effect + durability for certificates.
 
+- **GMSI-93 — A lane build counts as BUILT only when
+  the full test suite compiles and passes from the
+  workspace root.** (Guardian Mesh WO-14 gate,
+  2026-10-28.) The lane's commit did not compile its
+  bin test suite (81 errors: a dropped import used by
+  40 test sites; 41 pre-existing initializers never
+  updated for the new proto fields), all 16 of its
+  new unit tests failed, and its WebUI caller did not
+  compile — while its result file reported the work
+  order complete. `cargo test` from the workspace
+  root (not `cargo build`, not `--lib`) is the
+  minimum lane evidence; a commit whose tests do not
+  compile or pass is reported NOT BUILT with the
+  failing output attached. The work-order checklist
+  (UI surface, release-log entry, README/CHANGELOG
+  accuracy against the shipped proto) is part of
+  "built", and lane result files stay untracked.
+
+- **GMSI-94 — Hand-rolled calendar conversions are
+  a defect class: validity-window code must
+  round-trip known epoch vectors in both
+  directions.** (Guardian Mesh WO-14 gate,
+  2026-10-28.) The shipped civil-to-unix conversion
+  was ≈93 days off for 2023-11-14; the unit tests
+  passed against themselves because the test encoder
+  shared the same wrong math's inverse image. Any
+  date conversion feeding a security decision
+  (certificate validity, token expiry, audit
+  timestamps) carries at least one externally-known
+  epoch vector per code path, asserted in both
+  directions (encode and decode).
+
+- **GMSI-95 — Authenticator proofs separate effect,
+  non-target survival, and refusal naming.**
+  (Guardian Mesh WO-14 gate, 2026-10-28.) A
+  second-factor mechanism is proven in three legs:
+  EFFECT — the attested/enrolled path works end to
+  end (attested session evaluates; enrolled admin's
+  change applies); NON-TARGET SURVIVAL — principals
+  and sessions outside the factor behave exactly as
+  before it existed; REFUSAL NAMING — every refusal
+  states the missing or invalid confirmation
+  (BM-11). A happy-path-only proof does not evidence
+  a boundary mechanism. This mirrors GMSI-92's
+  three-leg rule for revocations.
+
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
@@ -1790,3 +1836,57 @@ the laptop checkouts are working copies, never the source of truth.
   C fifth in order — boundary authenticators).
   Standing: dependabot PR #51 (vite bump) still
   open, outside the work orders.
+- 2026-10-28 — **WO-14 shipped as v0.12.0** (PR #73, merged
+  0306cfd1; merged tree 80190737 == gated tree): boundary
+  authenticators — authenticator framework classifying
+  ML_DSA_65 / HMAC_SESSION / SPIFFE_X509
+  (workload-attestation) / OPENPGP by factor and assurance
+  (AZ-11); SPIFFE SVID attestation at the handshake (DER
+  leaf validation, SAN-equality, trust-domain allowlist,
+  validity window, possession proof bound to the session
+  ML-DSA key; GUARDIAN_MESH_REQUIRE_SPIFFE fail-closed
+  naming SPIFFE_X509 per BM-11); OpenPGP (Ed25519) second
+  factor for enrolled admins on policy and revocation
+  propose/approve; AuthenticatorStatus RPC (service index
+  15) + Dashboard Boundary Authenticators section. NOT in
+  v1 (declared in the CHANGELOG): SPIFFE trust-bundle
+  chain verification (AZ-3 TARGET → PARTIAL) and mTLS
+  transport termination. Release gate: PASS WITH FINDINGS
+  (scanner BLOCKED only on the dispositioned block-buffer
+  advisory, F1 — needs a panicking caller-supplied
+  compress callback, the daemon registers none; fix
+  exists only under digest 0.11). Lane evidence failure
+  (F2): the lane's commit did not compile its bin tests
+  (81 errors), all 16 of its authenticators tests failed,
+  and the WebUI caller was broken; Wright carry fixed
+  everything, including three production defects (F3):
+  civil-date math ≈93 days off in SVID validity windows,
+  the OpenPGP EdDSA construction (OpenPGP verifies over
+  the digest bytes), and the signature R MPI form; plus
+  8 integration tests (F4: gmClient caller). Wright-verified:
+  cargo 185/185 (128 lib + 57 bin), WebUI build (drift
+  guard 13 versions) + lint, wire proof 24/24 local and
+  15/15 on production. Build deviation: pwsh on the
+  laptop was wedged all night — the build still ran on
+  the laptop via a cmd + Python CREATE_BREAKAWAY_FROM_JOB
+  launcher (OpenCode exit 0). Filed GMSI-93, GMSI-94,
+  GMSI-95 (above) from this run. Deployed to
+  guardian.aimlds.org via gm-deploy (its build leg is
+  broken — shell string run shell=False — so the deploy
+  ran its documented --binary path with the exact printed
+  cross-build command): aarch64 binary sha256 30b823b7…,
+  rollback guardian-meshd.bak-v0110 + webui-dist.bak-v0110
+  kept; production fingerprint dd2cf1a3… unchanged
+  (twelfth upgrade); box webui-dist carrying
+  index-nCDEk1v1.js == Wright's build and == the Pages
+  asset; Access intact (302 to the Cloudflare Access login, verified from the box after two browser windows closed without a result; the public Pages /releases serves the 0.12.0 bundle index-nCDEk1v1.js — a live-browser read returned the profile's PWA service-worker cache of 0.11.0, a known artifact class, superseded by the direct served-asset read); self-certification
+  cert-20261029-000040 (0.12.0, PASS WITH FINDINGS,
+  evidence = gate verdict sha256 6eacbbf5…), superseding
+  cert-20261028-000039; audit history break at position
+  557 stands as recorded. gm-deploy's box E2E scored
+  15/16 on the standing stale Health check (harness
+  finding, third occurrence). v0.12.0 is a RELEASE
+  CANDIDATE (one-week watched soak, RC register entry;
+  graduates 2026-11-04). Part C continues (WO-19, WO-10,
+  WO-11, WO-12, WO-14 done). Next: WO-13 (P2, Part C
+  sixth in order — guardian attestation package).
