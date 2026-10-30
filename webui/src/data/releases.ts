@@ -25,8 +25,8 @@ export const RELEASES: Release[] = [
       "WebUI Guardian Attestation section displaying version, build commit (short), and running binary SHA-256 with attestation reminder",
       "HONESTY BOUNDARY: SLSA L2-style builder-signed provenance, no SLSA L3 hermetic builder, no transparency log, no TPM measured boot in v1"
     ],
-    gateVerdict: "TBD",
-    tests: "TBD",
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-10-29",
+    tests: "193 Rust tests passing (136 library + 57 binary) · WebUI build + lint · reproducible builds identical · gm-attest VALID/tamper-INVALID · Health build-identity wire proof",
     status: "Release candidate"
   },
   {

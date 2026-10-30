@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-SOURCE_DIR="${1:-.}"
+SOURCE_DIR="$(cd "${1:-.}" && pwd)"
 
 echo "=== Guardian Mesh Reproducible Build Verification ==="
 echo "Source directory: $SOURCE_DIR"
@@ -39,8 +39,7 @@ export GUARDIAN_MESH_GIT_COMMIT="$COMMIT_HASH"
 export LC_ALL=C
 export TZ=UTC
 
-cargo build --release --locked \
-  --remap-path-prefix "$TMPDIR1=/guardian-mesh"
+RUSTFLAGS="--remap-path-prefix $TMPDIR1=/guardian-mesh" cargo build --release --locked
 
 BINARY1="$TMPDIR1/target/release/guardian-meshd"
 HASH1=$(sha256sum "$BINARY1" | awk '{print $1}')
@@ -56,8 +55,7 @@ export GUARDIAN_MESH_GIT_COMMIT="$COMMIT_HASH"
 export LC_ALL=C
 export TZ=UTC
 
-cargo build --release --locked \
-  --remap-path-prefix "$TMPDIR2=/guardian-mesh"
+RUSTFLAGS="--remap-path-prefix $TMPDIR2=/guardian-mesh" cargo build --release --locked
 
 BINARY2="$TMPDIR2/target/release/guardian-meshd"
 HASH2=$(sha256sum "$BINARY2" | awk '{print $1}')

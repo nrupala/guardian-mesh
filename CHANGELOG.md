@@ -21,11 +21,12 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Tests
 - attestation.rs unit tests (8): build_identity_functions_exist, running_binary_sha256_is_64_hex_chars, canonical_json_is_byte_stable, package_builds_and_verifies, package_rejects_tampered_binary, package_rejects_tampered_statement, package_rejects_wrong_signature_key, base64_roundtrip.
-- Rust tests: 134 passed (lib tests, Windows; 1 pre-existing failure in authenticators::tests::test_pgp_fixture_verify from WO-14, not WO-13 code). Bin tests blocked by Windows Defender (os error 225) during gate run; lib tests cover the attestation module.
-- WebUI: `npm ci` + `npm run build` (passing, built in 338ms) + `npm run lint` (passing, 0 errors).
+- Rust tests (Wright-verified, Linux, workspace root): 193/193 — 136 lib + 57 bin (baseline 185; the +8 lib tests are the attestation unit tests). The lane's Windows run reported 134 lib passed + 1 failed (authenticators::tests::test_pgp_fixture_verify, WO-14 — passes on Linux and in CI) and its bin test executable was blocked by Windows Defender (os error 225, false positive on a fresh test binary).
+- WebUI (Wright-verified): `npm ci` + `npm run build` (drift guard 14 versions) + `npm run lint` — all green.
+- Behaviour proofs (Wright): reproducible build — two clean builds in separate directories produced IDENTICAL binaries (SHA-256 a39725c6…) after two Wright fixes to the lane's script (a relative source path broke after `cd`; `--remap-path-prefix` is a rustc flag and is now passed via RUSTFLAGS — the lane never ran its own script end to end). gm-attest stranger path: build → sign → verify = ATTESTATION VALID on the release binary; a one-byte-appended copy = ATTESTATION INVALID naming the subject digest, exit 1. Health wire proof (gRPC-web, raw frame decode): the running daemon reports build_version 0.13.0, build_commit = the source commit, and binary_sha256 exactly equal to the running binary's real SHA-256.
 
 ### Gate Verdict
-TBD — to be completed by Wright
+PASS WITH FINDINGS — Release Gate 2026-10-29. Scanner BLOCKED only on the previously dispositioned block-buffer advisory GHSA-qwgh-2vcv-g2f7 (WO-14 F1: exploitation needs a panicking caller-supplied compress callback; the daemon registers none); 0 secrets, no auth/leak leads. Findings: F1 the lane's reproducible-build.sh could not run as shipped (fixed in the Wright carry, then proven); F2 lane evidence slips (unrun script claimed working, stale drift-guard count, branch never pushed).
 
 ## [0.12.0] - 2026-10-28
 
