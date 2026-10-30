@@ -171,6 +171,9 @@ message HealthResponse {
   uint32 protocol_firewall_rules_total = 4;
   string signing_key_fingerprint = 5; // SHA-256 of the daemon's ML-DSA-65 public key (lowercase hex)
   map<string, string> protocol_firewall_rule_counters = 6; // Per-rule measured counts: "passed=<n>,failed=<n>"
+  string build_version = 7;   // daemon crate version, e.g. "0.13.0"
+  string build_commit = 8;    // git commit the binary was built from, or "unknown"
+  string binary_sha256 = 9;   // SHA-256 of the running executable (lowercase hex), "" if unreadable
 }
 
 // ── Shared Types ──────────────────────────

@@ -697,6 +697,9 @@ impl GuardianMesh for GuardianMeshService {
             protocol_firewall_rules_total: (passed + failed) as u32,
             signing_key_fingerprint: fingerprint,
             protocol_firewall_rule_counters,
+            build_version: guardian_meshd::attestation::build_version().to_string(),
+            build_commit: guardian_meshd::attestation::build_commit().to_string(),
+            binary_sha256: guardian_meshd::attestation::running_binary_sha256(),
         };
 
         Ok(Response::new(response))
