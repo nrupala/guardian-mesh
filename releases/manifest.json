@@ -556,5 +556,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-29T01:28:03-06:00",
     "message": "Merge pull request #74 from nrupala/wright/ledger-wo14-gmsi93-95-20261028"
+  },
+  {
+    "release": 67,
+    "tag": "release/v67",
+    "previous_tag": "release/v66",
+    "sha": "95f3fcacda737a874953485c6589bce4a9868d40",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-30T00:21:05-06:00",
+    "message": "Merge pull request #75 from nrupala/wright/wo13-attestation-package"
   }
 ]
