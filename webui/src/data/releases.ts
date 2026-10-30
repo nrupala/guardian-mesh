@@ -13,6 +13,23 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.13.0",
+    date: "2026-10-29",
+    summary: "Guardian attestation package: signed reproducible builds with provenance published per release. Closes specs CP-19, CP-21, DC-17 (PARTIAL).",
+    highlights: [
+      "Health carries build identity: build_version, build_commit, binary_sha256 fields for tenant verification before first verdict",
+      "gm-attest CLI for building provenance statements, signing attestation packages, and verifying binary-to-attestation correspondence",
+      "Reproducible build script (scripts/reproducible-build.sh) performing two independent builds with SOURCE_DATE_EPOCH and path remapping",
+      "docs/ATTESTATION.md public verification instructions a stranger can follow from public artifacts alone",
+      "Provenance statement following in-toto/SLSA v1 structure signed with ML-DSA-65 in a sealed envelope",
+      "WebUI Guardian Attestation section displaying version, build commit (short), and running binary SHA-256 with attestation reminder",
+      "HONESTY BOUNDARY: SLSA L2-style builder-signed provenance, no SLSA L3 hermetic builder, no transparency log, no TPM measured boot in v1"
+    ],
+    gateVerdict: "TBD",
+    tests: "TBD",
+    status: "Release candidate"
+  },
+  {
     version: "0.12.0",
     date: "2026-10-28",
     summary: "Boundary authenticators: SPIFFE SVID workload attestation at the handshake and OpenPGP administrator second factor on policy and revocation crossings. Second-factor framework for BM-9 (spec AZ-3, AZ-4, AZ-11, AZ-14).",

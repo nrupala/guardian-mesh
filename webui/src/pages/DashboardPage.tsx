@@ -673,6 +673,37 @@ function LivePanel() {
           )}
         </section>
 
+        <section className="dash-section">
+          <h2>Guardian Attestation</h2>
+          <p className="hint">
+            Compare this digest with the release's published attestation before trusting a first verdict.
+          </p>
+          {health ? (
+            <div className="card">
+              <div className="audit-entry-body">
+                <p>
+                  <strong>Version:</strong> {health.buildVersion || "unknown"}
+                </p>
+                <p>
+                  <strong>Build commit:</strong> {health.buildCommit ? health.buildCommit.slice(0, 8) : "unknown"}
+                </p>
+                <p>
+                  <strong>Running binary SHA-256:</strong>{" "}
+                  {health.binarySha256 ? (
+                    <span title={health.binarySha256}>
+                      {health.binarySha256.slice(0, 16)}…
+                    </span>
+                  ) : (
+                    "unreadable"
+                  )}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="hint">Waiting for health data…</p>
+          )}
+        </section>
+
         <section className="dash-section" ref={evalRef}>
           <h2>Run an evaluation</h2>
           <p className="hint">

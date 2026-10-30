@@ -360,7 +360,7 @@ that is itself the risk. (Owner-approved 2026-10-15; source: the
 
 | ID | Requirement | Status |
 |----|-------------|--------|
-| DC-17 | Releases MUST be signed and reproducible, with published provenance (CP-19); a tenant MUST be able to verify the running daemon is the attested build (measured boot / remote attestation where the platform offers it) before trusting its first verdict. "Who guards the guardian" is answered with evidence, not branding. | [TARGET] |
+| DC-17 | Releases MUST be signed and reproducible, with published provenance (CP-19); a tenant MUST be able to verify the running daemon is the attested build (measured boot / remote attestation where the platform offers it) before trusting its first verdict. "Who guards the guardian" is answered with evidence, not branding. | [PARTIAL] — WO-13 v1: signed provenance + Health build identity; measured boot / trust-bundle publication remain target |
 
 ### 6.9 Policy governance
 

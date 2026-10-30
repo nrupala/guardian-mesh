@@ -291,7 +291,19 @@ export interface HealthResponse {
      */
     protocolFirewallRuleCounters: {
         [key: string]: string;
-    };
+    }; // Per-rule measured counts: "passed=<n>,failed=<n>"
+    /**
+     * @generated from protobuf field: string build_version = 7
+     */
+    buildVersion: string; // daemon crate version, e.g. "0.13.0"
+    /**
+     * @generated from protobuf field: string build_commit = 8
+     */
+    buildCommit: string; // git commit the binary was built from, or "unknown"
+    /**
+     * @generated from protobuf field: string binary_sha256 = 9
+     */
+    binarySha256: string; // SHA-256 of the running executable (lowercase hex), "" if unreadable
 }
 /**
  * @generated from protobuf enum guardian_mesh.HealthResponse.ServingStatus
@@ -1386,7 +1398,7 @@ class EvaluateResponse$Type extends MessageType<EvaluateResponse> {
             { no: 4, name: "proof", kind: "message", T: () => AuditProof },
             { no: 5, name: "handshake_token", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
             { no: 6, name: "proof_envelope", kind: "message", T: () => SealedEnvelope },
-            { no: 7, name: "reasons", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => StructuredReason },
+            { no: 7, name: "reasons", kind: "message", repeat: 2 /*RepeatType.UNPACKED*/, T: () => StructuredReason },
             { no: 8, name: "simulation", kind: "scalar", T: 8 /*ScalarType.BOOL*/ }
         ]);
     }
@@ -1790,7 +1802,10 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
             { no: 3, name: "protocol_firewall_rules_passed", kind: "scalar", T: 13 /*ScalarType.UINT32*/ },
             { no: 4, name: "protocol_firewall_rules_total", kind: "scalar", T: 13 /*ScalarType.UINT32*/ },
             { no: 5, name: "signing_key_fingerprint", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
-            { no: 6, name: "protocol_firewall_rule_counters", kind: "map", K: 9 /*ScalarType.STRING*/, V: { kind: "scalar", T: 9 /*ScalarType.STRING*/ } }
+            { no: 6, name: "protocol_firewall_rule_counters", kind: "map", K: 9 /*ScalarType.STRING*/, V: { kind: "scalar", T: 9 /*ScalarType.STRING*/ } },
+            { no: 7, name: "build_version", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 8, name: "build_commit", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 9, name: "binary_sha256", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<HealthResponse>): HealthResponse {
@@ -1801,6 +1816,9 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
         message.protocolFirewallRulesTotal = 0;
         message.signingKeyFingerprint = "";
         message.protocolFirewallRuleCounters = {};
+        message.buildVersion = "";
+        message.buildCommit = "";
+        message.binarySha256 = "";
         if (value !== undefined)
             reflectionMergePartial<HealthResponse>(this, message, value);
         return message;
@@ -1827,6 +1845,15 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
                     break;
                 case /* map<string, string> protocol_firewall_rule_counters */ 6:
                     this.binaryReadMap6(message.protocolFirewallRuleCounters, reader, options);
+                    break;
+                case /* string build_version */ 7:
+                    message.buildVersion = reader.string();
+                    break;
+                case /* string build_commit */ 8:
+                    message.buildCommit = reader.string();
+                    break;
+                case /* string binary_sha256 */ 9:
+                    message.binarySha256 = reader.string();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -1890,6 +1917,15 @@ class HealthResponse$Type extends MessageType<HealthResponse> {
         /* map<string, string> protocol_firewall_rule_counters = 6; */
         for (let k of globalThis.Object.keys(message.protocolFirewallRuleCounters))
             writer.tag(6, WireType.LengthDelimited).fork().tag(1, WireType.LengthDelimited).string(k).tag(2, WireType.LengthDelimited).string(message.protocolFirewallRuleCounters[k]).join();
+        /* string build_version = 7; */
+        if (message.buildVersion !== "")
+            writer.tag(7, WireType.LengthDelimited).string(message.buildVersion);
+        /* string build_commit = 8; */
+        if (message.buildCommit !== "")
+            writer.tag(8, WireType.LengthDelimited).string(message.buildCommit);
+        /* string binary_sha256 = 9; */
+        if (message.binarySha256 !== "")
+            writer.tag(9, WireType.LengthDelimited).string(message.binarySha256);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -3422,22 +3458,22 @@ class ProposeRevocationRequest$Type extends MessageType<ProposeRevocationRequest
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case 1:
+                case /* string kind */ 1:
                     message.kind = reader.string();
                     break;
-                case 2:
+                case /* string target_id */ 2:
                     message.targetId = reader.string();
                     break;
-                case 3:
+                case /* string reason */ 3:
                     message.reason = reader.string();
                     break;
-                case 4:
+                case /* string proposer */ 4:
                     message.proposer = reader.string();
                     break;
-                case 5:
+                case /* bytes proposer_signature */ 5:
                     message.proposerSignature = reader.bytes();
                     break;
-                case 6:
+                case /* string pgp_signature */ 6:
                     message.pgpSignature = reader.string();
                     break;
                 default:
@@ -3452,16 +3488,22 @@ class ProposeRevocationRequest$Type extends MessageType<ProposeRevocationRequest
         return message;
     }
     internalBinaryWrite(message: ProposeRevocationRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string kind = 1; */
         if (message.kind !== "")
             writer.tag(1, WireType.LengthDelimited).string(message.kind);
+        /* string target_id = 2; */
         if (message.targetId !== "")
             writer.tag(2, WireType.LengthDelimited).string(message.targetId);
+        /* string reason = 3; */
         if (message.reason !== "")
             writer.tag(3, WireType.LengthDelimited).string(message.reason);
+        /* string proposer = 4; */
         if (message.proposer !== "")
             writer.tag(4, WireType.LengthDelimited).string(message.proposer);
+        /* bytes proposer_signature = 5; */
         if (message.proposerSignature.length)
             writer.tag(5, WireType.LengthDelimited).bytes(message.proposerSignature);
+        /* string pgp_signature = 6; */
         if (message.pgpSignature !== "")
             writer.tag(6, WireType.LengthDelimited).string(message.pgpSignature);
         let u = options.writeUnknownFields;
@@ -3470,7 +3512,11 @@ class ProposeRevocationRequest$Type extends MessageType<ProposeRevocationRequest
         return writer;
     }
 }
+/**
+ * @generated MessageType for protobuf message guardian_mesh.ProposeRevocationRequest
+ */
 export const ProposeRevocationRequest = new ProposeRevocationRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
 class ProposeRevocationResponse$Type extends MessageType<ProposeRevocationResponse> {
     constructor() {
         super("guardian_mesh.ProposeRevocationResponse", [
@@ -3493,13 +3539,13 @@ class ProposeRevocationResponse$Type extends MessageType<ProposeRevocationRespon
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case 1:
+                case /* bool accepted */ 1:
                     message.accepted = reader.bool();
                     break;
-                case 2:
+                case /* string change_id */ 2:
                     message.changeId = reader.string();
                     break;
-                case 3:
+                case /* string message */ 3:
                     message.message = reader.string();
                     break;
                 default:
@@ -3514,10 +3560,13 @@ class ProposeRevocationResponse$Type extends MessageType<ProposeRevocationRespon
         return message;
     }
     internalBinaryWrite(message: ProposeRevocationResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* bool accepted = 1; */
         if (message.accepted !== false)
             writer.tag(1, WireType.Varint).bool(message.accepted);
+        /* string change_id = 2; */
         if (message.changeId !== "")
             writer.tag(2, WireType.LengthDelimited).string(message.changeId);
+        /* string message = 3; */
         if (message.message !== "")
             writer.tag(3, WireType.LengthDelimited).string(message.message);
         let u = options.writeUnknownFields;
@@ -3526,7 +3575,11 @@ class ProposeRevocationResponse$Type extends MessageType<ProposeRevocationRespon
         return writer;
     }
 }
+/**
+ * @generated MessageType for protobuf message guardian_mesh.ProposeRevocationResponse
+ */
 export const ProposeRevocationResponse = new ProposeRevocationResponse$Type();
+// @generated message type with reflection information, may provide speed optimized methods
 class ApproveRevocationRequest$Type extends MessageType<ApproveRevocationRequest> {
     constructor() {
         super("guardian_mesh.ApproveRevocationRequest", [
@@ -3551,16 +3604,16 @@ class ApproveRevocationRequest$Type extends MessageType<ApproveRevocationRequest
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case 1:
+                case /* string change_id */ 1:
                     message.changeId = reader.string();
                     break;
-                case 2:
+                case /* string approver */ 2:
                     message.approver = reader.string();
                     break;
-                case 3:
+                case /* bytes approver_signature */ 3:
                     message.approverSignature = reader.bytes();
                     break;
-                case 4:
+                case /* string pgp_signature */ 4:
                     message.pgpSignature = reader.string();
                     break;
                 default:
@@ -3575,12 +3628,16 @@ class ApproveRevocationRequest$Type extends MessageType<ApproveRevocationRequest
         return message;
     }
     internalBinaryWrite(message: ApproveRevocationRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string change_id = 1; */
         if (message.changeId !== "")
             writer.tag(1, WireType.LengthDelimited).string(message.changeId);
+        /* string approver = 2; */
         if (message.approver !== "")
             writer.tag(2, WireType.LengthDelimited).string(message.approver);
+        /* bytes approver_signature = 3; */
         if (message.approverSignature.length)
             writer.tag(3, WireType.LengthDelimited).bytes(message.approverSignature);
+        /* string pgp_signature = 4; */
         if (message.pgpSignature !== "")
             writer.tag(4, WireType.LengthDelimited).string(message.pgpSignature);
         let u = options.writeUnknownFields;
@@ -3589,7 +3646,11 @@ class ApproveRevocationRequest$Type extends MessageType<ApproveRevocationRequest
         return writer;
     }
 }
+/**
+ * @generated MessageType for protobuf message guardian_mesh.ApproveRevocationRequest
+ */
 export const ApproveRevocationRequest = new ApproveRevocationRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
 class ApproveRevocationResponse$Type extends MessageType<ApproveRevocationResponse> {
     constructor() {
         super("guardian_mesh.ApproveRevocationResponse", [
@@ -3620,25 +3681,25 @@ class ApproveRevocationResponse$Type extends MessageType<ApproveRevocationRespon
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case 1:
+                case /* bool applied */ 1:
                     message.applied = reader.bool();
                     break;
-                case 2:
+                case /* string kind */ 2:
                     message.kind = reader.string();
                     break;
-                case 3:
+                case /* string target_id */ 3:
                     message.targetId = reader.string();
                     break;
-                case 4:
+                case /* uint32 effects */ 4:
                     message.effects = reader.uint32();
                     break;
-                case 5:
+                case /* uint64 propagation_ms */ 5:
                     message.propagationMs = reader.uint64().toString();
                     break;
-                case 6:
+                case /* uint64 bound_secs */ 6:
                     message.boundSecs = reader.uint64().toString();
                     break;
-                case 7:
+                case /* string message */ 7:
                     message.message = reader.string();
                     break;
                 default:
@@ -3653,18 +3714,25 @@ class ApproveRevocationResponse$Type extends MessageType<ApproveRevocationRespon
         return message;
     }
     internalBinaryWrite(message: ApproveRevocationResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* bool applied = 1; */
         if (message.applied !== false)
             writer.tag(1, WireType.Varint).bool(message.applied);
+        /* string kind = 2; */
         if (message.kind !== "")
             writer.tag(2, WireType.LengthDelimited).string(message.kind);
+        /* string target_id = 3; */
         if (message.targetId !== "")
             writer.tag(3, WireType.LengthDelimited).string(message.targetId);
+        /* uint32 effects = 4; */
         if (message.effects !== 0)
             writer.tag(4, WireType.Varint).uint32(message.effects);
+        /* uint64 propagation_ms = 5; */
         if (message.propagationMs !== "0")
             writer.tag(5, WireType.Varint).uint64(message.propagationMs);
+        /* uint64 bound_secs = 6; */
         if (message.boundSecs !== "0")
             writer.tag(6, WireType.Varint).uint64(message.boundSecs);
+        /* string message = 7; */
         if (message.message !== "")
             writer.tag(7, WireType.LengthDelimited).string(message.message);
         let u = options.writeUnknownFields;
@@ -3673,7 +3741,11 @@ class ApproveRevocationResponse$Type extends MessageType<ApproveRevocationRespon
         return writer;
     }
 }
+/**
+ * @generated MessageType for protobuf message guardian_mesh.ApproveRevocationResponse
+ */
 export const ApproveRevocationResponse = new ApproveRevocationResponse$Type();
+// @generated message type with reflection information, may provide speed optimized methods
 class RevocationStatusRequest$Type extends MessageType<RevocationStatusRequest> {
     constructor() {
         super("guardian_mesh.RevocationStatusRequest", [
@@ -3694,10 +3766,10 @@ class RevocationStatusRequest$Type extends MessageType<RevocationStatusRequest> 
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case 1:
+                case /* string kind */ 1:
                     message.kind = reader.string();
                     break;
-                case 2:
+                case /* string target_id */ 2:
                     message.targetId = reader.string();
                     break;
                 default:
@@ -3712,8 +3784,10 @@ class RevocationStatusRequest$Type extends MessageType<RevocationStatusRequest> 
         return message;
     }
     internalBinaryWrite(message: RevocationStatusRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string kind = 1; */
         if (message.kind !== "")
             writer.tag(1, WireType.LengthDelimited).string(message.kind);
+        /* string target_id = 2; */
         if (message.targetId !== "")
             writer.tag(2, WireType.LengthDelimited).string(message.targetId);
         let u = options.writeUnknownFields;
@@ -3722,7 +3796,11 @@ class RevocationStatusRequest$Type extends MessageType<RevocationStatusRequest> 
         return writer;
     }
 }
+/**
+ * @generated MessageType for protobuf message guardian_mesh.RevocationStatusRequest
+ */
 export const RevocationStatusRequest = new RevocationStatusRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
 class RevocationStatusResponse$Type extends MessageType<RevocationStatusResponse> {
     constructor() {
         super("guardian_mesh.RevocationStatusResponse", [
@@ -3759,34 +3837,34 @@ class RevocationStatusResponse$Type extends MessageType<RevocationStatusResponse
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case 1:
+                case /* bool revoked */ 1:
                     message.revoked = reader.bool();
                     break;
-                case 2:
+                case /* string kind */ 2:
                     message.kind = reader.string();
                     break;
-                case 3:
+                case /* string target_id */ 3:
                     message.targetId = reader.string();
                     break;
-                case 4:
+                case /* string reason */ 4:
                     message.reason = reader.string();
                     break;
-                case 5:
+                case /* string proposer */ 5:
                     message.proposer = reader.string();
                     break;
-                case 6:
+                case /* string approver */ 6:
                     message.approver = reader.string();
                     break;
-                case 7:
+                case /* uint64 revoked_at */ 7:
                     message.revokedAt = reader.uint64().toString();
                     break;
-                case 8:
+                case /* uint64 propagation_ms */ 8:
                     message.propagationMs = reader.uint64().toString();
                     break;
-                case 9:
+                case /* uint64 bound_secs */ 9:
                     message.boundSecs = reader.uint64().toString();
                     break;
-                case 10:
+                case /* uint32 total_revoked */ 10:
                     message.totalRevoked = reader.uint32();
                     break;
                 default:
@@ -3801,24 +3879,34 @@ class RevocationStatusResponse$Type extends MessageType<RevocationStatusResponse
         return message;
     }
     internalBinaryWrite(message: RevocationStatusResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* bool revoked = 1; */
         if (message.revoked !== false)
             writer.tag(1, WireType.Varint).bool(message.revoked);
+        /* string kind = 2; */
         if (message.kind !== "")
             writer.tag(2, WireType.LengthDelimited).string(message.kind);
+        /* string target_id = 3; */
         if (message.targetId !== "")
             writer.tag(3, WireType.LengthDelimited).string(message.targetId);
+        /* string reason = 4; */
         if (message.reason !== "")
             writer.tag(4, WireType.LengthDelimited).string(message.reason);
+        /* string proposer = 5; */
         if (message.proposer !== "")
             writer.tag(5, WireType.LengthDelimited).string(message.proposer);
+        /* string approver = 6; */
         if (message.approver !== "")
             writer.tag(6, WireType.LengthDelimited).string(message.approver);
+        /* uint64 revoked_at = 7; */
         if (message.revokedAt !== "0")
             writer.tag(7, WireType.Varint).uint64(message.revokedAt);
+        /* uint64 propagation_ms = 8; */
         if (message.propagationMs !== "0")
             writer.tag(8, WireType.Varint).uint64(message.propagationMs);
+        /* uint64 bound_secs = 9; */
         if (message.boundSecs !== "0")
             writer.tag(9, WireType.Varint).uint64(message.boundSecs);
+        /* uint32 total_revoked = 10; */
         if (message.totalRevoked !== 0)
             writer.tag(10, WireType.Varint).uint32(message.totalRevoked);
         let u = options.writeUnknownFields;
@@ -3827,6 +3915,9 @@ class RevocationStatusResponse$Type extends MessageType<RevocationStatusResponse
         return writer;
     }
 }
+/**
+ * @generated MessageType for protobuf message guardian_mesh.RevocationStatusResponse
+ */
 export const RevocationStatusResponse = new RevocationStatusResponse$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class AuthenticatorStatusRequest$Type extends MessageType<AuthenticatorStatusRequest> {
@@ -3840,7 +3931,20 @@ class AuthenticatorStatusRequest$Type extends MessageType<AuthenticatorStatusReq
         return message;
     }
     internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: AuthenticatorStatusRequest): AuthenticatorStatusRequest {
-        return target ?? this.create();
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
     }
     internalBinaryWrite(message: AuthenticatorStatusRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
         let u = options.writeUnknownFields;
@@ -3849,6 +3953,9 @@ class AuthenticatorStatusRequest$Type extends MessageType<AuthenticatorStatusReq
         return writer;
     }
 }
+/**
+ * @generated MessageType for protobuf message guardian_mesh.AuthenticatorStatusRequest
+ */
 export const AuthenticatorStatusRequest = new AuthenticatorStatusRequest$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class AuthenticatorInfo$Type extends MessageType<AuthenticatorInfo> {
@@ -3877,19 +3984,19 @@ class AuthenticatorInfo$Type extends MessageType<AuthenticatorInfo> {
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case 1:
+                case /* string method */ 1:
                     message.method = reader.string();
                     break;
-                case 2:
+                case /* string factor_type */ 2:
                     message.factorType = reader.string();
                     break;
-                case 3:
+                case /* string assurance */ 3:
                     message.assurance = reader.string();
                     break;
-                case 4:
+                case /* bool configured */ 4:
                     message.configured = reader.bool();
                     break;
-                case 5:
+                case /* string detail */ 5:
                     message.detail = reader.string();
                     break;
                 default:
@@ -3904,14 +4011,19 @@ class AuthenticatorInfo$Type extends MessageType<AuthenticatorInfo> {
         return message;
     }
     internalBinaryWrite(message: AuthenticatorInfo, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string method = 1; */
         if (message.method !== "")
             writer.tag(1, WireType.LengthDelimited).string(message.method);
+        /* string factor_type = 2; */
         if (message.factorType !== "")
             writer.tag(2, WireType.LengthDelimited).string(message.factorType);
+        /* string assurance = 3; */
         if (message.assurance !== "")
             writer.tag(3, WireType.LengthDelimited).string(message.assurance);
+        /* bool configured = 4; */
         if (message.configured !== false)
             writer.tag(4, WireType.Varint).bool(message.configured);
+        /* string detail = 5; */
         if (message.detail !== "")
             writer.tag(5, WireType.LengthDelimited).string(message.detail);
         let u = options.writeUnknownFields;
@@ -3920,12 +4032,15 @@ class AuthenticatorInfo$Type extends MessageType<AuthenticatorInfo> {
         return writer;
     }
 }
+/**
+ * @generated MessageType for protobuf message guardian_mesh.AuthenticatorInfo
+ */
 export const AuthenticatorInfo = new AuthenticatorInfo$Type();
 // @generated message type with reflection information, may provide speed optimized methods
 class AuthenticatorStatusResponse$Type extends MessageType<AuthenticatorStatusResponse> {
     constructor() {
         super("guardian_mesh.AuthenticatorStatusResponse", [
-            { no: 1, name: "authenticators", kind: "message", repeat: 1 /*RepeatType.PACKED*/, T: () => AuthenticatorInfo },
+            { no: 1, name: "authenticators", kind: "message", repeat: 2 /*RepeatType.UNPACKED*/, T: () => AuthenticatorInfo },
             { no: 2, name: "spiffe_trust_domains", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
             { no: 3, name: "spiffe_required", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
             { no: 4, name: "pgp_admin_principals", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ }
@@ -3946,16 +4061,16 @@ class AuthenticatorStatusResponse$Type extends MessageType<AuthenticatorStatusRe
         while (reader.pos < end) {
             let [fieldNo, wireType] = reader.tag();
             switch (fieldNo) {
-                case 1:
+                case /* repeated guardian_mesh.AuthenticatorInfo authenticators */ 1:
                     message.authenticators.push(AuthenticatorInfo.internalBinaryRead(reader, reader.uint32(), options));
                     break;
-                case 2:
+                case /* repeated string spiffe_trust_domains */ 2:
                     message.spiffeTrustDomains.push(reader.string());
                     break;
-                case 3:
+                case /* bool spiffe_required */ 3:
                     message.spiffeRequired = reader.bool();
                     break;
-                case 4:
+                case /* repeated string pgp_admin_principals */ 4:
                     message.pgpAdminPrincipals.push(reader.string());
                     break;
                 default:
@@ -3970,12 +4085,16 @@ class AuthenticatorStatusResponse$Type extends MessageType<AuthenticatorStatusRe
         return message;
     }
     internalBinaryWrite(message: AuthenticatorStatusResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* repeated guardian_mesh.AuthenticatorInfo authenticators = 1; */
         for (let i = 0; i < message.authenticators.length; i++)
             AuthenticatorInfo.internalBinaryWrite(message.authenticators[i], writer.tag(1, WireType.LengthDelimited).fork(), options).join();
+        /* repeated string spiffe_trust_domains = 2; */
         for (let i = 0; i < message.spiffeTrustDomains.length; i++)
             writer.tag(2, WireType.LengthDelimited).string(message.spiffeTrustDomains[i]);
+        /* bool spiffe_required = 3; */
         if (message.spiffeRequired !== false)
             writer.tag(3, WireType.Varint).bool(message.spiffeRequired);
+        /* repeated string pgp_admin_principals = 4; */
         for (let i = 0; i < message.pgpAdminPrincipals.length; i++)
             writer.tag(4, WireType.LengthDelimited).string(message.pgpAdminPrincipals[i]);
         let u = options.writeUnknownFields;
@@ -3984,6 +4103,9 @@ class AuthenticatorStatusResponse$Type extends MessageType<AuthenticatorStatusRe
         return writer;
     }
 }
+/**
+ * @generated MessageType for protobuf message guardian_mesh.AuthenticatorStatusResponse
+ */
 export const AuthenticatorStatusResponse = new AuthenticatorStatusResponse$Type();
 /**
  * @generated ServiceType for protobuf service guardian_mesh.GuardianMesh
