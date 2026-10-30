@@ -984,6 +984,28 @@ do, and none becomes a gate MUST until behaviour-proven here.
   a boundary mechanism. This mirrors GMSI-92's
   three-leg rule for revocations.
 
+- **GMSI-96 — A shipped script is evidence only after
+  its author lane has executed it end to end.**
+  (Guardian Mesh WO-13 gate, 2026-10-29.) A lane's
+  deliverable script or tool is NOT RUN until the lane
+  itself has run it once, successfully, on the record;
+  source that merely reads correctly is a claim, not
+  evidence. (Founding case: WO-13's
+  reproducible-build.sh shipped with two fatal defects
+  — a relative path broken by its own `cd`, and a
+  rustc flag passed to cargo — and no recorded run;
+  Wright's carry fixed both and the double build then
+  produced identical hashes.)
+- **GMSI-97 — A platform block on one suite is
+  NOT RUN for that suite, named with its platform.**
+  (Guardian Mesh WO-13 gate, 2026-10-29.) When an
+  OS/AV/EDR block prevents a test suite from executing
+  (founding case: Windows Defender os error 225 on a
+  fresh Rust bin test executable), the lane reports
+  that suite NOT RUN with the blocker named — never
+  folded into a neighbouring suite's pass, and never
+  silently dropped from the counts a release records.
+
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
@@ -1890,3 +1912,49 @@ the laptop checkouts are working copies, never the source of truth.
   graduates 2026-11-04). Part C continues (WO-19, WO-10,
   WO-11, WO-12, WO-14 done). Next: WO-13 (P2, Part C
   sixth in order — guardian attestation package).
+
+- 2026-10-29 — **WO-13 shipped as v0.13.0** (PR #75, merged
+  95f3fcac; merged tree 98ba7e9f == gated tree): guardian
+  attestation package — build identity embedded by build.rs
+  (git commit + SOURCE_DATE_EPOCH); HealthResponse appends
+  build_version / build_commit / binary_sha256 (fields 7/8/9;
+  the SHA-256 of the running executable, computed at runtime);
+  attestation.rs provenance (in-toto/SLSA-v1 shape, canonical
+  JSON, ML-DSA-65 sealed envelope, fail-closed verify in five
+  named checks); gm-attest CLI (build/sign/verify);
+  scripts/reproducible-build.sh; docs/ATTESTATION.md;
+  Dashboard Guardian Attestation section. NOT in v1 (declared
+  in the CHANGELOG): SLSA L3, transparency log, TPM measured
+  boot — CP-19/CP-21/DC-17 TARGET → PARTIAL. Release gate:
+  PASS WITH FINDINGS (scanner BLOCKED only on the
+  dispositioned block-buffer advisory GHSA-qwgh-2vcv-g2f7,
+  WO-14 F1). Wright-verified: cargo 193/193 (136 lib + 57 bin,
+  Linux; lane Windows 134+1 PGP-fixture fail that passes on
+  Linux/CI, bin suite Defender-blocked — GMSI-97), WebUI build
+  (drift guard 14 versions) + lint, reproducible build —
+  two clean builds IDENTICAL (SHA-256 a39725c6…) after the
+  Wright carry fixed the lane's unrun script (F1, GMSI-96),
+  gm-attest VALID / tamper-INVALID, Health wire proof exact.
+  Deployed to guardian.aimlds.org via gm-deploy --binary:
+  aarch64 binary sha256 f604dd67…, rollback
+  guardian-meshd.bak-v0120 + webui-dist.bak-v0120 kept;
+  production fingerprint dd2cf1a3… unchanged (thirteenth
+  upgrade); box dist asset index-D5vvP-yQ.js == Wright's
+  build == Pages asset; Access intact (302); production
+  daemon reports binary_sha256 == the installed binary's
+  real SHA-256 (f604dd67…) and build_commit 95f3fcac;
+  the release attestation package was signed on the box
+  with the production daemon key (signer fingerprint ==
+  the pinned dd2cf1a3…), verified VALID against the
+  installed binary, and published on the box at
+  /opt/guardian-mesh/guardian-meshd-0.13.0.attestation.json;
+  self-certification cert-20261030-000041 (0.13.0, PASS
+  WITH FINDINGS, evidence = gate verdict sha256 8668cc8b…),
+  superseding cert-20261029-000040. gm-deploy's box E2E
+  scored 15/16 on the standing stale Health check (harness
+  finding, fourth occurrence). v0.13.0 is a RELEASE
+  CANDIDATE (one-week watched soak, RC register entry;
+  graduates 2026-11-05). Part C continues (WO-19, WO-10,
+  WO-11, WO-12, WO-14, WO-13 done). Next: WO-15 (P2, Part C
+  seventh in order — multi-tenancy). Standing: dependabot
+  PR #51 (vite bump) still open, outside the work orders.
