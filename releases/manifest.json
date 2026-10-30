@@ -565,5 +565,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-30T00:21:05-06:00",
     "message": "Merge pull request #75 from nrupala/wright/wo13-attestation-package"
+  },
+  {
+    "release": 68,
+    "tag": "release/v68",
+    "previous_tag": "release/v67",
+    "sha": "d50cfae73ba6338ba83aea23db520fa71077c378",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-10-30T00:33:00-06:00",
+    "message": "Merge pull request #76 from nrupala/wright/ledger-wo13-gmsi96-97-20261029"
   }
 ]
