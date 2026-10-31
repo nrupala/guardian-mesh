@@ -574,5 +574,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-10-30T00:33:00-06:00",
     "message": "Merge pull request #76 from nrupala/wright/ledger-wo13-gmsi96-97-20261029"
+  },
+  {
+    "release": 69,
+    "tag": "release/v69",
+    "previous_tag": "release/v68",
+    "sha": "bf6126c8765b7e8a451ca1dba28b9c3abf9f5e6a",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-10-30T22:01:08-06:00",
+    "message": "Merge pull request #51 from nrupala/dependabot/npm_and_yarn/webui/npm_and_yarn-63f9813d79"
   }
 ]
