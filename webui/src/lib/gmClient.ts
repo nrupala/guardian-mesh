@@ -21,6 +21,7 @@ import type {
   PolicyBundleMessage,
   RevocationStatusResponse,
   AuthenticatorStatusResponse,
+  TenantStatusResponse,
 } from "../gen/guardian_mesh_pb"
 
 export const DAEMON_ENDPOINT: string | null =
@@ -138,6 +139,8 @@ async function ensureSession(client: GuardianMeshClient): Promise<Session> {
     spiffeId: "",
     svidLeafDer: new Uint8Array(),
     svidSignature: new Uint8Array(),
+    // WO-15: the WebUI operates as the default tenant in v1.
+    tenantId: "",
   }).response
   const ttlMs = Number(res.ttlSeconds || "300") * 1000
   session = {
@@ -309,4 +312,12 @@ export async function getAuthenticatorSummary(
   client: GuardianMeshClient,
 ): Promise<AuthenticatorStatusResponse> {
   return client.authenticatorStatus({}).response
+}
+
+export async function getTenantSummary(
+  client: GuardianMeshClient,
+): Promise<{ summary: TenantStatusResponse; defaultTenant: TenantStatusResponse }> {
+  const summary = await client.tenantStatus({ tenantId: "", requesterTenant: "", confirmations: 0 }).response
+  const defaultTenant = await client.tenantStatus({ tenantId: "default", requesterTenant: "", confirmations: 0 }).response
+  return { summary, defaultTenant }
 }

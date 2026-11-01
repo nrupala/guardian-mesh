@@ -156,6 +156,8 @@ function LivePanel() {
   const [revocationError, setRevocationError] = useState<string | null>(null)
   const [authSummary, setAuthSummary] = useState<import("../gen/guardian_mesh_pb").AuthenticatorStatusResponse | null>(null)
   const [authError, setAuthError] = useState<string | null>(null)
+  const [tenantSummary, setTenantSummary] = useState<{ summary: import("../gen/guardian_mesh_pb").TenantStatusResponse; defaultTenant: import("../gen/guardian_mesh_pb").TenantStatusResponse } | null>(null)
+  const [tenantError, setTenantError] = useState<string | null>(null)
 
   const evalRef = useRef<HTMLElement | null>(null)
   const verifyRef = useRef<HTMLElement | null>(null)
@@ -336,6 +338,27 @@ function LivePanel() {
       } catch (e: unknown) {
         if (!cancelled) {
           setAuthError(e instanceof Error ? e.message : String(e))
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [client])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { getTenantSummary } = await import("../lib/gmClient")
+        const summary = await getTenantSummary(client)
+        if (!cancelled) {
+          setTenantSummary(summary)
+          setTenantError(null)
+        }
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setTenantError(e instanceof Error ? e.message : String(e))
         }
       }
     })()
@@ -701,6 +724,37 @@ function LivePanel() {
             </div>
           ) : (
             <p className="hint">Waiting for health data…</p>
+          )}
+        </section>
+
+        <section className="dash-section">
+          <h2>Multi-tenancy</h2>
+          <p className="hint">
+            Tenants are isolated: policy, keys, rate budgets and audit records are scoped per tenant.
+          </p>
+          {tenantSummary ? (
+            <div className="card">
+              <div className="audit-entry-body">
+                <p>
+                  <strong>Registered tenants:</strong>{" "}
+                  {tenantSummary.summary.tenants.length > 0 
+                    ? tenantSummary.summary.tenants.join(", ")
+                    : "default only"}
+                </p>
+                <p>
+                  <strong>Default tenant budget remaining:</strong>{" "}
+                  {tenantSummary.defaultTenant.budgetRemaining || "0"}
+                </p>
+                <p>
+                  <strong>Default tenant audit entries:</strong>{" "}
+                  {tenantSummary.defaultTenant.auditEntries || "0"}
+                </p>
+              </div>
+            </div>
+          ) : tenantError ? (
+            <p className="error-text">{tenantError}</p>
+          ) : (
+            <p className="hint">Loading tenant status…</p>
           )}
         </section>
 

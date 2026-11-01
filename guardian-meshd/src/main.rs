@@ -43,6 +43,7 @@ use guardian_meshd::proto::{
     ApproveRevocationRequest, ApproveRevocationResponse,
     RevocationStatusRequest, RevocationStatusResponse,
     AuthenticatorStatusRequest, AuthenticatorStatusResponse, AuthenticatorInfo,
+    TenantStatusRequest, TenantStatusResponse,
 };
 use prost::Message as _;
 use ml_dsa::{MlDsa65, SigningKey, VerifyingKey, Verifier, SignatureEncoding};
@@ -76,6 +77,7 @@ pub struct GuardianMeshService {
     revocations: Arc<RevocationRegistry>,
     pending_revocation: Arc<RwLock<Option<PendingRevocation>>>,
     pgp_admins: std::collections::HashMap<String, PgpKey>,
+    tenants: Arc<std::sync::Mutex<guardian_meshd::tenant::TenantRegistry>>,
 }
 
 impl GuardianMeshService {
@@ -112,6 +114,17 @@ impl GuardianMeshService {
         
         let revocations = RevocationRegistry::new(config.revocation_dir())?;
         
+        // WO-15: Initialize tenant registry
+        let tenants = match guardian_meshd::tenant::TenantRegistry::new(&config.tenants, config.tenant_rate_budget) {
+            Ok(registry) => Arc::new(std::sync::Mutex::new(registry)),
+            Err(e) => {
+                eprintln!("Warning: tenant registry construction failed: {}; falling back to default tenant only", e);
+                let fallback = guardian_meshd::tenant::TenantRegistry::new(&[], config.tenant_rate_budget)
+                    .expect("fallback tenant registry with only default tenant must succeed");
+                Arc::new(std::sync::Mutex::new(fallback))
+            }
+        };
+        
         Ok(Self {
             bus: Arc::new(RwLock::new(HandshakeBus::new(&config.handshake_secret))),
             vault,
@@ -126,6 +139,7 @@ impl GuardianMeshService {
             revocations: Arc::new(revocations),
             pending_revocation: Arc::new(RwLock::new(None)),
             pgp_admins,
+            tenants,
             config,
         })
     }
@@ -266,6 +280,107 @@ impl GuardianMeshService {
         simulation: bool,
     ) -> Result<Response<EvaluateResponse>, Status> {
         let mut ctx = EnclaveContext::new(req);
+
+        // WO-15: Tenant resolution and policy/budget checks
+        let session_id = ctx.request.firewalled.as_ref()
+            .map(|f| f.handshake_session.as_str())
+            .unwrap_or("");
+        
+        let tenant_id = {
+            let bus = self.bus.read().await;
+            bus.session_tenant(session_id).unwrap_or_else(|| guardian_meshd::tenant::DEFAULT_TENANT.to_string())
+        };
+
+        let action_type = ctx.request.action.as_ref()
+            .map(|a| a.action_type.clone())
+            .unwrap_or_else(|| String::new());
+
+        // Tenant policy decision
+        let tenant_policy_decision = {
+            let tenants = self.tenants.lock().unwrap();
+            tenants.tenant_policy_decision(&tenant_id, &action_type)
+        };
+
+        if let Some(false) = tenant_policy_decision {
+            let reason = format!("tenant policy denies {} for tenant '{}' (DC-15)", action_type, tenant_id);
+            let structured_reason = StructuredReason {
+                rule_id: "DC-15".to_string(),
+                detail: reason.clone(),
+                remediation: String::new(),
+            };
+            
+            let policy_version = {
+                let policy = self.policy.read().await;
+                policy.policy_version()
+            };
+            
+            let proof = AuditProof {
+                action_id: action_type.clone(),
+                verdict: "BLOCK".into(),
+                enclave_chain: "NORMAL".into(),
+                signature: Vec::new(),
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                simulation,
+                rule_ids: vec!["DC-15".to_string()],
+                policy_version,
+                merkle_root: Vec::new(),
+            };
+
+            let proof_envelope = {
+                let sealed = SealedEnvelope::new(
+                    proof.encode_to_vec(),
+                    b"guardian_mesh.AuditProof".to_vec(),
+                    &self.signing_key,
+                );
+                ProtoSealedEnvelope {
+                    payload: sealed.payload,
+                    payload_type: sealed.payload_type,
+                    crc32c: sealed.crc32c_digest,
+                    ml_dsa_65_signature: sealed.ml_dsa_65_signature,
+                    timestamp: sealed.timestamp,
+                    nonce: sealed.nonce.to_vec(),
+                }
+            };
+
+            // WO-15 (Wright carry): a tenant-policy BLOCK is a real verdict
+            // and belongs in the tenant's audit partition (real only).
+            if !simulation {
+                let mut tenants = self.tenants.lock().unwrap();
+                let _ = tenants.append_audit(&tenant_id, &action_type, "BLOCK");
+            }
+
+            return Ok(Response::new(EvaluateResponse {
+                verdict: "BLOCK".into(),
+                reason,
+                containment_stage: "NORMAL".into(),
+                proof: Some(proof),
+                handshake_token: Vec::new(),
+                proof_envelope: Some(proof_envelope),
+                reasons: vec![structured_reason],
+                simulation,
+            }));
+        }
+
+        // Budget consumption (real Evaluate only, not Simulate)
+        if !simulation {
+            let mut tenants = self.tenants.lock().unwrap();
+            match tenants.try_consume_budget(&tenant_id) {
+                Err(e) => {
+                    return Err(Status::invalid_argument(e));
+                }
+                Ok(false) => {
+                    return Err(Status::resource_exhausted(
+                        format!("tenant rate budget exhausted for tenant '{}' (DC-15)", tenant_id)
+                    ));
+                }
+                Ok(true) => {
+                    // Budget consumed, continue
+                }
+            }
+        }
 
         let policy_version = {
             let policy = self.policy.read().await;
@@ -411,6 +526,13 @@ impl GuardianMeshService {
                 reasons,
                 simulation,
             };
+
+            // WO-15 (Wright carry): THROTTLE verdicts also belong in the
+            // tenant's audit partition (real Evaluate only).
+            if !simulation {
+                let mut tenants = self.tenants.lock().unwrap();
+                let _ = tenants.append_audit(&tenant_id, &action_type, final_verdict.as_str());
+            }
 
             return Ok(Response::new(response));
         }
@@ -614,6 +736,13 @@ impl GuardianMeshService {
             simulation,
         };
 
+        // WO-15: Append to tenant audit partition (real Evaluate only)
+        if !simulation {
+            let verdict = response.verdict.clone();
+            let mut tenants = self.tenants.lock().unwrap();
+            let _ = tenants.append_audit(&tenant_id, &action_type, &verdict);
+        }
+
         Ok(Response::new(response))
     }
 }
@@ -786,9 +915,37 @@ impl GuardianMesh for GuardianMeshService {
             return Err(Status::permission_denied("handshake refused: missing required confirmation SPIFFE_X509 (BM-9/BM-11)"));
         }
 
+        // WO-15: Tenant validation and key binding
+        let tenant_id = if req.tenant_id.is_empty() {
+            guardian_meshd::tenant::DEFAULT_TENANT.to_string()
+        } else {
+            req.tenant_id
+        };
+
+        {
+            let mut tenants = self.tenants.lock().unwrap();
+            if !tenants.is_registered(&tenant_id) {
+                return Err(Status::invalid_argument(format!("tenant '{}' is not registered", tenant_id)));
+            }
+
+            // Bind key to tenant and enforce cross-tenant rules
+            if !req.source_public_key.is_empty() {
+                use sha2::Digest;
+                let fingerprint = hex::encode(sha2::Sha256::digest(&req.source_public_key));
+                
+                if let Err(e) = tenants.check_key_access(&fingerprint, &tenant_id) {
+                    return Err(Status::permission_denied(e));
+                }
+                
+                if let Err(e) = tenants.bind_key(&fingerprint, &tenant_id) {
+                    return Err(Status::permission_denied(e));
+                }
+            }
+        }
+
         let bus = self.bus.read().await;
         self.sweep_expired_sessions(&bus);
-        let session = bus.create_session_attested(&source, &req.source_public_key, auth_factors.clone(), workload_id.clone());
+        let session = bus.create_session_attested_tenant(&source, &req.source_public_key, auth_factors.clone(), workload_id.clone(), tenant_id.clone());
 
         Ok(Response::new(HandshakeResponse {
             session_id: session.session_id,
@@ -796,6 +953,7 @@ impl GuardianMesh for GuardianMeshService {
             ttl_seconds: SESSION_TTL_SECS,
             auth_factors,
             workload_id,
+            tenant_id,
         }))
     }
 
@@ -1727,6 +1885,84 @@ impl GuardianMesh for GuardianMeshService {
             pgp_admin_principals: pgp_principals,
         }))
     }
+
+    async fn tenant_status(
+        &self,
+        request: Request<TenantStatusRequest>,
+    ) -> Result<Response<TenantStatusResponse>, Status> {
+        let req = request.into_inner();
+        let tenants = self.tenants.lock().unwrap();
+        let all_tenant_ids = tenants.tenant_ids();
+        
+        // Summary mode: empty tenant_id
+        if req.tenant_id.is_empty() {
+            return Ok(Response::new(TenantStatusResponse {
+                found: false,
+                tenant_id: String::new(),
+                budget_limit: 0,
+                budget_used: 0,
+                budget_remaining: 0,
+                audit_entries: 0,
+                policy_configured: false,
+                policy_version: 0,
+                tenants: all_tenant_ids,
+                message: "summary".to_string(),
+            }));
+        }
+        
+        // Unknown tenant
+        if !tenants.is_registered(&req.tenant_id) {
+            return Ok(Response::new(TenantStatusResponse {
+                found: false,
+                tenant_id: req.tenant_id.clone(),
+                budget_limit: 0,
+                budget_used: 0,
+                budget_remaining: 0,
+                audit_entries: 0,
+                policy_configured: false,
+                policy_version: 0,
+                tenants: all_tenant_ids,
+                message: format!("unknown tenant '{}'", req.tenant_id),
+            }));
+        }
+        
+        // Cross-tenant guard
+        if !req.requester_tenant.is_empty() 
+            && req.requester_tenant != req.tenant_id
+            && !guardian_meshd::tenant::cross_tenant_authorized(&req.requester_tenant, &req.tenant_id, req.confirmations) {
+            return Ok(Response::new(TenantStatusResponse {
+                found: false,
+                tenant_id: req.tenant_id.clone(),
+                budget_limit: 0,
+                budget_used: 0,
+                budget_remaining: 0,
+                audit_entries: 0,
+                policy_configured: false,
+                policy_version: 0,
+                tenants: all_tenant_ids,
+                message: "cross-tenant access requires two confirmations (BM-3 / DC-15)".to_string(),
+            }));
+        }
+        
+        // Authorized: return real numbers
+        let (budget_limit, budget_used, budget_remaining) = tenants.budget(&req.tenant_id).unwrap_or((0, 0, 0));
+        let audit_entries = tenants.audit_count(&req.tenant_id);
+        let policy_configured = tenants.policy_for(&req.tenant_id).is_some();
+        let policy_version = tenants.policy_for(&req.tenant_id).map(|b| b.version).unwrap_or(0);
+        
+        Ok(Response::new(TenantStatusResponse {
+            found: true,
+            tenant_id: req.tenant_id.clone(),
+            budget_limit,
+            budget_used,
+            budget_remaining,
+            audit_entries,
+            policy_configured,
+            policy_version,
+            tenants: all_tenant_ids,
+            message: String::new(),
+        }))
+    }
 }
 
 fn real_main() {
@@ -1810,9 +2046,13 @@ mod tests {
         vk: &VerifyingKey<MlDsa65>,
     ) -> HandshakeResponse {
         service
-            .handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+            .handshake(Request::new(HandshakeRequest {
+                spiffe_id: String::new(),
+                svid_leaf_der: Vec::new(),
+                svid_signature: Vec::new(),
                 source_enclave: "webui".into(),
                 source_public_key: vk.encode().to_vec(),
+                tenant_id: String::new(),
             }))
             .await
             .unwrap()
@@ -1859,9 +2099,13 @@ mod tests {
     async fn handshake_without_a_full_public_key_is_invalid_argument() {
         let (service, _dir) = test_service();
         let err = service
-            .handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+            .handshake(Request::new(HandshakeRequest { 
+                spiffe_id: String::new(), 
+                svid_leaf_der: Vec::new(), 
+                svid_signature: Vec::new(),
                 source_enclave: "webui".into(),
                 source_public_key: vec![1, 2, 3],
+                tenant_id: String::new(),
             }))
             .await
             .unwrap_err();
@@ -3341,9 +3585,13 @@ mod tests {
         
         // Handshake and create a session
         let (client_sk, client_vk) = generate_keypair();
-        let hs_resp = service.handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+        let hs_resp = service.handshake(Request::new(HandshakeRequest {
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
             source_enclave: "test".to_string(),
             source_public_key: client_vk.encode().to_vec(),
+            tenant_id: String::new(),
         }))
         .await
         .unwrap()
@@ -3591,9 +3839,13 @@ mod tests {
         let client_key_bytes = client_vk.encode().to_vec();
         let key_fingerprint = hex::encode(sha2::Sha256::digest(&client_key_bytes));
         
-        let hs_resp = service.handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+        let hs_resp = service.handshake(Request::new(HandshakeRequest {
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
             source_enclave: "test".to_string(),
             source_public_key: client_key_bytes.clone(),
+            tenant_id: String::new(),
         }))
         .await
         .unwrap()
@@ -3651,9 +3903,13 @@ mod tests {
         drop(bus);
         
         // New handshake with the same key should be refused
-        let hs_err = service.handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+        let hs_err = service.handshake(Request::new(HandshakeRequest {
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
             source_enclave: "test".to_string(),
             source_public_key: client_key_bytes.clone(),
+            tenant_id: String::new(),
         }))
         .await;
         
@@ -3664,9 +3920,13 @@ mod tests {
         
         // A different key should still work
         let (_, different_vk) = generate_keypair();
-        let hs_ok = service.handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+        let hs_ok = service.handshake(Request::new(HandshakeRequest {
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
             source_enclave: "test".to_string(),
             source_public_key: different_vk.encode().to_vec(),
+            tenant_id: String::new(),
         }))
         .await;
         
@@ -3915,9 +4175,13 @@ mod tests {
             assert_eq!(status_resp.reason, "persistent test");
             
             // Handshake with revoked key should still fail
-            let hs_err = service2.handshake(Request::new(HandshakeRequest { spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+            let hs_err = service2.handshake(Request::new(HandshakeRequest {
+                spiffe_id: String::new(),
+                svid_leaf_der: Vec::new(),
+                svid_signature: Vec::new(),
                 source_enclave: "test".to_string(),
                 source_public_key: client_key_bytes,
+                tenant_id: String::new(),
             }))
             .await;
             
@@ -4140,7 +4404,10 @@ mod tests {
         let resp = service.handshake(Request::new(HandshakeRequest {
             source_enclave: "wo14-test".to_string(),
             source_public_key: vk.encode().to_vec(),
-            spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: String::new(),
         })).await.unwrap().into_inner();
         assert_eq!(resp.auth_factors, vec!["ML_DSA_65".to_string(), "HMAC_SESSION".to_string()]);
         assert_eq!(resp.workload_id, "");
@@ -4161,7 +4428,10 @@ mod tests {
         let resp = service.handshake(Request::new(HandshakeRequest {
             source_enclave: "wo14-svid".to_string(),
             source_public_key: client_vk.encode().to_vec(),
-            spiffe_id: spiffe_id.to_string(), svid_leaf_der: der, svid_signature: sig.to_bytes().to_vec(),
+            spiffe_id: spiffe_id.to_string(),
+            svid_leaf_der: der,
+            svid_signature: sig.to_bytes().to_vec(),
+            tenant_id: String::new(),
         })).await.unwrap().into_inner();
         assert!(resp.auth_factors.contains(&"SPIFFE_X509".to_string()), "factors: {:?}", resp.auth_factors);
         assert_eq!(resp.workload_id, spiffe_id);
@@ -4186,8 +4456,12 @@ mod tests {
         let canon1 = guardian_meshd::authenticators::canonical_spiffe_string(id1, &ml_hash);
         let sig1 = ed25519_dalek::Signer::sign(&svid_sk, canon1.as_bytes());
         let err = service.handshake(Request::new(HandshakeRequest {
-            source_enclave: "wo14".to_string(), source_public_key: client_vk.encode().to_vec(),
-            spiffe_id: id1.to_string(), svid_leaf_der: der1, svid_signature: sig1.to_bytes().to_vec(),
+            source_enclave: "wo14".to_string(),
+            source_public_key: client_vk.encode().to_vec(),
+            spiffe_id: id1.to_string(),
+            svid_leaf_der: der1,
+            svid_signature: sig1.to_bytes().to_vec(),
+            tenant_id: String::new(),
         })).await.unwrap_err();
         assert_eq!(err.code(), tonic::Code::PermissionDenied);
         assert!(err.message().contains("not in allowlist"), "got: {}", err.message());
@@ -4197,8 +4471,12 @@ mod tests {
         let mut bad_sig = ed25519_dalek::Signer::sign(&svid_sk, b"different message").to_bytes();
         bad_sig[0] ^= 0x01;
         let err2 = service.handshake(Request::new(HandshakeRequest {
-            source_enclave: "wo14".to_string(), source_public_key: client_vk.encode().to_vec(),
-            spiffe_id: id2.to_string(), svid_leaf_der: der2, svid_signature: bad_sig.to_vec(),
+            source_enclave: "wo14".to_string(),
+            source_public_key: client_vk.encode().to_vec(),
+            spiffe_id: id2.to_string(),
+            svid_leaf_der: der2,
+            svid_signature: bad_sig.to_vec(),
+            tenant_id: String::new(),
         })).await.unwrap_err();
         assert_eq!(err2.code(), tonic::Code::PermissionDenied);
     }
@@ -4209,15 +4487,23 @@ mod tests {
         let (_csk, client_vk) = generate_keypair();
         // No SVID while required → refused naming the missing confirmation
         let err = service.handshake(Request::new(HandshakeRequest {
-            source_enclave: "wo14".to_string(), source_public_key: client_vk.encode().to_vec(),
-            spiffe_id: String::new(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+            source_enclave: "wo14".to_string(),
+            source_public_key: client_vk.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: String::new(),
         })).await.unwrap_err();
         assert_eq!(err.code(), tonic::Code::PermissionDenied);
         assert!(err.message().contains("SPIFFE_X509"), "got: {}", err.message());
         // Partial attestation → invalid_argument
         let err2 = service.handshake(Request::new(HandshakeRequest {
-            source_enclave: "wo14".to_string(), source_public_key: client_vk.encode().to_vec(),
-            spiffe_id: "spiffe://cluster.local/workload".to_string(), svid_leaf_der: Vec::new(), svid_signature: Vec::new(),
+            source_enclave: "wo14".to_string(),
+            source_public_key: client_vk.encode().to_vec(),
+            spiffe_id: "spiffe://cluster.local/workload".to_string(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: String::new(),
         })).await.unwrap_err();
         assert_eq!(err2.code(), tonic::Code::InvalidArgument);
     }
@@ -4316,4 +4602,327 @@ mod tests {
         assert!(pgp_row.configured);
     }
 
+    // WO-15 integration tests
+    
+    #[tokio::test]
+    async fn wo15_handshake_with_unregistered_tenant_is_invalid_argument() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let hs_req = HandshakeRequest {
+            source_enclave: "test".to_string(),
+            source_public_key: vk.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: "unregistered-tenant".to_string(),
+        };
+        let result = service.handshake(Request::new(hs_req)).await;
+        assert!(result.is_err());
+        let status = result.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
+        assert!(status.message().contains("not registered"));
+    }
+
+    #[tokio::test]
+    async fn wo15_handshake_with_registered_tenant_returns_tenant_id() {
+        let mut config = Config::default();
+        config.tenants = vec!["tenant-a".to_string()];
+        let service = test_service_with_config(config);
+        let (sk, vk) = generate_keypair();
+        let hs_req = HandshakeRequest {
+            source_enclave: "test".to_string(),
+            source_public_key: vk.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: "tenant-a".to_string(),
+        };
+        let resp = service.handshake(Request::new(hs_req)).await.unwrap().into_inner();
+        assert_eq!(resp.tenant_id, "tenant-a");
+        
+        // Session can evaluate normally
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &resp.session_id, &sealed).await;
+        let eval_resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(eval_resp.verdict, "ALLOW");
+    }
+
+    #[tokio::test]
+    async fn wo15_cross_tenant_key_is_permission_denied() {
+        let mut config = Config::default();
+        config.tenants = vec!["tenant-a".to_string(), "tenant-b".to_string()];
+        let service = test_service_with_config(config);
+        let (sk, vk) = generate_keypair();
+        
+        // First handshake binds key to tenant-a
+        let hs_req_a = HandshakeRequest {
+            source_enclave: "test".to_string(),
+            source_public_key: vk.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: "tenant-a".to_string(),
+        };
+        let resp_a = service.handshake(Request::new(hs_req_a)).await.unwrap().into_inner();
+        assert_eq!(resp_a.tenant_id, "tenant-a");
+        
+        // Second handshake with same key for tenant-b is denied
+        let hs_req_b = HandshakeRequest {
+            source_enclave: "test".to_string(),
+            source_public_key: vk.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: "tenant-b".to_string(),
+        };
+        let result = service.handshake(Request::new(hs_req_b)).await;
+        assert!(result.is_err());
+        let status = result.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::PermissionDenied);
+        assert!(status.message().contains("cross-tenant"));
+    }
+
+    fn test_service_with_config(mut config: Config) -> GuardianMeshService {
+        let dir = tempfile::TempDir::new().unwrap();
+        config.workspace_dir = dir.path().to_string_lossy().to_string();
+        config.output_dir = dir.path().join("output").to_string_lossy().to_string();
+        config.ensure_dirs().unwrap();
+        // The service generates/loads its own signing key from the
+        // workspace keys dir (config.ml_dsa_* fields are unused by it).
+        let service = GuardianMeshService::new(config).unwrap();
+        std::mem::forget(dir); // Keep alive for test
+        service
+    }
+
+    #[tokio::test]
+    async fn wo15_tenant_budget_exhaustion_throttles() {
+        let mut config = Config::default();
+        config.tenants = vec!["tenant-a".to_string(), "tenant-b".to_string()];
+        config.tenant_rate_budget = 2;
+        let service = test_service_with_config(config);
+        
+        let (sk_a, vk_a) = generate_keypair();
+        let (sk_b, vk_b) = generate_keypair();
+        
+        let hs_a = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test-a".to_string(),
+            source_public_key: vk_a.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: "tenant-a".to_string(),
+        })).await.unwrap().into_inner();
+        
+        let hs_b = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test-b".to_string(),
+            source_public_key: vk_b.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: "tenant-b".to_string(),
+        })).await.unwrap().into_inner();
+        
+        // tenant-a: first two evaluations succeed
+        let sealed1 = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_a);
+        let req1 = evaluate_request(&service, &hs_a.session_id, &sealed1).await;
+        let resp1 = service.evaluate(Request::new(req1)).await.unwrap().into_inner();
+        assert_eq!(resp1.verdict, "ALLOW");
+        
+        let sealed2 = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_a);
+        let req2 = evaluate_request(&service, &hs_a.session_id, &sealed2).await;
+        let resp2 = service.evaluate(Request::new(req2)).await.unwrap().into_inner();
+        assert_eq!(resp2.verdict, "ALLOW");
+        
+        // tenant-a: third evaluation is resource_exhausted
+        let sealed3 = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_a);
+        let req3 = evaluate_request(&service, &hs_a.session_id, &sealed3).await;
+        let result3 = service.evaluate(Request::new(req3)).await;
+        assert!(result3.is_err());
+        let status = result3.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::ResourceExhausted);
+        assert!(status.message().contains("exhausted"));
+        
+        // tenant-b: still evaluates normally
+        let sealed_b = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_b);
+        let req_b = evaluate_request(&service, &hs_b.session_id, &sealed_b).await;
+        let resp_b = service.evaluate(Request::new(req_b)).await.unwrap().into_inner();
+        assert_eq!(resp_b.verdict, "ALLOW");
+    }
+
+    #[tokio::test]
+    async fn wo15_tenant_status_summary_lists_tenants() {
+        let mut config = Config::default();
+        config.tenants = vec!["tenant-a".to_string(), "tenant-b".to_string()];
+        let service = test_service_with_config(config);
+        
+        let req = TenantStatusRequest {
+            tenant_id: String::new(),
+            requester_tenant: String::new(),
+            confirmations: 0,
+        };
+        let resp = service.tenant_status(Request::new(req)).await.unwrap().into_inner();
+        assert!(!resp.found);
+        assert_eq!(resp.message, "summary");
+        assert_eq!(resp.tenants.len(), 3); // default + tenant-a + tenant-b
+        assert!(resp.tenants.contains(&"default".to_string()));
+        assert!(resp.tenants.contains(&"tenant-a".to_string()));
+        assert!(resp.tenants.contains(&"tenant-b".to_string()));
+    }
+
+    #[tokio::test]
+    async fn wo15_cross_tenant_status_requires_confirmations() {
+        let mut config = Config::default();
+        config.tenants = vec!["tenant-a".to_string(), "tenant-b".to_string()];
+        let service = test_service_with_config(config);
+        
+        // Without confirmations: denied
+        let req = TenantStatusRequest {
+            tenant_id: "tenant-a".to_string(),
+            requester_tenant: "tenant-b".to_string(),
+            confirmations: 0,
+        };
+        let resp = service.tenant_status(Request::new(req)).await.unwrap().into_inner();
+        assert!(!resp.found);
+        assert!(resp.message.contains("two confirmations"));
+        assert_eq!(resp.budget_limit, 0);
+        
+        // With 1 confirmation: still denied
+        let req = TenantStatusRequest {
+            tenant_id: "tenant-a".to_string(),
+            requester_tenant: "tenant-b".to_string(),
+            confirmations: 1,
+        };
+        let resp = service.tenant_status(Request::new(req)).await.unwrap().into_inner();
+        assert!(!resp.found);
+        
+        // With 2 confirmations: allowed
+        let req = TenantStatusRequest {
+            tenant_id: "tenant-a".to_string(),
+            requester_tenant: "tenant-b".to_string(),
+            confirmations: 2,
+        };
+        let resp = service.tenant_status(Request::new(req)).await.unwrap().into_inner();
+        assert!(resp.found);
+        assert!(resp.budget_limit > 0);
+    }
+
+    #[tokio::test]
+    async fn wo15_audit_partitions_are_isolated() {
+        let mut config = Config::default();
+        config.tenants = vec!["tenant-a".to_string(), "tenant-b".to_string()];
+        let service = test_service_with_config(config);
+        
+        let (sk_a, vk_a) = generate_keypair();
+        let (sk_b, vk_b) = generate_keypair();
+        
+        let hs_a = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test-a".to_string(),
+            source_public_key: vk_a.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: "tenant-a".to_string(),
+        })).await.unwrap().into_inner();
+        
+        let hs_b = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test-b".to_string(),
+            source_public_key: vk_b.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: "tenant-b".to_string(),
+        })).await.unwrap().into_inner();
+        
+        // Evaluate under tenant-a
+        let sealed_a = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_a);
+        let req_a = evaluate_request(&service, &hs_a.session_id, &sealed_a).await;
+        let _ = service.evaluate(Request::new(req_a)).await.unwrap();
+        
+        // Evaluate under tenant-b
+        let sealed_b = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_b);
+        let req_b = evaluate_request(&service, &hs_b.session_id, &sealed_b).await;
+        let _ = service.evaluate(Request::new(req_b)).await.unwrap();
+        
+        // Tenant-a shows only its own entry
+        let status_a = service.tenant_status(Request::new(TenantStatusRequest {
+            tenant_id: "tenant-a".to_string(),
+            requester_tenant: String::new(),
+            confirmations: 0,
+        })).await.unwrap().into_inner();
+        assert_eq!(status_a.audit_entries, 1);
+        
+        // Tenant-b shows only its own entry
+        let status_b = service.tenant_status(Request::new(TenantStatusRequest {
+            tenant_id: "tenant-b".to_string(),
+            requester_tenant: String::new(),
+            confirmations: 0,
+        })).await.unwrap().into_inner();
+        assert_eq!(status_b.audit_entries, 1);
+    }
+
+    #[tokio::test]
+    async fn wo15_tenant_policy_deny_blocks_with_dc15_reason() {
+        let mut config = Config::default();
+        config.tenants = vec!["tenant-a".to_string()];
+        let service = test_service_with_config(config);
+        
+        // Set a tenant policy that denies "FORBIDDEN"
+        {
+            let mut tenants = service.tenants.lock().unwrap();
+            let bundle = guardian_meshd::policy::PolicyBundle {
+                version: 1,
+                rules: vec![guardian_meshd::policy::PolicyRule {
+                    action_type: "FORBIDDEN".to_string(),
+                    allow: false,
+                    priority: 10,
+                }],
+                escalate_actions: vec![],
+                prev_hash: "0".repeat(64),
+            };
+            tenants.set_policy("tenant-a", bundle).unwrap();
+        }
+        
+        let (sk, vk) = generate_keypair();
+        let hs = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test".to_string(),
+            source_public_key: vk.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: "tenant-a".to_string(),
+        })).await.unwrap().into_inner();
+        
+        let sealed = SealedEnvelope::new(b"{\"actionType\":\"FORBIDDEN\",\"context\":\"test\",\"target\":\"panel\",\"metadata\":{}}".to_vec(), b"test".to_vec(), &sk);
+        let mut req = evaluate_request(&service, &hs.session_id, &sealed).await;
+        req.action = Some(ActionDescriptor {
+            action_type: "FORBIDDEN".to_string(),
+            context: String::new(),
+            target: String::new(),
+            metadata: std::collections::HashMap::new(),
+        });
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "BLOCK");
+        assert!(resp.reason.contains("DC-15"));
+        assert!(resp.reason.contains("tenant-a"));
+        assert_eq!(resp.reasons.len(), 1);
+        assert_eq!(resp.reasons[0].rule_id, "DC-15");
+        
+        // Same action under default tenant (no policy) is allowed
+        let (sk2, vk2) = generate_keypair();
+        let hs2 = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test2".to_string(),
+            source_public_key: vk2.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: "default".to_string(),
+        })).await.unwrap().into_inner();
+        
+        let sealed2 = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk2);
+        let req2 = evaluate_request(&service, &hs2.session_id, &sealed2).await;
+        let resp2 = service.evaluate(Request::new(req2)).await.unwrap().into_inner();
+        assert_eq!(resp2.verdict, "ALLOW");
+    }
+
 }
+

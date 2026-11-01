@@ -353,8 +353,8 @@ that is itself the risk. (Owner-approved 2026-10-15; source: the
 
 | ID | Requirement | Status |
 |----|-------------|--------|
-| DC-15 | Policies, keys, rate budgets, and audit partitions MUST be tenant-scoped; cross-tenant access is a BM-3 crossing under the two-confirmation rule. | [TARGET] |
-| DC-16 | Tenant isolation MUST be behaviour-proven (conformance suite, §7.3): no tenant can read another's evidence, exhaust another's budget, or time another's traffic into information. | [TARGET] |
+| DC-15 | Policies, keys, rate budgets, and audit partitions MUST be tenant-scoped; cross-tenant access is a BM-3 crossing under the two-confirmation rule. | [PARTIAL] (WO-15 v1: tenant-scoped policy/keys/budgets/audit partitions, isolation behaviour-proven in tests; process isolation + cross-node remain target) |
+| DC-16 | Tenant isolation MUST be behaviour-proven (conformance suite, §7.3): no tenant can read another's evidence, exhaust another's budget, or time another's traffic into information. | [PARTIAL] (WO-15 v1: tenant-scoped policy/keys/budgets/audit partitions, isolation behaviour-proven in tests; process isolation + cross-node remain target) |
 
 ### 6.8 Attestation of the guardian
 

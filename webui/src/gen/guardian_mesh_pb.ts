@@ -234,6 +234,10 @@ export interface HandshakeRequest {
      * @generated from protobuf field: bytes svid_signature = 6
      */
     svidSignature: Uint8Array;
+    /**
+     * @generated from protobuf field: string tenant_id = 7
+     */
+    tenantId: string; // empty = default tenant
 }
 /**
  * @generated from protobuf message guardian_mesh.HandshakeResponse
@@ -259,6 +263,10 @@ export interface HandshakeResponse {
      * @generated from protobuf field: string workload_id = 5
      */
     workloadId: string;
+    /**
+     * @generated from protobuf field: string tenant_id = 6
+     */
+    tenantId: string;
 }
 /**
  * @generated from protobuf message guardian_mesh.HealthResponse
@@ -1028,6 +1036,70 @@ export interface AuthenticatorStatusResponse {
      */
     pgpAdminPrincipals: string[]; // sorted
 }
+// ── TenantStatus RPC (WO-15) ──────────────
+
+/**
+ * @generated from protobuf message guardian_mesh.TenantStatusRequest
+ */
+export interface TenantStatusRequest {
+    /**
+     * @generated from protobuf field: string tenant_id = 1
+     */
+    tenantId: string; // empty = summary (tenant list only)
+    /**
+     * @generated from protobuf field: string requester_tenant = 2
+     */
+    requesterTenant: string; // empty = the tenant itself / local operator
+    /**
+     * @generated from protobuf field: uint32 confirmations = 3
+     */
+    confirmations: number; // BM-3 confirmations for a cross-tenant read
+}
+/**
+ * @generated from protobuf message guardian_mesh.TenantStatusResponse
+ */
+export interface TenantStatusResponse {
+    /**
+     * @generated from protobuf field: bool found = 1
+     */
+    found: boolean;
+    /**
+     * @generated from protobuf field: string tenant_id = 2
+     */
+    tenantId: string;
+    /**
+     * @generated from protobuf field: uint64 budget_limit = 3
+     */
+    budgetLimit: string;
+    /**
+     * @generated from protobuf field: uint64 budget_used = 4
+     */
+    budgetUsed: string;
+    /**
+     * @generated from protobuf field: uint64 budget_remaining = 5
+     */
+    budgetRemaining: string;
+    /**
+     * @generated from protobuf field: uint64 audit_entries = 6
+     */
+    auditEntries: string;
+    /**
+     * @generated from protobuf field: bool policy_configured = 7
+     */
+    policyConfigured: boolean;
+    /**
+     * @generated from protobuf field: uint64 policy_version = 8
+     */
+    policyVersion: string; // tenant bundle version, 0 when none
+    /**
+     * @generated from protobuf field: repeated string tenants = 9
+     */
+    tenants: string[]; // all registered tenant ids, sorted
+    /**
+     * @generated from protobuf field: string message = 10
+     */
+    message: string;
+}
 // @generated message type with reflection information, may provide speed optimized methods
 class SealedEnvelope$Type extends MessageType<SealedEnvelope> {
     constructor() {
@@ -1643,7 +1715,8 @@ class HandshakeRequest$Type extends MessageType<HandshakeRequest> {
             { no: 3, name: "source_public_key", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
             { no: 4, name: "spiffe_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
             { no: 5, name: "svid_leaf_der", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
-            { no: 6, name: "svid_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ }
+            { no: 6, name: "svid_signature", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
+            { no: 7, name: "tenant_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<HandshakeRequest>): HandshakeRequest {
@@ -1653,6 +1726,7 @@ class HandshakeRequest$Type extends MessageType<HandshakeRequest> {
         message.spiffeId = "";
         message.svidLeafDer = new Uint8Array(0);
         message.svidSignature = new Uint8Array(0);
+        message.tenantId = "";
         if (value !== undefined)
             reflectionMergePartial<HandshakeRequest>(this, message, value);
         return message;
@@ -1676,6 +1750,9 @@ class HandshakeRequest$Type extends MessageType<HandshakeRequest> {
                     break;
                 case /* bytes svid_signature */ 6:
                     message.svidSignature = reader.bytes();
+                    break;
+                case /* string tenant_id */ 7:
+                    message.tenantId = reader.string();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -1704,6 +1781,9 @@ class HandshakeRequest$Type extends MessageType<HandshakeRequest> {
         /* bytes svid_signature = 6; */
         if (message.svidSignature.length)
             writer.tag(6, WireType.LengthDelimited).bytes(message.svidSignature);
+        /* string tenant_id = 7; */
+        if (message.tenantId !== "")
+            writer.tag(7, WireType.LengthDelimited).string(message.tenantId);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -1722,7 +1802,8 @@ class HandshakeResponse$Type extends MessageType<HandshakeResponse> {
             { no: 2, name: "session_key", kind: "scalar", T: 12 /*ScalarType.BYTES*/ },
             { no: 3, name: "ttl_seconds", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
             { no: 4, name: "auth_factors", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
-            { no: 5, name: "workload_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+            { no: 5, name: "workload_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 6, name: "tenant_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
         ]);
     }
     create(value?: PartialMessage<HandshakeResponse>): HandshakeResponse {
@@ -1732,6 +1813,7 @@ class HandshakeResponse$Type extends MessageType<HandshakeResponse> {
         message.ttlSeconds = "0";
         message.authFactors = [];
         message.workloadId = "";
+        message.tenantId = "";
         if (value !== undefined)
             reflectionMergePartial<HandshakeResponse>(this, message, value);
         return message;
@@ -1755,6 +1837,9 @@ class HandshakeResponse$Type extends MessageType<HandshakeResponse> {
                     break;
                 case /* string workload_id */ 5:
                     message.workloadId = reader.string();
+                    break;
+                case /* string tenant_id */ 6:
+                    message.tenantId = reader.string();
                     break;
                 default:
                     let u = options.readUnknownField;
@@ -1783,6 +1868,9 @@ class HandshakeResponse$Type extends MessageType<HandshakeResponse> {
         /* string workload_id = 5; */
         if (message.workloadId !== "")
             writer.tag(5, WireType.LengthDelimited).string(message.workloadId);
+        /* string tenant_id = 6; */
+        if (message.tenantId !== "")
+            writer.tag(6, WireType.LengthDelimited).string(message.tenantId);
         let u = options.writeUnknownFields;
         if (u !== false)
             (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
@@ -4107,6 +4195,188 @@ class AuthenticatorStatusResponse$Type extends MessageType<AuthenticatorStatusRe
  * @generated MessageType for protobuf message guardian_mesh.AuthenticatorStatusResponse
  */
 export const AuthenticatorStatusResponse = new AuthenticatorStatusResponse$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class TenantStatusRequest$Type extends MessageType<TenantStatusRequest> {
+    constructor() {
+        super("guardian_mesh.TenantStatusRequest", [
+            { no: 1, name: "tenant_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 2, name: "requester_tenant", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "confirmations", kind: "scalar", T: 13 /*ScalarType.UINT32*/ }
+        ]);
+    }
+    create(value?: PartialMessage<TenantStatusRequest>): TenantStatusRequest {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.tenantId = "";
+        message.requesterTenant = "";
+        message.confirmations = 0;
+        if (value !== undefined)
+            reflectionMergePartial<TenantStatusRequest>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: TenantStatusRequest): TenantStatusRequest {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* string tenant_id */ 1:
+                    message.tenantId = reader.string();
+                    break;
+                case /* string requester_tenant */ 2:
+                    message.requesterTenant = reader.string();
+                    break;
+                case /* uint32 confirmations */ 3:
+                    message.confirmations = reader.uint32();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: TenantStatusRequest, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* string tenant_id = 1; */
+        if (message.tenantId !== "")
+            writer.tag(1, WireType.LengthDelimited).string(message.tenantId);
+        /* string requester_tenant = 2; */
+        if (message.requesterTenant !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.requesterTenant);
+        /* uint32 confirmations = 3; */
+        if (message.confirmations !== 0)
+            writer.tag(3, WireType.Varint).uint32(message.confirmations);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.TenantStatusRequest
+ */
+export const TenantStatusRequest = new TenantStatusRequest$Type();
+// @generated message type with reflection information, may provide speed optimized methods
+class TenantStatusResponse$Type extends MessageType<TenantStatusResponse> {
+    constructor() {
+        super("guardian_mesh.TenantStatusResponse", [
+            { no: 1, name: "found", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 2, name: "tenant_id", kind: "scalar", T: 9 /*ScalarType.STRING*/ },
+            { no: 3, name: "budget_limit", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 4, name: "budget_used", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 5, name: "budget_remaining", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 6, name: "audit_entries", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 7, name: "policy_configured", kind: "scalar", T: 8 /*ScalarType.BOOL*/ },
+            { no: 8, name: "policy_version", kind: "scalar", T: 4 /*ScalarType.UINT64*/ },
+            { no: 9, name: "tenants", kind: "scalar", repeat: 2 /*RepeatType.UNPACKED*/, T: 9 /*ScalarType.STRING*/ },
+            { no: 10, name: "message", kind: "scalar", T: 9 /*ScalarType.STRING*/ }
+        ]);
+    }
+    create(value?: PartialMessage<TenantStatusResponse>): TenantStatusResponse {
+        const message = globalThis.Object.create((this.messagePrototype!));
+        message.found = false;
+        message.tenantId = "";
+        message.budgetLimit = "0";
+        message.budgetUsed = "0";
+        message.budgetRemaining = "0";
+        message.auditEntries = "0";
+        message.policyConfigured = false;
+        message.policyVersion = "0";
+        message.tenants = [];
+        message.message = "";
+        if (value !== undefined)
+            reflectionMergePartial<TenantStatusResponse>(this, message, value);
+        return message;
+    }
+    internalBinaryRead(reader: IBinaryReader, length: number, options: BinaryReadOptions, target?: TenantStatusResponse): TenantStatusResponse {
+        let message = target ?? this.create(), end = reader.pos + length;
+        while (reader.pos < end) {
+            let [fieldNo, wireType] = reader.tag();
+            switch (fieldNo) {
+                case /* bool found */ 1:
+                    message.found = reader.bool();
+                    break;
+                case /* string tenant_id */ 2:
+                    message.tenantId = reader.string();
+                    break;
+                case /* uint64 budget_limit */ 3:
+                    message.budgetLimit = reader.uint64().toString();
+                    break;
+                case /* uint64 budget_used */ 4:
+                    message.budgetUsed = reader.uint64().toString();
+                    break;
+                case /* uint64 budget_remaining */ 5:
+                    message.budgetRemaining = reader.uint64().toString();
+                    break;
+                case /* uint64 audit_entries */ 6:
+                    message.auditEntries = reader.uint64().toString();
+                    break;
+                case /* bool policy_configured */ 7:
+                    message.policyConfigured = reader.bool();
+                    break;
+                case /* uint64 policy_version */ 8:
+                    message.policyVersion = reader.uint64().toString();
+                    break;
+                case /* repeated string tenants */ 9:
+                    message.tenants.push(reader.string());
+                    break;
+                case /* string message */ 10:
+                    message.message = reader.string();
+                    break;
+                default:
+                    let u = options.readUnknownField;
+                    if (u === "throw")
+                        throw new globalThis.Error(`Unknown field ${fieldNo} (wire type ${wireType}) for ${this.typeName}`);
+                    let d = reader.skip(wireType);
+                    if (u !== false)
+                        (u === true ? UnknownFieldHandler.onRead : u)(this.typeName, message, fieldNo, wireType, d);
+            }
+        }
+        return message;
+    }
+    internalBinaryWrite(message: TenantStatusResponse, writer: IBinaryWriter, options: BinaryWriteOptions): IBinaryWriter {
+        /* bool found = 1; */
+        if (message.found !== false)
+            writer.tag(1, WireType.Varint).bool(message.found);
+        /* string tenant_id = 2; */
+        if (message.tenantId !== "")
+            writer.tag(2, WireType.LengthDelimited).string(message.tenantId);
+        /* uint64 budget_limit = 3; */
+        if (message.budgetLimit !== "0")
+            writer.tag(3, WireType.Varint).uint64(message.budgetLimit);
+        /* uint64 budget_used = 4; */
+        if (message.budgetUsed !== "0")
+            writer.tag(4, WireType.Varint).uint64(message.budgetUsed);
+        /* uint64 budget_remaining = 5; */
+        if (message.budgetRemaining !== "0")
+            writer.tag(5, WireType.Varint).uint64(message.budgetRemaining);
+        /* uint64 audit_entries = 6; */
+        if (message.auditEntries !== "0")
+            writer.tag(6, WireType.Varint).uint64(message.auditEntries);
+        /* bool policy_configured = 7; */
+        if (message.policyConfigured !== false)
+            writer.tag(7, WireType.Varint).bool(message.policyConfigured);
+        /* uint64 policy_version = 8; */
+        if (message.policyVersion !== "0")
+            writer.tag(8, WireType.Varint).uint64(message.policyVersion);
+        /* repeated string tenants = 9; */
+        for (let i = 0; i < message.tenants.length; i++)
+            writer.tag(9, WireType.LengthDelimited).string(message.tenants[i]);
+        /* string message = 10; */
+        if (message.message !== "")
+            writer.tag(10, WireType.LengthDelimited).string(message.message);
+        let u = options.writeUnknownFields;
+        if (u !== false)
+            (u == true ? UnknownFieldHandler.onWrite : u)(this.typeName, message, writer);
+        return writer;
+    }
+}
+/**
+ * @generated MessageType for protobuf message guardian_mesh.TenantStatusResponse
+ */
+export const TenantStatusResponse = new TenantStatusResponse$Type();
 /**
  * @generated ServiceType for protobuf service guardian_mesh.GuardianMesh
  */
@@ -4126,5 +4396,6 @@ export const GuardianMesh = new ServiceType("guardian_mesh.GuardianMesh", [
     { name: "ProposeRevocation", options: {}, I: ProposeRevocationRequest, O: ProposeRevocationResponse },
     { name: "ApproveRevocation", options: {}, I: ApproveRevocationRequest, O: ApproveRevocationResponse },
     { name: "RevocationStatus", options: {}, I: RevocationStatusRequest, O: RevocationStatusResponse },
-    { name: "AuthenticatorStatus", options: {}, I: AuthenticatorStatusRequest, O: AuthenticatorStatusResponse }
+    { name: "AuthenticatorStatus", options: {}, I: AuthenticatorStatusRequest, O: AuthenticatorStatusResponse },
+    { name: "TenantStatus", options: {}, I: TenantStatusRequest, O: TenantStatusResponse }
 ]);

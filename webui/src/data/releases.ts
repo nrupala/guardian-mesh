@@ -13,6 +13,23 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.14.0",
+    date: "2026-10-31",
+    summary: "Multi-tenancy: tenant-scoped policy, keys, rate budgets, and audit partitions. Closes specs DC-15 (PARTIAL), DC-16 (PARTIAL), CP-14 (PARTIAL).",
+    highlights: [
+      "Tenant registry with per-tenant policy bundles, ML-DSA key bindings, rate budgets, and audit partitions",
+      "Handshake tenant_id field binds sessions to tenants; cross-tenant key access is permission_denied",
+      "Tenant policy decisions evaluated before global policy; deny verdicts return BLOCK with DC-15 structured reason",
+      "Rate budgets are per-tenant and isolated: exhausting one tenant's budget does not affect others",
+      "Audit partitions are per-tenant with independent hash chains; TenantStatus RPC enforces BM-3 two-confirmation cross-tenant reads",
+      "TenantStatus RPC and WebUI Multi-tenancy section showing registered tenants, default tenant budget, and audit entry counts",
+      "HONESTY BOUNDARY: v1 is single-node in-process; budgets and audit are in-memory (reset on restart); no process isolation (CP-14 SC-39), no cross-node tenancy, no admin RPC for tenant policies (library/test surface only)"
+    ],
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-10-31",
+    tests: "213 Rust tests passing (148 library + 65 binary) · WebUI build + lint · TenantStatus wire proof 10/10",
+    status: "Release candidate"
+  },
+  {
     version: "0.13.0",
     date: "2026-10-29",
     summary: "Guardian attestation package: signed reproducible builds with provenance published per release. Closes specs CP-19, CP-21, DC-17 (PARTIAL).",
