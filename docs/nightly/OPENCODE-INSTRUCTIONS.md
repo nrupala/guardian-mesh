@@ -183,6 +183,24 @@ cross-build route recorded in the ledger.
 ### WO-15 (P2) Multi-tenancy
 Tenant-scoped policy, keys, rate budgets, audit partitions, with
 isolation behaviour-proven in tests (spec DC-15, DC-16, CP-14).
+Status 2026-10-31: built, Wright-verified, gated PASS WITH
+FINDINGS and merged as v0.14.0 (PR #78) — but the deploy was
+ROLLED BACK at production proof (gate F6: the tenant budget
+pre-empted Gatekeeper THROTTLE verdicts under burst, box E2E
+PF-18). Production remains on v0.13.0. Completion rides on
+WO-15.1 below.
+
+### WO-15.1 (P1) Tenant-budget ordering fix (WO-15 completion)
+Move the per-tenant budget check AFTER Gatekeeper evaluation:
+the budget gates only requests the Gatekeeper allowed, so
+THROTTLE verdicts are never converted to resource_exhausted
+errors (gate F6 / GMSI-100). Acceptance: box-E2E PF-18 verdict
+mix restored (excess = THROTTLE, other = 0) in Wright's
+pre-merge wire proof AND on the box after deploy; WO-15's
+tenant tests stay green. Then v0.14.0 (or the next patch
+version) deploys with the standing attestation + certification
+ceremony. Also carries WO-15 F4 if it falls out naturally
+(bogus-session budget burn) — otherwise F4 stays fodder.
 
 ### WO-16 (P2) Clustered verdicts + degraded modes
 Multi-node verdict issuance per architecture v2 consensus levels;
@@ -1005,6 +1023,35 @@ do, and none becomes a gate MUST until behaviour-proven here.
   that suite NOT RUN with the blocker named — never
   folded into a neighbouring suite's pass, and never
   silently dropped from the counts a release records.
+- **GMSI-98 — A proto field addition is diffed against
+  every shipped client call site before done.**
+  (Guardian Mesh WO-15 gate, 2026-10-31.) When a work
+  order adds a field to a wire message, every shipped
+  client that constructs that message (TS gmClient,
+  Rust, Python) is diffed and updated in the same
+  change — a required-field addition that breaks a
+  client's build is a work-order defect, found in
+  WO-14 (F4) and again in WO-15 (F2).
+- **GMSI-99 — Partitioned audit appends on EVERY
+  Ok return path.** (Guardian Mesh WO-15 gate,
+  2026-10-31.) When audit is partitioned by any key
+  (tenant here), the append must be proven on every
+  Ok verdict return path — final, policy-deny,
+  throttle, simulation-block. A partition that
+  undercounts BLOCK/THROTTLE verdicts is a silent
+  evidence gap.
+- **GMSI-100 — Production harness contracts are
+  part of the shipped spec.** (Guardian Mesh WO-15
+  deploy, 2026-11-01.) The box E2E's observable
+  contracts (e.g. the PF-18 burst verdict mix:
+  excess returns THROTTLE verdicts, never errors)
+  bind every work order. A change to limiter
+  ordering or verdict routing re-proves those
+  contracts in Wright's pre-merge behaviour proof —
+  never discovers them at deploy. (Founding case:
+  WO-15's tenant budget ran before the Gatekeeper
+  and converted burst excess to resource_exhausted;
+  deploy rolled back, gate F6.)
 
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
@@ -1958,3 +2005,52 @@ the laptop checkouts are working copies, never the source of truth.
   WO-11, WO-12, WO-14, WO-13 done). Next: WO-15 (P2, Part C
   seventh in order — multi-tenancy). Standing: dependabot
   PR #51 (vite bump) still open, outside the work orders.
+
+- 2026-10-31 — **WO-15 built and merged as v0.14.0; deploy
+  ROLLED BACK at production proof (gate F6)** (PR #78, merged
+  f4437192; merged tree d55376ce == gated tree): multi-tenancy
+  — tenant registry (GUARDIAN_MESH_TENANTS env), per-tenant
+  policy bundles, ML-DSA key bindings, rate budgets and
+  hash-chained audit partitions; handshake carries tenant_id
+  (proto fields appended only); cross-tenant reads require
+  ≥2 confirmations (BM-3) and leak zero numbers on refusal;
+  new TenantStatus RPC; WebUI Multi-tenancy section;
+  docs/MULTI_TENANCY.md. DC-15/DC-16 [TARGET] → [PARTIAL].
+  Declared v1 limits: single-node in-process; budgets and
+  partitions in-memory (reset on restart); no process
+  isolation (CP-14 SC-39 not claimed); no tenant-policy
+  admin RPC. Release gate: PASS WITH FINDINGS (F1 lane tree
+  did not compile — fixed in Wright's carry, honestly
+  reported by the lane; F2 gmClient tenantId — GMSI-98;
+  F3 audit-partition appends on BLOCK/THROTTLE paths —
+  GMSI-99; F4 bogus-session budget burn, OPEN fodder;
+  F5 in-memory tenant state, OPEN declared). Wright-verified:
+  cargo 213/213 (148 lib + 65 bin; baseline 193, +20 WO-15),
+  WebUI build (drift guard 15 versions) + lint, raw
+  gRPC-web wire proof 10/10 against a two-tenant daemon.
+  Deployed via the gm-deploy sequence executed on the box
+  (this VM's sandbox denies zig file writes — a
+  VM-replacement policy change; the aarch64 binary,
+  sha256 00f9a4e7…, was cross-built on the owner's laptop
+  from merged main, and gm-deploy's own build leg remains
+  broken — standing fodder): direct production proof of
+  v0.14.0 was clean (Health SERVING, build_commit
+  f4437192, binary_sha256 == installed, fingerprint
+  dd2cf1a3… unchanged, TenantStatus summary [default]) BUT
+  the box E2E scored 14/16 — PF-18 burst FAILED
+  (allowed=89 throttled=0 other=26 vs v0.13.0's 100/15/0):
+  the tenant budget runs before the Gatekeeper and converts
+  burst excess into resource_exhausted errors, breaking the
+  WO-5 THROTTLE-verdict contract (gate F6, GMSI-100).
+  Production rolled back the same night to v0.13.0
+  (guardian-meshd.bak-v0130 + webui-dist.bak-v0130
+  restored; post-rollback E2E 15/16, PF-18 PASS, Health
+  0.13.0/f604dd67…, Access 302). v0.14.0 is NOT deployed,
+  NOT attested, NOT certified, no RC entry; v0.13.0's soak
+  still graduates 2026-11-05. Standing corrections: PR #51
+  merged before this run (main bf6126c8); dependabot PR #77
+  (fast-uri + serialize-javascript) is the open one, outside
+  the work orders — owner's call pending. Part C continues
+  (WO-19, WO-10, WO-11, WO-12, WO-14, WO-13 done; WO-15
+  merged, completion pending WO-15.1). Next: WO-15.1 (P1 —
+  tenant-budget ordering fix, completes WO-15).
