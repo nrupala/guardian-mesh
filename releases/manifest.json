@@ -592,5 +592,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-01T00:13:51-06:00",
     "message": "Merge pull request #78 from nrupala/wright/wo15-multi-tenancy"
+  },
+  {
+    "release": 71,
+    "tag": "release/v71",
+    "previous_tag": "release/v70",
+    "sha": "8812d4cb90e489c2c3e33cecac974fef67110b70",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-01T00:58:10-06:00",
+    "message": "Merge pull request #79 from nrupala/wright/wo15-ledger"
   }
 ]
