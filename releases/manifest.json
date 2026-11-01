@@ -583,5 +583,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-10-30T22:01:08-06:00",
     "message": "Merge pull request #51 from nrupala/dependabot/npm_and_yarn/webui/npm_and_yarn-63f9813d79"
+  },
+  {
+    "release": 70,
+    "tag": "release/v70",
+    "previous_tag": "release/v69",
+    "sha": "f44371922a7c0ccb8f7e5398fdadaffae82e21cf",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-01T00:13:51-06:00",
+    "message": "Merge pull request #78 from nrupala/wright/wo15-multi-tenancy"
   }
 ]
