@@ -23,6 +23,7 @@ pub struct HandshakeSession {
     pub source_public_key: Vec<u8>,
     pub auth_factors: Vec<String>,
     pub workload_id: String,
+    pub tenant_id: String,
 }
 
 pub struct HandshakeBus {
@@ -93,6 +94,17 @@ impl HandshakeBus {
         auth_factors: Vec<String>,
         workload_id: String,
     ) -> HandshakeSession {
+        self.create_session_attested_tenant(source_enclave, source_public_key, auth_factors, workload_id, crate::tenant::DEFAULT_TENANT.to_string())
+    }
+
+    pub fn create_session_attested_tenant(
+        &self,
+        source_enclave: &str,
+        source_public_key: &[u8],
+        auth_factors: Vec<String>,
+        workload_id: String,
+        tenant_id: String,
+    ) -> HandshakeSession {
         let mut session_id_bytes = [0u8; 16];
         let _ = SysRng.try_fill_bytes(&mut session_id_bytes);
         let session_id = hex::encode(session_id_bytes);
@@ -113,6 +125,7 @@ impl HandshakeBus {
             source_public_key: source_public_key.to_vec(),
             auth_factors,
             workload_id,
+            tenant_id,
         };
 
         let mut sessions = self.sessions.lock().unwrap();
@@ -221,6 +234,20 @@ impl HandshakeBus {
             return None;
         }
         Some((session.auth_factors.clone(), session.workload_id.clone()))
+    }
+
+    /// Get the tenant_id for a session (unexpired only).
+    pub fn session_tenant(&self, session_id: &str) -> Option<String> {
+        let sessions = self.sessions.lock().unwrap();
+        let session = sessions.get(session_id)?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        if now.saturating_sub(session.created_at) >= SESSION_TTL_SECS {
+            return None;
+        }
+        Some(session.tenant_id.clone())
     }
 }
 
@@ -381,5 +408,21 @@ mod tests {
         let expired_time = session.created_at + SESSION_TTL_SECS + 1;
         bus.evict_expired_at(expired_time);
         assert_eq!(bus.session_auth(&session.session_id), None);
+    }
+
+    #[test]
+    fn session_tenant_reports_tenant() {
+        let bus = HandshakeBus::new(b"test-secret");
+        
+        // Tenant session
+        let session = bus.create_session_attested_tenant("test", &[1u8; 1952], vec![], String::new(), "tenant-a".to_string());
+        assert_eq!(bus.session_tenant(&session.session_id), Some("tenant-a".to_string()));
+        
+        // Unknown session returns None
+        assert_eq!(bus.session_tenant("nonexistent"), None);
+        
+        // Legacy session (default tenant)
+        let legacy = bus.create_session("legacy");
+        assert_eq!(bus.session_tenant(&legacy), Some(crate::tenant::DEFAULT_TENANT.to_string()));
     }
 }

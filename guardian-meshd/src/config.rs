@@ -21,6 +21,8 @@ pub struct Config {
     pub spiffe_trust_domains: Vec<String>,
     pub spiffe_required: bool,
     pub pgp_admin_keys_dir: Option<String>,
+    pub tenants: Vec<String>,
+    pub tenant_rate_budget: u64,
 }
 
 impl Config {
@@ -145,6 +147,16 @@ impl Default for Config {
         
         let pgp_admin_keys_dir = std::env::var("GUARDIAN_MESH_PGP_ADMIN_KEYS_DIR").ok();
         
+        let tenants = std::env::var("GUARDIAN_MESH_TENANTS")
+            .ok()
+            .map(|s| s.split(',').map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect())
+            .unwrap_or_default();
+        
+        let tenant_rate_budget = std::env::var("GUARDIAN_MESH_TENANT_RATE_BUDGET")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(policy_throttle_rate as u64);
+        
         Self {
             bind_addr: std::env::var("GUARDIAN_MESH_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".into()),
             bind_port: std::env::var("GUARDIAN_MESH_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or_else(find_free_port),
@@ -163,6 +175,8 @@ impl Default for Config {
             spiffe_trust_domains,
             spiffe_required,
             pgp_admin_keys_dir,
+            tenants,
+            tenant_rate_budget,
         }
     }
 }

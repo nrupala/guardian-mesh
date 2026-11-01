@@ -64,6 +64,8 @@ service GuardianMesh {
   rpc RevocationStatus (RevocationStatusRequest) returns (RevocationStatusResponse);
   // Query authenticator status (AZ-11/AZ-14)
   rpc AuthenticatorStatus (AuthenticatorStatusRequest) returns (AuthenticatorStatusResponse);
+  // Query tenant status (WO-15 / DC-15)
+  rpc TenantStatus (TenantStatusRequest) returns (TenantStatusResponse);
 }
 
 // ── Message Types ─────────────────────────
@@ -148,6 +150,7 @@ message HandshakeRequest {
   string spiffe_id = 4;
   bytes svid_leaf_der = 5;
   bytes svid_signature = 6;
+  string tenant_id = 7;        // empty = default tenant
 }
 
 message HandshakeResponse {
@@ -156,6 +159,7 @@ message HandshakeResponse {
   uint64 ttl_seconds = 3;  // Session lifetime from creation
   repeated string auth_factors = 4;
   string workload_id = 5;
+  string tenant_id = 6;
 }
 
 message HealthResponse {
@@ -407,4 +411,25 @@ message AuthenticatorStatusResponse {
   repeated string spiffe_trust_domains = 2;
   bool spiffe_required = 3;
   repeated string pgp_admin_principals = 4;   // sorted
+}
+
+// ── TenantStatus RPC (WO-15) ──────────────
+
+message TenantStatusRequest {
+  string tenant_id = 1;        // empty = summary (tenant list only)
+  string requester_tenant = 2; // empty = the tenant itself / local operator
+  uint32 confirmations = 3;    // BM-3 confirmations for a cross-tenant read
+}
+
+message TenantStatusResponse {
+  bool found = 1;
+  string tenant_id = 2;
+  uint64 budget_limit = 3;
+  uint64 budget_used = 4;
+  uint64 budget_remaining = 5;
+  uint64 audit_entries = 6;
+  bool policy_configured = 7;
+  uint64 policy_version = 8;   // tenant bundle version, 0 when none
+  repeated string tenants = 9; // all registered tenant ids, sorted
+  string message = 10;
 }

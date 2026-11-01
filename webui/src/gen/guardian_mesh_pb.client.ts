@@ -9,6 +9,8 @@
 import type { RpcTransport } from "@protobuf-ts/runtime-rpc";
 import type { ServiceInfo } from "@protobuf-ts/runtime-rpc";
 import { GuardianMesh } from "./guardian_mesh_pb";
+import type { TenantStatusResponse } from "./guardian_mesh_pb";
+import type { TenantStatusRequest } from "./guardian_mesh_pb";
 import type { AuthenticatorStatusResponse } from "./guardian_mesh_pb";
 import type { AuthenticatorStatusRequest } from "./guardian_mesh_pb";
 import type { RevocationStatusResponse } from "./guardian_mesh_pb";
@@ -323,5 +325,14 @@ export class GuardianMeshClient implements IGuardianMeshClient, ServiceInfo {
     authenticatorStatus(input: AuthenticatorStatusRequest, options?: RpcOptions): UnaryCall<AuthenticatorStatusRequest, AuthenticatorStatusResponse> {
         const method = this.methods[15], opt = this._transport.mergeOptions(options);
         return stackIntercept<AuthenticatorStatusRequest, AuthenticatorStatusResponse>("unary", this._transport, method, opt, input);
+    }
+    /**
+     * Query tenant status (WO-15 / DC-15)
+     *
+     * @generated from protobuf rpc: TenantStatus
+     */
+    tenantStatus(input: TenantStatusRequest, options?: RpcOptions): UnaryCall<TenantStatusRequest, TenantStatusResponse> {
+        const method = this.methods[16], opt = this._transport.mergeOptions(options);
+        return stackIntercept<TenantStatusRequest, TenantStatusResponse>("unary", this._transport, method, opt, input);
     }
 }
