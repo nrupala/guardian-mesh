@@ -601,5 +601,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-01T00:58:10-06:00",
     "message": "Merge pull request #79 from nrupala/wright/wo15-ledger"
+  },
+  {
+    "release": 72,
+    "tag": "release/v72",
+    "previous_tag": "release/v71",
+    "sha": "d7ad93d32f3c6d50096752aa9334b17d9c7e5828",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-03T00:17:52-06:00",
+    "message": "Merge pull request #80 from nrupala/wright/pack-refresh-gmsi101-111-20261102"
   }
 ]
