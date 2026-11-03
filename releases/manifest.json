@@ -610,5 +610,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-03T00:17:52-06:00",
     "message": "Merge pull request #80 from nrupala/wright/pack-refresh-gmsi101-111-20261102"
+  },
+  {
+    "release": 73,
+    "tag": "release/v73",
+    "previous_tag": "release/v72",
+    "sha": "b8d5d067929bd55969a1c5807097cea3fba7997f",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-03T01:11:26-06:00",
+    "message": "Merge pull request #81 from nrupala/wright/wo151-budget-ordering"
   }
 ]
