@@ -187,8 +187,10 @@ Status 2026-10-31: built, Wright-verified, gated PASS WITH
 FINDINGS and merged as v0.14.0 (PR #78) — but the deploy was
 ROLLED BACK at production proof (gate F6: the tenant budget
 pre-empted Gatekeeper THROTTLE verdicts under burst, box E2E
-PF-18). Production remains on v0.13.0. Completion rides on
-WO-15.1 below.
+PF-18). Production remained on v0.13.0. Status 2026-11-02:
+COMPLETE — WO-15.1 shipped as v0.14.1 (PR #81) and deployed
+the same night; production proof PF-18 PASS (100/15/0). See
+the 2026-11-02 ledger entry.
 
 ### WO-15.1 (P1) Tenant-budget ordering fix (WO-15 completion)
 Move the per-tenant budget check AFTER Gatekeeper evaluation:
@@ -201,6 +203,13 @@ tenant tests stay green. Then v0.14.0 (or the next patch
 version) deploys with the standing attestation + certification
 ceremony. Also carries WO-15 F4 if it falls out naturally
 (bogus-session budget burn) — otherwise F4 stays fodder.
+Status 2026-11-02: SHIPPED as v0.14.1 (PR #81, merged
+b8d5d067) and deployed the same night; box-E2E PF-18 PASS
+(allowed=100 throttled=15 other=0) in Wright's pre-merge
+proof AND on the box after deploy; F4 proven closed
+(bogus-session regression test in tree). The fix also
+converted the tenant budget from a lifetime quota to a
+per-window rate budget (gate F2 of the WO-15.1 gate).
 
 ### WO-16 (P2) Clustered verdicts + degraded modes
 Multi-node verdict issuance per architecture v2 consensus levels;
@@ -1117,6 +1126,20 @@ do, and none becomes a gate MUST until behaviour-proven here.
   store-channel bundle must contain no
   direct-checkout URL strings for channels that
   forbid them; proven mechanically, not by hand.
+
+- **GMSI-112 — Wall-clock-window contracts are
+  tested by controlling the window or the clock.**
+  (Guardian Mesh WO-15.1 gate, 2026-11-02.) A test of a
+  rate limiter, budget window, or freshness window must
+  not race real time: sequential pre-signed envelopes
+  aged past the PF-15 5 s window before reaching the
+  rate window, and a concurrent variant raced the 1 s
+  window under full-suite CPU contention — the same
+  test passed and failed on identical code. Unit tests
+  prove ordering deterministically (configure the window
+  or the rate so the outcome cannot race); scale and
+  volume contracts belong to the production harness,
+  run against a release binary on a quiet surface.
 
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
@@ -2119,3 +2142,55 @@ the laptop checkouts are working copies, never the source of truth.
   (WO-19, WO-10, WO-11, WO-12, WO-14, WO-13 done; WO-15
   merged, completion pending WO-15.1). Next: WO-15.1 (P1 —
   tenant-budget ordering fix, completes WO-15).
+
+- 2026-11-02 — **WO-15.1 shipped as v0.14.1** (PR #81, merged b8d5d067):
+  tenant-budget ordering fix completing WO-15 (gate F6 / GMSI-100),
+  plus a defect the ordering fix exposed: WO-15's budget was a
+  LIFETIME quota whose default (100) matched a per-second rate, so
+  Gatekeeper-allowed calls permanently drained the tenant. RateBudget
+  is now a true per-window rate budget (default window 1000 ms,
+  GUARDIAN_MESH_TENANT_BUDGET_WINDOW_MS / tenant_budget_window_ms);
+  TenantStatus used/remaining report the current window. The budget
+  check runs AFTER Gatekeeper evaluation and gates only allowed
+  requests; THROTTLE and BLOCK verdicts never consume budget and are
+  never converted to resource_exhausted. F4 proven closed: a request
+  with an unknown session id is rejected permission_denied with
+  budget_used unchanged (regression test in tree). Wright-verified:
+  cargo test 216/216 (baseline 213, +3), WebUI build + lint green,
+  production harness twice at PF-18 PASS allowed=100 throttled=15
+  other=0 (the exact v0.13.0 mix). Release gate: PASS WITH FINDINGS
+  (F1 lane burst test flaky by construction — replaced with a
+  deterministic ordering test, fixed; F2 the lifetime-quota defect,
+  fixed; F3 stale Health check in the box harness, OPEN standing;
+  F5 tenant state in-memory only, OPEN declared). Deployed to
+  guardian.aimlds.org the same night via gm-deploy --binary
+  (aarch64 sha256 4afff018…, cross-built on Wright's VM from
+  merged main — the VM image lacks protoc, fetched 25.1 into
+  the run dir; rollback guardian-meshd.bak-v0130 +
+  webui-dist.bak-v0130 kept, bak-v0130 sha256 == the v0.13.0
+  binary): box E2E 15/16 with PF-18 PASS (100/15/0) — gm-deploy
+  exited "NOT certified" on the F3 stale check alone, and
+  certification rests on the direct proof (Health SERVING,
+  build_version 0.14.1, build_commit b8d5d067, binary_sha256
+  == installed; TenantStatus summary [default]; both services
+  active; Access 302; box dist asset == Wright's build ==
+  Pages asset); attestation package VALID against the
+  installed binary, signer fingerprint == the pinned
+  dd2cf1a3…, published on the box; self-certification
+  cert-20261103-000042 ACTIVE (evidence = gate verdict
+  sha256 e2be4d42…), superseding cert-20261030-000041.
+  v0.14.1 RC graduates 2026-11-09 on a clean week. WO-15 is
+  COMPLETE. Standing fodder unchanged: PR #77 (dependabot)
+  open — owner's call. Part C continues (WO-19, WO-10,
+  WO-11, WO-12, WO-14, WO-13, WO-15 done). Next: WO-16 (P2,
+  Part C eighth — clustered verdicts + degraded modes).
+
+GMSI filed by this run's own gate: GMSI-112 — wall-clock-window
+contracts (rate limiters, budget windows, freshness windows) must be
+tested by controlling the window or the clock, never by racing real
+time from a unit test; scale/volume contracts belong to the
+production harness, unit tests prove ordering deterministically.
+(Tonight's lane burst test failed exactly this way: sequential
+pre-signed envelopes aged past the PF-15 5 s window before reaching
+the rate window, and a concurrent variant raced the 1 s window
+under full-suite CPU contention.)
