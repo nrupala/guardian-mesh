@@ -23,6 +23,7 @@ pub struct Config {
     pub pgp_admin_keys_dir: Option<String>,
     pub tenants: Vec<String>,
     pub tenant_rate_budget: u64,
+    pub tenant_budget_window_ms: u64,
 }
 
 impl Config {
@@ -156,6 +157,16 @@ impl Default for Config {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(policy_throttle_rate as u64);
+
+        // WO-15.1 (Wright carry): the tenant budget is a RATE budget —
+        // its limit applies per sliding window, not over the daemon's
+        // lifetime. The window defaults to the PF-18 / policy-rate
+        // window (1s), the window the default limit is derived from.
+        let tenant_budget_window_ms = std::env::var("GUARDIAN_MESH_TENANT_BUDGET_WINDOW_MS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .filter(|&v| v > 0)
+            .unwrap_or(1000);
         
         Self {
             bind_addr: std::env::var("GUARDIAN_MESH_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".into()),
@@ -177,6 +188,7 @@ impl Default for Config {
             pgp_admin_keys_dir,
             tenants,
             tenant_rate_budget,
+            tenant_budget_window_ms,
         }
     }
 }

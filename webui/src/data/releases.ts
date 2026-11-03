@@ -13,6 +13,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.14.1",
+    date: "2026-11-02",
+    summary: "Tenant-budget ordering fix (gate F6 / GMSI-100): the per-tenant rate budget now gates only requests the Gatekeeper allowed, so bursts return THROTTLE verdicts instead of resource_exhausted errors. First deployed multi-tenancy release (0.14.0 was rolled back).",
+    highlights: [
+      "Budget consumption moved after the Sentinel/Gatekeeper pipeline and after the THROTTLE and BLOCK return paths",
+      "THROTTLE and BLOCK verdicts never consume tenant budget and are never converted to budget errors",
+      "Existing wo15_tenant_budget_exhaustion_throttles test unchanged; new burst regression test asserts zero errors",
+      "F4: an unknown/bogus session is denied before the budget point, with a regression test asserting budget_used is unchanged"
+    ],
+    gateVerdict: "PENDING — independent verification (Wright)",
+    tests: "PENDING — independent verification (Wright); this lane did not run cargo test or npm",
+    status: "Release candidate"
+  },
+  {
     version: "0.14.0",
     date: "2026-10-31",
     summary: "Multi-tenancy: tenant-scoped policy, keys, rate budgets, and audit partitions. Closes specs DC-15 (PARTIAL), DC-16 (PARTIAL), CP-14 (PARTIAL).",

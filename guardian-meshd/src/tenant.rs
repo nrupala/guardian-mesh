@@ -33,15 +33,75 @@ pub fn validate_tenant_id(id: &str) -> Result<String, String> {
     Ok(id.to_string())
 }
 
+/// Default budget window: the PF-18 / policy-rate window (1 s).
+/// The tenant budget is a RATE budget: `limit` consumptions per
+/// sliding window (WO-15.1 Wright carry — as shipped in WO-15 the
+/// budget was a lifetime quota whose default was a per-second rate,
+/// which guaranteed exhaustion under sustained allowed traffic and
+/// made the PF-18 burst contract unsatisfiable on a shared tenant).
+pub const DEFAULT_BUDGET_WINDOW_MS: u64 = 1_000;
+
 #[derive(Debug, Clone)]
 pub struct RateBudget {
     pub limit: u64,
-    pub used: u64,
+    window_ms: u64,
+    stamps: std::collections::VecDeque<u64>,
 }
 
 impl RateBudget {
+    pub fn new(limit: u64, window_ms: u64) -> Self {
+        RateBudget {
+            limit,
+            window_ms: if window_ms == 0 { DEFAULT_BUDGET_WINDOW_MS } else { window_ms },
+            stamps: std::collections::VecDeque::new(),
+        }
+    }
+
+    fn now_ms() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+    }
+
+    fn in_window(&self, now_ms: u64) -> u64 {
+        self.stamps
+            .iter()
+            .filter(|&&ts| now_ms.saturating_sub(ts) <= self.window_ms)
+            .count() as u64
+    }
+
+    /// Consumptions inside the current window.
+    pub fn used(&self) -> u64 {
+        self.in_window(Self::now_ms())
+    }
+
     pub fn remaining(&self) -> u64 {
-        self.limit.saturating_sub(self.used)
+        self.limit.saturating_sub(self.used())
+    }
+
+    fn consume_at(&mut self, now_ms: u64) -> bool {
+        while let Some(&ts) = self.stamps.front() {
+            if now_ms.saturating_sub(ts) > self.window_ms {
+                self.stamps.pop_front();
+            } else {
+                break;
+            }
+        }
+        // Limit of 0 means unlimited (consumption still recorded).
+        if self.limit == 0 {
+            self.stamps.push_back(now_ms);
+            return true;
+        }
+        if (self.stamps.len() as u64) >= self.limit {
+            return false;
+        }
+        self.stamps.push_back(now_ms);
+        true
+    }
+
+    fn consume(&mut self) -> bool {
+        self.consume_at(Self::now_ms())
     }
 }
 
@@ -84,6 +144,10 @@ pub struct TenantRegistry {
 
 impl TenantRegistry {
     pub fn new(configured: &[String], default_budget: u64) -> Result<Self, String> {
+        Self::new_with_window(configured, default_budget, DEFAULT_BUDGET_WINDOW_MS)
+    }
+
+    pub fn new_with_window(configured: &[String], default_budget: u64, budget_window_ms: u64) -> Result<Self, String> {
         let mut registered = BTreeSet::new();
         
         // Always register DEFAULT_TENANT
@@ -98,10 +162,7 @@ impl TenantRegistry {
         // Initialize budgets for all registered tenants
         let mut budgets = HashMap::new();
         for tenant in &registered {
-            budgets.insert(tenant.clone(), RateBudget {
-                limit: default_budget,
-                used: 0,
-            });
+            budgets.insert(tenant.clone(), RateBudget::new(default_budget, budget_window_ms));
         }
         
         Ok(TenantRegistry {
@@ -212,27 +273,16 @@ impl TenantRegistry {
     
     pub fn try_consume_budget(&mut self, tenant: &str) -> Result<bool, String> {
         self.require_registered(tenant)?;
-        
+
         let budget = self.budgets.get_mut(tenant)
             .ok_or_else(|| format!("no budget for tenant '{}'", tenant))?;
-        
-        // Limit of 0 means unlimited
-        if budget.limit == 0 {
-            budget.used += 1;
-            return Ok(true);
-        }
-        
-        if budget.used >= budget.limit {
-            return Ok(false);
-        }
-        
-        budget.used += 1;
-        Ok(true)
+
+        Ok(budget.consume())
     }
-    
+
     pub fn budget(&self, tenant: &str) -> Option<(u64, u64, u64)> {
         self.budgets.get(tenant).map(|b| {
-            (b.limit, b.used, b.remaining())
+            (b.limit, b.used(), b.remaining())
         })
     }
     
@@ -475,6 +525,24 @@ mod tests {
         assert_eq!(remaining, 0);
     }
     
+    #[test]
+    fn test_budget_window_refills() {
+        // WO-15.1: the budget is a rate budget — limit per sliding
+        // window. Driven with synthetic timestamps, deterministically.
+        let mut budget = RateBudget::new(2, 1_000);
+        assert!(budget.consume_at(0));
+        assert!(budget.consume_at(500));
+        assert!(!budget.consume_at(900)); // window full: {0, 500}
+        assert!(budget.consume_at(1_001)); // 0 expired; window: {500, 1001}
+        assert!(!budget.consume_at(1_200)); // window full again
+        assert!(budget.consume_at(1_502)); // 500 expired; window: {1001, 1502}
+        // Unlimited budgets always consume, in any window position.
+        let mut unlimited = RateBudget::new(0, 1_000);
+        for t in 0..10 {
+            assert!(unlimited.consume_at(t * 10));
+        }
+    }
+
     #[test]
     fn test_budget_unlimited() {
         let mut registry = TenantRegistry::new(&[], 0).unwrap();
