@@ -1052,6 +1052,71 @@ do, and none becomes a gate MUST until behaviour-proven here.
   WO-15's tenant budget ran before the Gatekeeper
   and converted burst excess to resource_exhausted;
   deploy rolled back, gate F6.)
+- **GMSI-101 — Scanner secret candidates are
+  classified by code context before they block.**
+  (codetopo 0.8.0 gate, 2026-11-02; third consecutive
+  occurrence, fourth at the release-PR gate.) A
+  `generic-secret-assign` hit inside a Rust
+  `#[cfg(test)]` / `#[test]` fixture is emitted as a
+  lead, not a blocker — the scanner classifies test
+  context before raising a secret candidate.
+- **GMSI-102 — Call-resolution fidelity is a tracked
+  measurement, not an anecdote.** (codetopo 0.8.0
+  gate, 2026-11-02.) A probe reports per-language
+  call-resolution rates (resolved vs stubbed) over
+  pinned corpora at each gate, so a builder change
+  is measured before/after.
+- **GMSI-103 — Dependency-advisory freshness between
+  releases.** (codetopo 0.8.0 gate, 2026-11-02.) The
+  weekly fleet sweep re-runs the OSV pass against
+  shipped lockfiles, not only at release time — an
+  advisory that post-dates a gate is caught by the
+  sweep, not by the next build's gate alone.
+- **GMSI-104 — Cross-surface value parity.**
+  (codetopo 0.9.0 gate, 2026-11-02.) For any
+  measurement product, a value crossing a
+  serialization boundary (CLI / HTTP / MCP) must
+  round-trip bit-identically; the mesh proves parity
+  across every surface the product exposes.
+  (Founding case: serde_json's default float parser,
+  1 ULP across the HTTP boundary.)
+- **GMSI-105 — Absence integrity.** (codetopo 0.9.0
+  gate, 2026-11-02.) A non-converged or over-ceiling
+  answer is an absence with a reason — never a zero
+  or a partial result presented as an answer.
+- **GMSI-106 — A release workflow that builds an
+  artifact without running the test suite is
+  provable from the workflow file.** (Nov-3 Play
+  apps gate, 2026-11-02; founding case: all four
+  vault children.) The mesh checks workflow steps
+  mechanically before a release artifact counts.
+- **GMSI-107 — Manifest-vs-declared permission
+  diff.** (Nov-3 Play apps gate, 2026-11-02.) The
+  shipped artifact's merged-manifest permissions
+  are diffed automatically against the pack's
+  declared set.
+- **GMSI-108 — Framework-version advisory watch at
+  gate time.** (Nov-3 Play apps gate, 2026-11-02.)
+  Framework versions in lockfiles (Capacitor and
+  peers) are checked against GHSA ranges at gate
+  time; the boundary arithmetic is never done by
+  hand at the gate.
+- **GMSI-109 — Bundle-vs-privacy disclosure diff.**
+  (Nov-3 Play apps gate, 2026-11-02.) Remote
+  references inside a shipped bundle are diffed
+  against the product's privacy disclosures; an
+  undisclosed remote reference is a finding.
+- **GMSI-110 — Workflow-literal secret watch,
+  history-aware.** (Nov-3 Play apps gate,
+  2026-11-02.) Credentials as literals in workflow
+  files are proven absent in the working tree AND
+  in history — tree scans alone miss the history
+  half.
+- **GMSI-111 — Channel-string sweep for money
+  surfaces.** (Nov-3 Play apps gate, 2026-11-02.) A
+  store-channel bundle must contain no
+  direct-checkout URL strings for channels that
+  forbid them; proven mechanically, not by hand.
 
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
