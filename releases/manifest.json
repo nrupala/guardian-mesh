@@ -619,5 +619,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-03T01:11:26-06:00",
     "message": "Merge pull request #81 from nrupala/wright/wo151-budget-ordering"
+  },
+  {
+    "release": 74,
+    "tag": "release/v74",
+    "previous_tag": "release/v73",
+    "sha": "b4be916bca18db56749939b8b20d01ae9290f163",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-03T01:31:38-06:00",
+    "message": "Merge pull request #82 from nrupala/wright/ledger-wo151-20261102"
   }
 ]
