@@ -10,9 +10,10 @@ Guardian Mesh v0.14.0 introduces multi-tenancy: policy bundles, ML-DSA key bindi
   - Example: `GUARDIAN_MESH_TENANTS="tenant-a,tenant-b,tenant-c"`
   - Tenant IDs are validated: 1-64 chars, first char ASCII lowercase alphanumeric, remaining chars ASCII lowercase alphanumeric/`-`/`_`.
 
-- `GUARDIAN_MESH_TENANT_RATE_BUDGET`: Per-tenant rate budget limit (default: value of `GUARDIAN_MESH_POLICY_THROTTLE_RATE` cast to u64).
+- `GUARDIAN_MESH_TENANT_RATE_BUDGET`: Per-tenant rate budget limit — consumptions per budget window (default: value of `GUARDIAN_MESH_POLICY_THROTTLE_RATE` cast to u64).
   - A limit of `0` means unlimited (budget tracking still counts usage).
   - Example: `GUARDIAN_MESH_TENANT_RATE_BUDGET=1000`
+- `GUARDIAN_MESH_TENANT_BUDGET_WINDOW_MS`: Budget window in milliseconds (default: `1000`, the PF-18 / policy-rate window). Since WO-15.1 the budget is a rate budget: the limit applies per sliding window, not over the daemon's lifetime.
 
 ### Default Tenant
 
@@ -45,7 +46,10 @@ Each tenant has an independent rate budget:
 
 - Exhausting one tenant's budget does not affect other tenants.
 - Budget consumption occurs only on real `Evaluate` calls, not on `Simulate`.
-- When a tenant's budget is exhausted, further `Evaluate` calls return `resource_exhausted`.
+- The limit applies per sliding window (default 1s, `GUARDIAN_MESH_TENANT_BUDGET_WINDOW_MS`): a tenant may consume up to the limit per window; TenantStatus reports the current window's used/remaining.
+- When a tenant's budget is exhausted in the current window, further `Evaluate` calls return `resource_exhausted` until the window slides.
+
+**Ordering rule:** The tenant budget gates only requests the Gatekeeper allowed. THROTTLE verdicts (PF-18 or policy rate) and BLOCK verdicts (Sentinel, Gatekeeper, or the tenant-policy DC-15 deny) never consume tenant budget and are never converted to budget errors; a burst over the policy rate therefore returns THROTTLE verdicts, not `resource_exhausted`. A budget-exhausted response is an error and appends nothing to the tenant audit partition.
 
 **Honesty Boundary:** Budgets are in-memory and reset on daemon restart in v1.
 

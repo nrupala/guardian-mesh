@@ -115,11 +115,11 @@ impl GuardianMeshService {
         let revocations = RevocationRegistry::new(config.revocation_dir())?;
         
         // WO-15: Initialize tenant registry
-        let tenants = match guardian_meshd::tenant::TenantRegistry::new(&config.tenants, config.tenant_rate_budget) {
+        let tenants = match guardian_meshd::tenant::TenantRegistry::new_with_window(&config.tenants, config.tenant_rate_budget, config.tenant_budget_window_ms) {
             Ok(registry) => Arc::new(std::sync::Mutex::new(registry)),
             Err(e) => {
                 eprintln!("Warning: tenant registry construction failed: {}; falling back to default tenant only", e);
-                let fallback = guardian_meshd::tenant::TenantRegistry::new(&[], config.tenant_rate_budget)
+                let fallback = guardian_meshd::tenant::TenantRegistry::new_with_window(&[], config.tenant_rate_budget, config.tenant_budget_window_ms)
                     .expect("fallback tenant registry with only default tenant must succeed");
                 Arc::new(std::sync::Mutex::new(fallback))
             }
@@ -364,24 +364,6 @@ impl GuardianMeshService {
             }));
         }
 
-        // Budget consumption (real Evaluate only, not Simulate)
-        if !simulation {
-            let mut tenants = self.tenants.lock().unwrap();
-            match tenants.try_consume_budget(&tenant_id) {
-                Err(e) => {
-                    return Err(Status::invalid_argument(e));
-                }
-                Ok(false) => {
-                    return Err(Status::resource_exhausted(
-                        format!("tenant rate budget exhausted for tenant '{}' (DC-15)", tenant_id)
-                    ));
-                }
-                Ok(true) => {
-                    // Budget consumed, continue
-                }
-            }
-        }
-
         let policy_version = {
             let policy = self.policy.read().await;
             policy.policy_version()
@@ -597,6 +579,27 @@ impl GuardianMeshService {
                 return Ok(Response::new(response));
             } else {
                 return Err(Status::permission_denied(msg));
+            }
+        }
+
+        // WO-15.1: The tenant budget gates only requests the Gatekeeper
+        // allowed. THROTTLE and BLOCK verdicts return above without
+        // touching it, so a burst over the policy rate produces THROTTLE
+        // verdicts rather than resource_exhausted errors.
+        if !simulation {
+            let mut tenants = self.tenants.lock().unwrap();
+            match tenants.try_consume_budget(&tenant_id) {
+                Err(e) => {
+                    return Err(Status::invalid_argument(e));
+                }
+                Ok(false) => {
+                    return Err(Status::resource_exhausted(
+                        format!("tenant rate budget exhausted for tenant '{}' (DC-15)", tenant_id)
+                    ));
+                }
+                Ok(true) => {
+                    // Budget consumed, continue
+                }
             }
         }
 
@@ -4699,8 +4702,12 @@ mod tests {
         let mut config = Config::default();
         config.tenants = vec!["tenant-a".to_string(), "tenant-b".to_string()];
         config.tenant_rate_budget = 2;
+        // Wright carry (WO-15.1): the budget is a per-window rate
+        // budget; this test exercises exhaustion semantics, so pin a
+        // window far longer than the test can take.
+        config.tenant_budget_window_ms = 60_000;
         let service = test_service_with_config(config);
-        
+
         let (sk_a, vk_a) = generate_keypair();
         let (sk_b, vk_b) = generate_keypair();
         
@@ -4747,6 +4754,111 @@ mod tests {
         let req_b = evaluate_request(&service, &hs_b.session_id, &sealed_b).await;
         let resp_b = service.evaluate(Request::new(req_b)).await.unwrap().into_inner();
         assert_eq!(resp_b.verdict, "ALLOW");
+    }
+
+    #[tokio::test]
+    async fn wo151_burst_excess_throttles_not_errors() {
+        // Wright carry (the lane's sequential 115-request version and
+        // a concurrent 8-request version were both timing-flaky in
+        // this parallel suite: pre-signed envelopes go stale under
+        // PF-15, and the 1-second rate window slides under CPU
+        // contention — observed 42 ALLOW + 73 Err sequential, and
+        // 5 ALLOW + 3 Err concurrent under full-suite load). This
+        // version proves the same ordering contract (GMSI-100)
+        // deterministically: with policy_throttle_rate = 0 the
+        // Gatekeeper throttles EVERY request, so with a tenant budget
+        // of 1, ANY budget consumption before the Gatekeeper would
+        // surface as a resource_exhausted error on the second
+        // request. The scale contract itself (115 concurrent ->
+        // 100 ALLOW + 15 THROTTLE) is proven against the real
+        // daemon by the production harness (box E2E PF-18), which
+        // Wright runs on the gated tree before merge.
+        let mut config = Config::default();
+        config.policy_throttle_rate = 0;
+        config.tenant_rate_budget = 1;
+        let service = test_service_with_config(config);
+        let (sk, vk) = generate_keypair();
+        let hs = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test".to_string(),
+            source_public_key: vk.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: String::new(),
+        })).await.unwrap().into_inner();
+
+        for i in 0..3 {
+            let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+            let req = evaluate_request(&service, &hs.session_id, &sealed).await;
+            let resp = service.evaluate(Request::new(req)).await
+                .unwrap_or_else(|e| panic!("request {i} must return a THROTTLE verdict, not an error: {e}"))
+                .into_inner();
+            assert_eq!(resp.verdict, "THROTTLE", "request {i}: verdict={}", resp.verdict);
+        }
+
+        let status = service.tenant_status(Request::new(TenantStatusRequest {
+            tenant_id: "default".to_string(),
+            requester_tenant: String::new(),
+            confirmations: 0,
+        })).await.unwrap().into_inner();
+        assert_eq!(
+            status.budget_used, 0,
+            "throttled requests must consume no tenant budget (used={})", status.budget_used
+        );
+    }
+
+    #[tokio::test]
+    async fn wo151_bogus_session_burns_no_budget() {
+        // WO-15 F4: with the budget consumed only after the Gatekeeper
+        // allows, a request naming an unknown session is denied before
+        // the budget is touched.
+        let service = test_service_with_config(Config::default());
+        let (sk, _vk) = generate_keypair();
+
+        let used_before = service.tenant_status(Request::new(TenantStatusRequest {
+            tenant_id: "default".to_string(),
+            requester_tenant: String::new(),
+            confirmations: 0,
+        })).await.unwrap().into_inner().budget_used;
+
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let envelope = ProtoSealedEnvelope {
+            payload: sealed.payload.clone(),
+            payload_type: sealed.payload_type.clone(),
+            crc32c: sealed.crc32c_digest,
+            ml_dsa_65_signature: sealed.ml_dsa_65_signature.clone(),
+            timestamp: sealed.timestamp,
+            nonce: sealed.nonce.to_vec(),
+        };
+        let req = EvaluateRequest {
+            firewalled: Some(FirewalledRequest {
+                envelope: Some(envelope),
+                source_enclave: "webui".into(),
+                handshake_session: "does-not-exist-session".into(),
+                hmac_tag: Vec::new(),
+            }),
+            action: Some(ActionDescriptor {
+                action_type: "TOOL_CALL".into(),
+                context: "test".into(),
+                target: "panel".into(),
+                metadata: Default::default(),
+            }),
+        };
+
+        let result = service.evaluate(Request::new(req)).await;
+        assert!(result.is_err(), "bogus session should be denied, not evaluated");
+        assert_eq!(result.unwrap_err().code(), tonic::Code::PermissionDenied);
+
+        let used_after = service.tenant_status(Request::new(TenantStatusRequest {
+            tenant_id: "default".to_string(),
+            requester_tenant: String::new(),
+            confirmations: 0,
+        })).await.unwrap().into_inner().budget_used;
+
+        assert_eq!(
+            used_after, used_before,
+            "a bogus session must not consume the tenant budget (before={used_before}, after={used_after})"
+        );
     }
 
     #[tokio::test]
