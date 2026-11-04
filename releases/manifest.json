@@ -637,5 +637,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-04T00:19:57-06:00",
     "message": "Merge pull request #83 from nrupala/wright/pack-refresh-gmsi-20261103"
+  },
+  {
+    "release": 76,
+    "tag": "release/v76",
+    "previous_tag": "release/v75",
+    "sha": "e741ca35cd2b0a3de3a15d4549c4b7d95277e715",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-04T01:16:49-06:00",
+    "message": "Merge pull request #84 from nrupala/wright/wo16-degraded-modes"
   }
 ]
