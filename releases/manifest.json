@@ -655,5 +655,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-04T01:40:20-06:00",
     "message": "Merge pull request #85 from nrupala/wright/wo16-startup-chain-fix"
+  },
+  {
+    "release": 78,
+    "tag": "release/v78",
+    "previous_tag": "release/v77",
+    "sha": "d89b9b234fcaa990258cd7a58b1eddf981d78d4a",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-04T01:57:22-06:00",
+    "message": "Merge pull request #86 from nrupala/docs/wo16-v1-ledger"
   }
 ]
