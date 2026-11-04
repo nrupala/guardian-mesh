@@ -13,6 +13,19 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.15.1",
+    date: "2026-11-03",
+    summary: "Fix for the v0.15.0 deploy defect: the degraded-mode startup trigger now verifies the live tail segment of the audit log instead of the entire history, so a daemon with a historical chain interleave (production, 2026-10-26/27) starts normally while tampering with the current segment still fails closed.",
+    highlights: [
+      "verify_startup_chain: newest non-empty audit file, chained from the previous file's last stored digest; same entry check as the strict verifier",
+      "Full-history verification remains on ReadAuditLog, which keeps reporting the historical interleave as a finding — the audit trail is never rewritten",
+      "Proven against a copy of the actual production audit log before deploy: clean start SERVING; one corrupted tail byte starts DEGRADED"
+    ],
+    gateVerdict: "PASS WITH FINDINGS — WO-16 gate addendum 2026-11-03",
+    tests: "227/227 cargo (Wright-verified); WebUI build + lint green; production-log proof: clean copy starts SERVING, one corrupted tail byte starts DEGRADED",
+    status: "Release candidate"
+  },
+  {
     version: "0.15.0",
     date: "2026-11-03",
     summary: "Declared degraded modes (DC-4/DC-5) and issuing-node identity in proofs (DC-2): a daemon can be started in a fail-closed degraded mode that permits only a pre-declared safe action subset, with entry/exit audit events and a persisted marker, while every AuditProof names the node that issued it.",
@@ -25,9 +38,9 @@ export const RELEASES: Release[] = [
       "AuditProof gains issuing_node so a proof names the daemon that issued it; sealed proofs continue to verify via VerifyProof",
       "HONESTY BOUNDARY: multi-node consensus (DC-1) and threshold issuance (DC-3) are NOT in this release and remain target; v1 degraded mode is single-node and operator-declared"
     ],
-    gateVerdict: "PENDING — independent verification (Wright)",
-    tests: "PENDING — independent verification (Wright); this lane did not run cargo test or npm",
-    status: "Release candidate"
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-11-03 (guardian-mesh-wo16-2026-11-03)",
+    tests: "223/223 cargo (Wright-verified); WebUI build + lint green; degraded wire proof 8/8",
+    status: "Rolled back — deployed 2026-11-03 and rolled back the same night: the startup full-chain check degraded the daemon on the production audit history (see 0.15.1). Superseded by 0.15.1."
   },
   {
     version: "0.14.1",
@@ -39,8 +52,8 @@ export const RELEASES: Release[] = [
       "Existing wo15_tenant_budget_exhaustion_throttles test unchanged; new burst regression test asserts zero errors",
       "F4: an unknown/bogus session is denied before the budget point, with a regression test asserting budget_used is unchanged"
     ],
-    gateVerdict: "PENDING — independent verification (Wright)",
-    tests: "PENDING — independent verification (Wright); this lane did not run cargo test or npm",
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-11-03 (guardian-mesh-wo16-2026-11-03)",
+    tests: "223/223 cargo (Wright-verified); WebUI build + lint green; degraded wire proof 8/8",
     status: "Release candidate"
   },
   {

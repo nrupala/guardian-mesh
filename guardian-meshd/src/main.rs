@@ -101,13 +101,14 @@ impl GuardianMeshService {
             .unwrap_or_default()
             .as_secs();
 
-        // Only a completed verification that reports an invalid chain
-        // triggers the audit-chain-verification-failed mode. A read
-        // error (for example on a fresh/empty workspace) does not.
-        let audit_chain_invalid = match vault.read_audit_log() {
-            Ok(entries) => !vault.verify_chain(&entries).verified,
-            Err(_) => false,
-        };
+        // v0.15.1 (Wright carry): the startup trigger judges the LIVE
+        // tail segment of the audit log (verify_startup_chain), not the
+        // full history. v0.15.0 verified the whole chain at startup and
+        // bricked production on its own archive: the 2026-10-26/27
+        // segment interleaves two daemons' chains from a deploy window
+        // and cannot verify as one chain. Full-history verification
+        // remains the ReadAuditLog surface's job.
+        let audit_chain_invalid = !vault.verify_startup_chain();
 
         let (degraded_active, degraded_trigger) = if config.degraded {
             (true, "operator-declared".to_string())
@@ -4674,6 +4675,71 @@ mod tests {
             .unwrap()
             .into_inner();
         assert!(verified.valid, "sealed proof must verify: {}", verified.reason);
+    }
+
+    // v0.15.1 (Wright carry): seed a workspace whose audit history is
+    // broken in an older file but whose live tail segment is intact,
+    // using the vault's own append path for the tail. Returns the
+    // workspace tempdir guard's path components via a constructed
+    // Config; the caller keeps the TempDir alive.
+    fn seeded_history_config(corrupt_tail: bool) -> (Config, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = Config::default();
+        config.workspace_dir = dir.path().join("ws").to_string_lossy().into_owned();
+        config.output_dir = dir.path().join("out").to_string_lossy().into_owned();
+        config.ensure_dirs().unwrap();
+
+        let audit_dir = config.audit_dir();
+        std::fs::write(
+            audit_dir.join("audit_1.jsonl"),
+            "1700000000|414354|ALLOW|chain|deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef|historical\n",
+        )
+        .unwrap();
+        {
+            let vault = guardian_meshd::enclave::vault::VaultEnclave::new(10_000, audit_dir.clone());
+            vault.record_degraded_event("DEGRADED_MODE_EXITED", "seed").unwrap();
+        }
+        if corrupt_tail {
+            // Flip one reason byte in today's (tail) audit file.
+            let today = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+                / 86400;
+            let tail = audit_dir.join(format!("audit_{}.jsonl", today));
+            let content = std::fs::read_to_string(&tail).unwrap();
+            let corrupted = content.replace("trigger=seed", "trigger=seex");
+            assert_ne!(content, corrupted);
+            std::fs::write(&tail, corrupted).unwrap();
+        }
+        (config, dir)
+    }
+
+    #[tokio::test]
+    async fn startup_ignores_broken_history_when_tail_intact() {
+        let (config, _dir) = seeded_history_config(false);
+        let service = GuardianMeshService::new(config).unwrap();
+        let resp = service
+            .health(Request::new(HealthRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(!resp.degraded, "broken history alone must not degrade (v0.15.1)");
+        assert_eq!(resp.status, ServingStatus::Serving as i32);
+    }
+
+    #[tokio::test]
+    async fn startup_degrades_on_corrupt_tail() {
+        let (config, _dir) = seeded_history_config(true);
+        let service = GuardianMeshService::new(config).unwrap();
+        let resp = service
+            .health(Request::new(HealthRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(resp.degraded, "a corrupt live tail must degrade (DC-4)");
+        assert_eq!(resp.degraded_trigger, "audit-chain-verification-failed");
+        assert_eq!(resp.status, ServingStatus::Degraded as i32);
     }
 
     #[tokio::test]

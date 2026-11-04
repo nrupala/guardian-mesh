@@ -471,6 +471,131 @@ impl VaultEnclave {
         Ok(all_entries)
     }
 
+    /// WO-16 v1.1 (Wright carry, v0.15.1): startup-scope chain verification.
+    ///
+    /// The degraded-mode startup trigger guards the LIVE segment of the
+    /// audit log: the entries of the most recent non-empty audit file,
+    /// chained from the last stored digest of the file before it (the
+    /// genesis hash when there is none). Full-history verification is
+    /// `verify_chain` over `read_audit_log` (the ReadAuditLog surface) —
+    /// production history contains a concurrent-writer interleave segment
+    /// from 2026-10-26/27 (two daemons on one workspace during the WO-11
+    /// deploy window) that cannot verify as a single chain, and re-judging
+    /// all history at every startup would brick the daemon on its own
+    /// archive. The tail rule still fails closed on what a startup check
+    /// can honestly judge: tampering with, corrupting, or forking the
+    /// current segment. Returns true when the tail verifies (or the log
+    /// is empty); false only on a completed check that finds a break, or
+    /// on a malformed tail entry. A directory/read error on a fresh
+    /// workspace is not a break.
+    pub fn verify_startup_chain(&self) -> bool {
+        let entries = match std::fs::read_dir(&self.audit_path) {
+            Ok(e) => e,
+            Err(_) => return true,
+        };
+        let mut all_files: Vec<_> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path()
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|s| s.starts_with("audit_") && s.ends_with(".jsonl"))
+                    .unwrap_or(false)
+            })
+            .collect();
+        all_files.sort_by_key(|e| {
+            e.path()
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string())
+                .unwrap_or_default()
+        });
+
+        // Parse each file's entries; keep (entries) per file in name order.
+        // A malformed line is recorded as a marker (None) so the tail
+        // decision below can fail closed when the malformation is IN the
+        // tail segment, without re-judging older files' contents.
+        let mut per_file: Vec<Vec<Option<ParsedAuditEntry>>> = Vec::new();
+        for file_entry in &all_files {
+            let file = match std::fs::File::open(file_entry.path()) {
+                Ok(f) => f,
+                Err(_) => return true,
+            };
+            let reader = BufReader::new(file);
+            let mut parsed = Vec::new();
+            for line in reader.lines() {
+                let line = match line {
+                    Ok(l) => l,
+                    Err(_) => return true,
+                };
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let parts: Vec<&str> = line.split('|').collect();
+                if parts.len() < 6 {
+                    parsed.push(None);
+                    continue;
+                }
+                let timestamp = match parts[0].parse::<u64>() {
+                    Ok(t) => t,
+                    Err(_) => {
+                        parsed.push(None);
+                        continue;
+                    }
+                };
+                parsed.push(Some(ParsedAuditEntry {
+                    timestamp,
+                    action_id: parts[1].to_string(),
+                    verdict: parts[2].to_string(),
+                    enclave_chain: parts[3].to_string(),
+                    chain_hash: parts[4].to_string(),
+                    reason: parts[5..].join("|"),
+                }));
+            }
+            per_file.push(parsed);
+        }
+
+        // Tail segment = last file holding any line; anchor = last stored
+        // digest of the file before it (genesis when none).
+        let tail_idx = match per_file.iter().rposition(|f| !f.is_empty()) {
+            Some(i) => i,
+            None => return true,
+        };
+        if per_file[tail_idx].iter().any(|e| e.is_none()) {
+            return false; // malformed entry inside the live segment
+        }
+        let mut prev_hash =
+            "0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        if tail_idx > 0 {
+            if let Some(Some(prev_entry)) = per_file[tail_idx - 1].last() {
+                prev_hash = prev_entry.chain_hash.clone();
+            }
+        }
+
+        for entry in per_file[tail_idx].iter().map(|e| e.as_ref().unwrap()) {
+            let mut hasher = Sha256::new();
+            hasher.update(prev_hash.as_bytes());
+            hasher.update(entry.timestamp.to_le_bytes());
+            hasher.update(entry.action_id.as_bytes());
+            hasher.update(entry.verdict.as_bytes());
+            hasher.update(entry.enclave_chain.as_bytes());
+            hasher.update(entry.reason.as_bytes());
+            let expected_hash = hex::encode(hasher.finalize());
+
+            let mut legacy_hasher = Sha256::new();
+            legacy_hasher.update(entry.action_id.as_bytes());
+            legacy_hasher.update(entry.verdict.as_bytes());
+            legacy_hasher.update(entry.timestamp.to_le_bytes());
+            let legacy_hash = hex::encode(legacy_hasher.finalize());
+
+            if expected_hash != entry.chain_hash && legacy_hash != entry.chain_hash {
+                return false;
+            }
+            prev_hash = entry.chain_hash.clone();
+        }
+        true
+    }
+
     pub fn verify_chain(&self, entries: &[ParsedAuditEntry]) -> ChainVerification {
         if entries.is_empty() {
             return ChainVerification {
@@ -722,6 +847,48 @@ mod tests {
         hasher.update(entries[1].reason.as_bytes());
         let expected_second = hex::encode(hasher.finalize());
         assert_eq!(entries[1].chain_hash, expected_second);
+    }
+
+    #[test]
+    fn startup_chain_ignores_broken_history_but_judges_tail() {
+        // v0.15.1: an older audit file whose entries do not chain must
+        // NOT fail the startup check when the live tail segment (the
+        // newest file, chained from the older file's last stored
+        // digest) is intact — and corrupting the tail MUST fail it.
+        let dir = tempfile::tempdir().unwrap();
+        let audit_dir = dir.path().to_path_buf();
+
+        // Older file (sorts first): one parseable entry with a digest
+        // that chains from nothing — history the tail anchors onto by
+        // stored digest, exactly as load_last_chain_hash does.
+        std::fs::write(
+            audit_dir.join("audit_1.jsonl"),
+            "1700000000|414354|ALLOW|chain|deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef|historical\n",
+        )
+        .unwrap();
+
+        // Live tail: a real vault appends today's entries, chained from
+        // the historical file's last stored digest.
+        let vault = VaultEnclave::new(100, audit_dir.clone());
+        vault
+            .record_degraded_event("DEGRADED_MODE_EXITED", "seed")
+            .unwrap();
+        assert!(vault.verify_startup_chain());
+
+        // Corrupt one byte of the tail entry's reason -> digest mismatch.
+        let today_file = audit_dir.join(format!("audit_{}.jsonl", chrono_now_date()));
+        let content = std::fs::read_to_string(&today_file).unwrap();
+        let corrupted = content.replace("trigger=seed", "trigger=seex");
+        assert_ne!(content, corrupted);
+        std::fs::write(&today_file, corrupted).unwrap();
+        assert!(!vault.verify_startup_chain());
+    }
+
+    #[test]
+    fn startup_chain_empty_log_is_valid() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = VaultEnclave::new(100, dir.path().to_path_buf());
+        assert!(vault.verify_startup_chain());
     }
 
     #[test]

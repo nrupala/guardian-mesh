@@ -6,6 +6,19 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-11-03
+
+### Fixed
+- **Startup audit-chain trigger scope (Wright carry; v0.15.0 deploy defect).** v0.15.0 verified the *entire* persisted audit chain at startup and entered degraded mode when it did not verify. Deployed to production, it bricked the daemon on its own archive: the production log's 2026-10-26/27 segment interleaves two daemons' chains (concurrent writers on one workspace during the WO-11 deploy window; 89 link breaks, all inside `audit_20746.jsonl`, entries 557–668 of 2,121) and cannot verify as a single chain. v0.15.0 was rolled back to v0.14.1 the same night (box E2E 15/16, PF-18 PASS 100/15/0 after rollback). The trigger now judges the **live tail segment** only — `VaultEnclave::verify_startup_chain`: the most recent non-empty audit file's entries, chained from the previous file's last stored digest (genesis when none), with the same dual-formula entry check as `verify_chain`. Tampering with, corrupting, or forking the current segment still fails closed into degraded mode; historical segments are judged by the `ReadAuditLog` strict verification, which continues to report the 2026-10-26/27 interleave as a break (standing finding F4 of the WO-16 gate — the audit trail is append-only and is never rewritten to make it pass). Proven before deploy this time: the fixed binary run against a copy of the actual production audit log starts SERVING, and corrupting one tail byte in that copy makes it start DEGRADED with trigger `audit-chain-verification-failed`.
+
+### Tests
+- Rust (Wright-verified, carry tree): **227/227** — 154 lib + 73 bin (223 at v0.15.0; +4 = `startup_chain_ignores_broken_history_but_judges_tail`, `startup_chain_empty_log_is_valid`, `startup_ignores_broken_history_when_tail_intact`, `startup_degrades_on_corrupt_tail`).
+- WebUI (Wright-verified): `npm ci` + `npm run build` (drift guard passed) + `npm run lint` — green.
+- Behaviour proof against the real production data shape (Wright, release binary from the carry tree, fresh copy of the production audit log — 2,120 entries, 18 day-files): clean copy → daemon starts **SERVING**, `degraded=false`, harness 14/16 locally (the two standing local items: stale Health check, PF-18 environmental per gate F1); the same copy with **one tail byte corrupted** → daemon starts **DEGRADED**, trigger `audit-chain-verification-failed`, empty safe subset.
+
+### Gate Verdict
+- **PASS WITH FINDINGS** — WO-16 gate addendum, 2026-11-03 (`guardian-mesh-wo16-2026-11-03/addendum-v0151.md`). F4 (OPEN, standing): the production audit history's 2026-10-26/27 concurrent-writer interleave segment is permanently non-verifiable as one chain under the strict full-history check; recorded as a finding, never rewritten. GMSI-118 filed by the addendum (startup/deploy integrity gates must be proven against the production data they will judge).
+
 ## [0.15.0] - 2026-11-03
 
 ### Added
@@ -24,7 +37,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Behaviour proof (Wright, release binary from the gated tree, local daemons): normal mode — Health SERVING with `node_id` present and `degraded=false`; production harness 14/16 (the standing stale Health-fields check plus a PF-18 burst miss that an A/B against a v0.14.1 base-tree release binary reproduced identically on the same VM — environmental, GMSI-112 class; PF-18's criterion is the production-box proof). Degraded mode (operator-declared, safe subset `[SAFE_ACTION]`) — raw wire proof **8/8**: Health DEGRADED with trigger and subset named; non-safe action returns a sealed BLOCK with rule DC-4; `proof.issuing_node` equals the Health `node_id`. DC-5 proven: `DEGRADED_MODE_ENTERED` on entry, `DEGRADED_MODE_EXITED` + marker removal on a clean restart, same node_id across restarts. Audit-chain trigger proven: one corrupted byte in the persisted audit log → restart enters degraded mode (`audit-chain-verification-failed`, empty subset, everything BLOCKs).
 
 ### Gate Verdict
-- **PASS WITH FINDINGS** (release gate, 2026-11-03; pack: `guardian-mesh-wo16-2026-11-03` — machine pass PASS, 0 secrets, 0 known-vulnerable deps). F1: PF-18 local harness miss, environmental and A/B-proven against the base tree (see Tests); box proof after deploy is the criterion. F2: pre-authentication verdict BLOCKs (DC-4, like DC-15 before it) are a declared, bounded behaviour — filed as GMSI-117. F3 (OPEN, standing): the box harness's stale Health-fields check. NOT RUN: cargo audit (tool absent; scanner OSV covered deps), Kali/Arch benches (not built, standing).
+- **PASS WITH FINDINGS** (release gate, 2026-11-03; pack: `guardian-mesh-wo16-2026-11-03` — machine pass PASS, 0 secrets, 0 known-vulnerable deps). F1: PF-18 local harness miss, environmental and A/B-proven against the base tree (see Tests); box proof after deploy is the criterion. F2: pre-authentication verdict BLOCKs (DC-4, like DC-15 before it) are a declared, bounded behaviour — filed as GMSI-117. F3 (OPEN, standing): the box harness's stale Health-fields check. NOT RUN: cargo audit (tool absent; scanner OSV covered deps), Kali/Arch benches (not built, standing). **Deploy outcome: deployed and rolled back the same night** — the startup full-chain verification entered degraded mode on the production audit history (see 0.15.1); production was restored to v0.14.1 and re-verified (box E2E 15/16, PF-18 PASS). Superseded by v0.15.1.
 
 ## [0.14.1] - 2026-11-02
 

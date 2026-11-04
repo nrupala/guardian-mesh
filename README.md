@@ -1,6 +1,6 @@
 # Guardian Mesh
 
-**Status:** Current/active development · **Version:** 0.15.0 · **Updated:** 2026-11-03
+**Status:** Current/active development · **Version:** 0.15.1 · **Updated:** 2026-11-03
 
 See [CHANGELOG.md](CHANGELOG.md).
 
