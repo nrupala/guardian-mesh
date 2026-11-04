@@ -12,6 +12,7 @@ pub mod revocation;
 pub mod authenticators;
 pub mod attestation;
 pub mod tenant;
+pub mod degraded;
 
 pub mod proto {
     tonic::include_proto!("guardian_mesh");

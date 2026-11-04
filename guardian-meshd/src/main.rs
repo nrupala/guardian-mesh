@@ -22,6 +22,7 @@ use guardian_meshd::authenticators::{AuthMethod, PgpKey, parse_pgp_public_key, v
 use ml_dsa::Signer;
 use guardian_meshd::certificate::{CertificateRegistry, Tests, IssuanceResult, CertificateStatus as CertStatus};
 use guardian_meshd::revocation::{RevocationRegistry, RevocationKind, RevocationEntry, canonical_revocation_string, revocation_change_id, validate_revocation};
+use guardian_meshd::degraded::DegradedState;
 use guardian_meshd::proto::{
     guardian_mesh_server::{GuardianMesh, GuardianMeshServer},
     EvaluateRequest, EvaluateResponse, AuditProof, StructuredReason,
@@ -78,12 +79,75 @@ pub struct GuardianMeshService {
     pending_revocation: Arc<RwLock<Option<PendingRevocation>>>,
     pgp_admins: std::collections::HashMap<String, PgpKey>,
     tenants: Arc<std::sync::Mutex<guardian_meshd::tenant::TenantRegistry>>,
+    node_id: String,
+    degraded: DegradedState,
 }
 
 impl GuardianMeshService {
     pub fn new(config: Config) -> Result<Self, String> {
         let (sk, vk) = load_or_generate_signing_key(config.keys_dir())?;
         let vault = Arc::new(VaultEnclave::new(10_000, config.audit_dir()));
+
+        let fingerprint = compute_fingerprint(&vk);
+        let node_id = config
+            .node_id
+            .as_deref()
+            .filter(|id| !id.is_empty())
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| format!("node-{}", &fingerprint[..12]));
+
+        let now_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // Only a completed verification that reports an invalid chain
+        // triggers the audit-chain-verification-failed mode. A read
+        // error (for example on a fresh/empty workspace) does not.
+        let audit_chain_invalid = match vault.read_audit_log() {
+            Ok(entries) => !vault.verify_chain(&entries).verified,
+            Err(_) => false,
+        };
+
+        let (degraded_active, degraded_trigger) = if config.degraded {
+            (true, "operator-declared".to_string())
+        } else if audit_chain_invalid {
+            (true, "audit-chain-verification-failed".to_string())
+        } else {
+            (false, String::new())
+        };
+
+        let marker_path = std::path::Path::new(&config.workspace_dir).join("degraded.marker");
+        if degraded_active {
+            if let Err(e) = vault.record_degraded_event("DEGRADED_MODE_ENTERED", &degraded_trigger) {
+                eprintln!("Warning: failed to record degraded-mode entry audit event: {}", e);
+            }
+            if let Err(e) = std::fs::write(&marker_path, &degraded_trigger) {
+                eprintln!("Warning: failed to write degraded marker {}: {}", marker_path.display(), e);
+            }
+        } else if marker_path.exists() {
+            let previous_trigger = std::fs::read_to_string(&marker_path)
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "unknown".to_string());
+            if let Err(e) = vault.record_degraded_event("DEGRADED_MODE_EXITED", &previous_trigger) {
+                eprintln!("Warning: failed to record degraded-mode exit audit event: {}", e);
+            }
+            if let Err(e) = std::fs::remove_file(&marker_path) {
+                eprintln!("Warning: failed to remove degraded marker {}: {}", marker_path.display(), e);
+            }
+        }
+
+        let degraded = if degraded_active {
+            DegradedState::active(
+                degraded_trigger,
+                config.degraded_safe_actions.clone(),
+                now_unix,
+            )
+        } else {
+            DegradedState::inactive()
+        };
         
         // Load policy admins from the configured directory
         let policy_admins = Self::load_policy_admins(&config)?;
@@ -140,6 +204,8 @@ impl GuardianMeshService {
             pending_revocation: Arc::new(RwLock::new(None)),
             pgp_admins,
             tenants,
+            node_id,
+            degraded,
             config,
         })
     }
@@ -295,6 +361,73 @@ impl GuardianMeshService {
             .map(|a| a.action_type.clone())
             .unwrap_or_else(|| String::new());
 
+        // WO-16 DC-4: while degraded, only the pre-declared safe subset
+        // is permitted. Everything else fails closed before tenant policy.
+        if !self.degraded.allows(&action_type) {
+            let reason = format!(
+                "degraded mode active (trigger: {}): action {} is not in the pre-declared safe subset (DC-4)",
+                self.degraded.trigger, action_type
+            );
+            let structured_reason = StructuredReason {
+                rule_id: "DC-4".to_string(),
+                detail: reason.clone(),
+                remediation: "restore normal operation or pre-declare this action in GUARDIAN_MESH_DEGRADED_SAFE_ACTIONS".to_string(),
+            };
+
+            let policy_version = {
+                let policy = self.policy.read().await;
+                policy.policy_version()
+            };
+
+            let proof = AuditProof {
+                action_id: action_type.clone(),
+                verdict: "BLOCK".into(),
+                enclave_chain: "NORMAL".into(),
+                signature: Vec::new(),
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                simulation,
+                rule_ids: vec!["DC-4".to_string()],
+                policy_version,
+                issuing_node: self.node_id.clone(),
+                merkle_root: Vec::new(),
+            };
+
+            let proof_envelope = {
+                let sealed = SealedEnvelope::new(
+                    proof.encode_to_vec(),
+                    b"guardian_mesh.AuditProof".to_vec(),
+                    &self.signing_key,
+                );
+                ProtoSealedEnvelope {
+                    payload: sealed.payload,
+                    payload_type: sealed.payload_type,
+                    crc32c: sealed.crc32c_digest,
+                    ml_dsa_65_signature: sealed.ml_dsa_65_signature,
+                    timestamp: sealed.timestamp,
+                    nonce: sealed.nonce.to_vec(),
+                }
+            };
+
+            if !simulation {
+                let mut tenants = self.tenants.lock().unwrap();
+                let _ = tenants.append_audit(&tenant_id, &action_type, "BLOCK");
+            }
+
+            return Ok(Response::new(EvaluateResponse {
+                verdict: "BLOCK".into(),
+                reason,
+                containment_stage: "NORMAL".into(),
+                proof: Some(proof),
+                handshake_token: Vec::new(),
+                proof_envelope: Some(proof_envelope),
+                reasons: vec![structured_reason],
+                simulation,
+            }));
+        }
+
         // Tenant policy decision
         let tenant_policy_decision = {
             let tenants = self.tenants.lock().unwrap();
@@ -326,6 +459,7 @@ impl GuardianMeshService {
                 simulation,
                 rule_ids: vec!["DC-15".to_string()],
                 policy_version,
+                issuing_node: self.node_id.clone(),
                 merkle_root: Vec::new(),
             };
 
@@ -398,6 +532,7 @@ impl GuardianMeshService {
                     simulation: true,
                     rule_ids,
                     policy_version,
+                    issuing_node: self.node_id.clone(),
                     merkle_root: Vec::new(),
                 };
 
@@ -479,6 +614,7 @@ impl GuardianMeshService {
                 simulation,
                 rule_ids,
                 policy_version,
+                issuing_node: self.node_id.clone(),
                 merkle_root: Vec::new(),
             };
 
@@ -547,6 +683,7 @@ impl GuardianMeshService {
                     simulation: true,
                     rule_ids,
                     policy_version,
+                    issuing_node: self.node_id.clone(),
                     merkle_root: Vec::new(),
                 };
 
@@ -632,6 +769,7 @@ impl GuardianMeshService {
                     simulation: true,
                     rule_ids,
                     policy_version,
+                    issuing_node: self.node_id.clone(),
                     merkle_root: Vec::new(),
                 };
 
@@ -706,6 +844,7 @@ impl GuardianMeshService {
             simulation,
             rule_ids,
             policy_version,
+            issuing_node: self.node_id.clone(),
             merkle_root: Vec::new(),
         };
 
@@ -822,8 +961,14 @@ impl GuardianMesh for GuardianMeshService {
         
         let (passed, failed) = self.firewall.totals();
         
+        let status = if self.degraded.active {
+            ServingStatus::Degraded
+        } else {
+            ServingStatus::Serving
+        };
+
         let response = HealthResponse {
-            status: ServingStatus::Serving.into(),
+            status: status.into(),
             enclave_health,
             protocol_firewall_rules_passed: passed as u32,
             protocol_firewall_rules_total: (passed + failed) as u32,
@@ -832,6 +977,11 @@ impl GuardianMesh for GuardianMeshService {
             build_version: guardian_meshd::attestation::build_version().to_string(),
             build_commit: guardian_meshd::attestation::build_commit().to_string(),
             binary_sha256: guardian_meshd::attestation::running_binary_sha256(),
+            node_id: self.node_id.clone(),
+            degraded: self.degraded.active,
+            degraded_trigger: self.degraded.trigger.clone(),
+            degraded_safe_actions: self.degraded.safe_actions.clone(),
+            degraded_since_unix: self.degraded.since_unix,
         };
 
         Ok(Response::new(response))
@@ -4398,6 +4548,132 @@ mod tests {
 
     fn wo14_now() -> u64 {
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
+    }
+
+    #[tokio::test]
+    async fn health_reports_node_id_and_not_degraded_by_default() {
+        let (service, _dir) = test_service();
+        let resp = service
+            .health(Request::new(HealthRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+
+        assert!(!resp.node_id.is_empty());
+        assert!(resp.node_id.starts_with("node-"));
+        assert!(!resp.degraded);
+        assert_eq!(resp.status, ServingStatus::Serving as i32);
+        assert!(resp.degraded_trigger.is_empty());
+        assert!(resp.degraded_safe_actions.is_empty());
+        assert_eq!(resp.degraded_since_unix, 0);
+    }
+
+    #[tokio::test]
+    async fn degraded_mode_blocks_non_safe_action_and_allows_safe_one() {
+        let mut config = Config::default();
+        config.degraded = true;
+        config.degraded_safe_actions = vec!["SAFE_ACTION".to_string()];
+        let service = test_service_with_config(config);
+
+        let (sk, vk) = generate_keypair();
+        let hs = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test".to_string(),
+            source_public_key: vk.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: String::new(),
+        })).await.unwrap().into_inner();
+
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &hs.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "BLOCK");
+        assert!(resp.reason.contains("DC-4"));
+        assert_eq!(resp.reasons.len(), 1);
+        assert_eq!(resp.reasons[0].rule_id, "DC-4");
+
+        let sealed_safe = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let mut req_safe = evaluate_request(&service, &hs.session_id, &sealed_safe).await;
+        req_safe.action = Some(ActionDescriptor {
+            action_type: "SAFE_ACTION".to_string(),
+            context: "test".to_string(),
+            target: "panel".to_string(),
+            metadata: Default::default(),
+        });
+        let resp_safe = service.evaluate(Request::new(req_safe)).await.unwrap().into_inner();
+        assert!(
+            !(resp_safe.verdict == "BLOCK" && resp_safe.reasons.iter().any(|r| r.rule_id == "DC-4")),
+            "safe action must not be DC-4 blocked: verdict={} reasons={:?}",
+            resp_safe.verdict,
+            resp_safe.reasons
+        );
+    }
+
+    #[tokio::test]
+    async fn degraded_block_does_not_consume_tenant_budget() {
+        let mut config = Config::default();
+        config.degraded = true;
+        let service = test_service_with_config(config);
+
+        let (sk, vk) = generate_keypair();
+        let hs = service.handshake(Request::new(HandshakeRequest {
+            source_enclave: "test".to_string(),
+            source_public_key: vk.encode().to_vec(),
+            spiffe_id: String::new(),
+            svid_leaf_der: Vec::new(),
+            svid_signature: Vec::new(),
+            tenant_id: String::new(),
+        })).await.unwrap().into_inner();
+
+        let before = service.tenant_status(Request::new(TenantStatusRequest {
+            tenant_id: "default".to_string(),
+            requester_tenant: String::new(),
+            confirmations: 0,
+        })).await.unwrap().into_inner().budget_used;
+        assert_eq!(before, 0);
+
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &hs.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "BLOCK");
+        assert!(resp.reasons.iter().any(|r| r.rule_id == "DC-4"));
+
+        let after = service.tenant_status(Request::new(TenantStatusRequest {
+            tenant_id: "default".to_string(),
+            requester_tenant: String::new(),
+            confirmations: 0,
+        })).await.unwrap().into_inner().budget_used;
+        assert_eq!(after, before, "degraded BLOCK must not consume tenant budget");
+    }
+
+    #[tokio::test]
+    async fn proof_names_issuing_node() {
+        let (service, _dir) = test_service();
+        let health = service
+            .health(Request::new(HealthRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+
+        let proof = resp.proof.as_ref().expect("evaluate must return a proof");
+        assert_eq!(proof.issuing_node, health.node_id);
+
+        let envelope = resp.proof_envelope.clone().expect("evaluate must return a proof envelope");
+        let verified = service
+            .verify_proof(Request::new(VerifyProofRequest {
+                proof_envelope: Some(envelope),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(verified.valid, "sealed proof must verify: {}", verified.reason);
     }
 
     #[tokio::test]

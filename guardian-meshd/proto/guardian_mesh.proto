@@ -178,6 +178,11 @@ message HealthResponse {
   string build_version = 7;   // daemon crate version, e.g. "0.13.0"
   string build_commit = 8;    // git commit the binary was built from, or "unknown"
   string binary_sha256 = 9;   // SHA-256 of the running executable (lowercase hex), "" if unreadable
+  string node_id = 10;        // resolved node identity (WO-16)
+  bool degraded = 11;         // true when a declared degraded mode is active (WO-16)
+  string degraded_trigger = 12; // trigger name, empty when not degraded (WO-16)
+  repeated string degraded_safe_actions = 13; // pre-declared safe action subset (WO-16)
+  uint64 degraded_since_unix = 14; // unix seconds when degraded mode began, 0 when not degraded (WO-16)
 }
 
 // ── Shared Types ──────────────────────────
@@ -191,6 +196,7 @@ message AuditProof {
   bool simulation = 6;
   repeated string rule_ids = 7;
   uint64 policy_version = 8;   // Policy bundle version at evaluation time (WO-11)
+  string issuing_node = 9;     // node_id of the daemon that issued this proof (WO-16)
   bytes merkle_root = 16;      // Optional — for batch audit verification
 }
 
