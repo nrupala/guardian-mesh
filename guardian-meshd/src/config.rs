@@ -24,6 +24,9 @@ pub struct Config {
     pub tenants: Vec<String>,
     pub tenant_rate_budget: u64,
     pub tenant_budget_window_ms: u64,
+    pub node_id: Option<String>,
+    pub degraded: bool,
+    pub degraded_safe_actions: Vec<String>,
 }
 
 impl Config {
@@ -167,6 +170,18 @@ impl Default for Config {
             .and_then(|s| s.parse().ok())
             .filter(|&v| v > 0)
             .unwrap_or(1000);
+
+        let node_id = std::env::var("GUARDIAN_MESH_NODE_ID").ok();
+
+        let degraded = std::env::var("GUARDIAN_MESH_DEGRADED")
+            .ok()
+            .map(|s| s == "1" || s.to_lowercase() == "true")
+            .unwrap_or(false);
+
+        let degraded_safe_actions = std::env::var("GUARDIAN_MESH_DEGRADED_SAFE_ACTIONS")
+            .ok()
+            .map(|s| s.split(',').map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect())
+            .unwrap_or_default();
         
         Self {
             bind_addr: std::env::var("GUARDIAN_MESH_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".into()),
@@ -189,6 +204,9 @@ impl Default for Config {
             tenants,
             tenant_rate_budget,
             tenant_budget_window_ms,
+            node_id,
+            degraded,
+            degraded_safe_actions,
         }
     }
 }

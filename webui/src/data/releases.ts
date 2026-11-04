@@ -13,6 +13,23 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.15.0",
+    date: "2026-11-03",
+    summary: "Declared degraded modes (DC-4/DC-5) and issuing-node identity in proofs (DC-2): a daemon can be started in a fail-closed degraded mode that permits only a pre-declared safe action subset, with entry/exit audit events and a persisted marker, while every AuditProof names the node that issued it.",
+    highlights: [
+      "Degraded mode triggers: operator declaration (GUARDIAN_MESH_DEGRADED=1/true) or a completed audit-chain verification that reports an invalid chain",
+      "Safe subset configured with GUARDIAN_MESH_DEGRADED_SAFE_ACTIONS; while degraded every action outside the exact-match subset returns a sealed BLOCK with rule DC-4 before tenant policy",
+      "Degraded BLOCKs never consume tenant budget and append to the tenant audit partition exactly like the existing DC-15 BLOCK path",
+      "Entry/exit lifecycle events (DEGRADED_MODE_ENTERED / DEGRADED_MODE_EXITED) are written to the hash-chained audit log; a degraded.marker in the workspace records the trigger and is removed on clean exit",
+      "node_id resolves from GUARDIAN_MESH_NODE_ID or defaults to node-<first 12 hex of the signing-key fingerprint>; Health reports it alongside degraded status, trigger, safe actions, and since timestamp",
+      "AuditProof gains issuing_node so a proof names the daemon that issued it; sealed proofs continue to verify via VerifyProof",
+      "HONESTY BOUNDARY: multi-node consensus (DC-1) and threshold issuance (DC-3) are NOT in this release and remain target; v1 degraded mode is single-node and operator-declared"
+    ],
+    gateVerdict: "PENDING — independent verification (Wright)",
+    tests: "PENDING — independent verification (Wright); this lane did not run cargo test or npm",
+    status: "Release candidate"
+  },
+  {
     version: "0.14.1",
     date: "2026-11-02",
     summary: "Tenant-budget ordering fix (gate F6 / GMSI-100): the per-tenant rate budget now gates only requests the Gatekeeper allowed, so bursts return THROTTLE verdicts instead of resource_exhausted errors. First deployed multi-tenancy release (0.14.0 was rolled back).",
