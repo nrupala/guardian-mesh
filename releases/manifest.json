@@ -646,5 +646,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-04T01:16:49-06:00",
     "message": "Merge pull request #84 from nrupala/wright/wo16-degraded-modes"
+  },
+  {
+    "release": 77,
+    "tag": "release/v77",
+    "previous_tag": "release/v76",
+    "sha": "12212cce0e636d4b271c9deceec76d21acca250d",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-04T01:40:20-06:00",
+    "message": "Merge pull request #85 from nrupala/wright/wo16-startup-chain-fix"
   }
 ]
