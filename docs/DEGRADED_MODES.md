@@ -41,13 +41,22 @@ before serving requests. There are two triggers:
 
 1. **`operator-declared`** — `GUARDIAN_MESH_DEGRADED` is set to `1` or `true`.
    This takes precedence over the audit-chain trigger.
-2. **`audit-chain-verification-failed`** — the persisted audit log was read and a
-   completed chain verification reported an invalid chain.
+2. **`audit-chain-verification-failed`** — the startup chain check
+   (`verify_startup_chain`) found a break in the **live tail segment** of
+   the audit log: the entries of the most recent non-empty audit file,
+   chained from the last stored digest of the file before it.
 
-A failed read of the audit log (for example a fresh or empty workspace) does **not**
-trigger degraded mode. Only a completed verification that reports an invalid chain
-does. This keeps a new installation from starting degraded merely because there is
-no audit history yet.
+The startup check judges the live segment only (scope corrected in
+v0.15.1 — see the CHANGELOG). Full-history verification is the
+`ReadAuditLog` surface's job: its strict chain check reports breaks
+anywhere in the archive, including the 2026-10-26/27 concurrent-writer
+interleave segment in this project's own production history, which
+cannot verify as a single chain and is a standing finding, not a
+startup blocker. A failed read of the audit log (for example a fresh or
+empty workspace) does **not** trigger degraded mode either. This keeps a
+new installation from starting degraded merely because there is no
+audit history yet, and an old installation from bricking on its own
+archive.
 
 ## Fail-Closed Behaviour
 
@@ -114,9 +123,12 @@ For an operator-declared mode:
    `degraded.marker` is gone.
 
 For an audit-chain failure, removing the environment trigger is not enough: the
-daemon re-verifies the chain on every startup. Repair or restore the audit log to a
-verifiable state, then restart. Until then it will re-enter degraded mode with
-`audit-chain-verification-failed`.
+daemon re-checks the live tail segment on every startup. Repair or restore the
+current audit segment to a verifiable state, then restart. Until then it will
+re-enter degraded mode with `audit-chain-verification-failed`. Historical
+segments are not repaired by editing the log — the audit trail is
+append-only; a historical break is a finding to record, never a line to
+rewrite.
 
 The marker is bookkeeping, not the source of truth. Deleting it manually does not
 exit degraded mode; the next startup re-evaluates the configured trigger and the
