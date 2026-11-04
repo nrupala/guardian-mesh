@@ -214,6 +214,16 @@ per-window rate budget (gate F2 of the WO-15.1 gate).
 ### WO-16 (P2) Clustered verdicts + degraded modes
 Multi-node verdict issuance per architecture v2 consensus levels;
 declared fail-closed degraded modes (spec DC-1…DC-5).
+Status: **v1 SHIPPED 2026-11-03 as v0.15.1** — the DC-4 declared
+degraded modes + DC-5 entry/exit audit events + DC-2 issuing-node
+slice (PR #84 v0.15.0 + PR #85 fix, gate PASS WITH FINDINGS —
+guardian-mesh-wo16-2026-11-03). v0.15.0 was deployed and rolled back
+the same night (its full-history startup chain check degraded the
+daemon on the production audit archive; the fix scopes the startup
+check to the live tail segment — GMSI-118). **WO-16 stays OPEN** for
+the DC-1/DC-3 cluster slice (multi-node verdict issuance per
+architecture v2 consensus levels — a phase-scale build, sequenced
+with the cluster program, not a nightly slice).
 
 ### WO-17 (P2) Conformance suite + chaos drills
 Spec-as-tests in CI: PF table, boundary rules, authorization
@@ -1186,6 +1196,25 @@ do, and none becomes a gate MUST until behaviour-proven here.
   repo code; their NOT RUN status is recorded by the gate thread. The
   repo-side contribution is WO-8's fuzz targets, which the Arch isolation
   bench will consume.
+- **GMSI-117 — Pre-authentication degraded/BLOCK verdicts are a
+  policy surface of their own.** A fail-closed mode that seals
+  evaluation before authentication (WO-16 DC-4, like WO-15 DC-15)
+  answers unauthenticated requesters with verdict semantics; that
+  is acceptable only as a declared, bounded behaviour: the sealed
+  verdict names no policy internals beyond the declared rule id,
+  and the gate for any such mode states the pre-auth behaviour
+  explicitly instead of discovering it in review.
+- **GMSI-118 — Startup/deploy integrity gates must be proven
+  against the production data they will judge.** A check correct
+  on young or synthetic data and failing on real history is an
+  escape class: before an integrity, migration, or verification
+  gate ships, it is exercised against a copy of the actual
+  production dataset (audit log, store, manifest set), and the
+  evidence names that dataset's size and shape. (WO-16 v0.15.0
+  verified the full persisted audit chain at startup and bricked
+  production on its own 2026-10-26/27 concurrent-writer interleave
+  segment; v0.15.1 scopes the startup check to the live tail and
+  was proven against the real 2,120-entry log before redeploy.)
 
 ## Development home and engine routing
 
@@ -2234,3 +2263,48 @@ production harness, unit tests prove ordering deterministically.
 pre-signed envelopes aged past the PF-15 5 s window before reaching
 the rate window, and a concurrent variant raced the 1 s window
 under full-suite CPU contention.)
+
+WO-16 v1 slice run (2026-11-03, ninth nightly entry in this
+ledger's run history): pack refreshed first (PR #83, GMSI-113…116).
+Sources: no open issues; PR #77 (dependabot) open, owner's call.
+WO-16 built on the laptop in a fresh clone (lane: OpenCode
+big-pickle; lane's first completion claim overclaimed a commit —
+caught by tree inspection, finished by a continuation pass,
+commit 24d45f3). Wright verification: cargo 223/223 at v0.15.0
+(227/227 at the v0.15.1 carry), WebUI build + lint green, normal
+wire proof 3/3, degraded wire proof 8/8 (BLOCK rule DC-4, proof
+issuing_node == Health node_id), DC-5 entry/exit proof on the
+wire incl. marker lifecycle, audit-chain trigger proven by
+single-byte log corruption. Gate PASS WITH FINDINGS
+(guardian-mesh-wo16-2026-11-03): F1 PF-18 local environmental
+(A/B-proven against a v0.14.1-base binary on the same VM —
+production proof governs); F2 pre-auth DC-4 BLOCKs → GMSI-117;
+F3 box-e2e stale Health check (OPEN, 8th occurrence); F4 (gate
+addendum) the production audit history's 2026-10-26/27
+concurrent-writer interleave (OPEN standing; never rewritten).
+Shipped: PR #84 merged e741ca35 (v0.15.0) — deployed and ROLLED
+BACK the same night (startup full-chain check vs the production
+archive; box restored to v0.14.1, E2E 15/16 PF-18 PASS); fix
+PR #85 merged 12212cce (v0.15.1, startup check scoped to the
+live tail segment, proven against a copy of the real production
+log before redeploy) — deployed, box E2E 15/16 PF-18 PASS
+(100/15/0), Health SERVING / degraded=false / node_id
+node-dd2cf1a350e0, binary sha256 02350e06… == installed ==
+attested; attestation VALID signer == pin (one wrong-key
+package caught by the pin check and re-signed; throwaway key
+removed, never used by the daemon); self-cert
+cert-20261104-000044 ACTIVE (evidence verdict+addendum
+eb8fda18…). RC entry filed; v0.15.1 in soak to 2026-11-10;
+v0.15.0 never entered soak. NOT RUN: cargo audit (tool absent),
+Kali/Arch benches (not built, standing). Standing fodder carried:
+PR #77 (owner's call); F3 stale harness check; gm-attest
+--key-file parent-dir trap (it takes a key FILE path and uses
+its parent — passing a directory silently generates a new key
+one level up); WO-15 F5 in-memory tenant state. Next: WO-17
+(P2, Part C ninth — conformance suite + chaos drills). WO-16
+stays open for the DC-1/DC-3 cluster slice.
+
+GMSI filed by this run's own gate: GMSI-117 (pre-authentication
+degraded/BLOCK verdicts are a declared policy surface) and
+GMSI-118 (startup/deploy integrity gates proven against the
+production data they will judge).
