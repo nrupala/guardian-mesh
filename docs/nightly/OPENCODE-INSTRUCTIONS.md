@@ -1141,6 +1141,46 @@ do, and none becomes a gate MUST until behaviour-proven here.
   volume contracts belong to the production harness,
   run against a release binary on a quiet surface.
 
+- **GMSI-113 — A provider's raw error never crosses an
+  API boundary.** (Conduit filings checkout error-leak
+  gate, 2026-11-03.) Any outbound-call error path must
+  answer in the product's own words, with provider
+  detail confined to server logs. Guardian Mesh must be
+  able to prove, for an evaluation that depends on an
+  external call, that the caller-visible response
+  contains no provider response body or provider error
+  string, while the sealed proof still records that an
+  external failure occurred and which class it was.
+
+- **GMSI-114 — Price-to-plan integrity is a provable
+  money-surface invariant.** (codetopo tiered-pricing
+  gate GM-1, 2026-11-03.) For any recorded subscription
+  or payment event, the plan stamped on the issued key
+  or certificate equals the plan of the price actually
+  billed. Guardian Mesh must be able to issue and
+  verify a proof binding billed price, resolved plan,
+  and issued credential together, so a mismatch is
+  detectable after the fact, not only at issuance.
+
+- **GMSI-115 — One-off gate probes must graduate into
+  the repo suite.** (codetopo tiered-pricing gate GM-2,
+  2026-11-03.) A coverage gap closed by a one-off gate
+  probe escapes again unless the probe becomes a
+  standing test in the product's own suite. Guardian
+  Mesh certificates for a release should be able to
+  name which gate-probe classes are covered by standing
+  tests in the gated tree, so probe graduation is
+  checkable rather than remembered.
+
+- **GMSI-116 — Tier-switch enforcement freshness.**
+  (codetopo tiered-pricing gate GM-3, 2026-11-03.) Once
+  a higher tier's limits exist, no live key may enforce
+  a lower tier than its entitlement record shows, or
+  the exception must be named in the proof. Guardian
+  Mesh must be able to prove the enforcement tier a
+  credential is actually under at evaluation time, not
+  only the tier it was issued with.
+
 - **Backbone note.** The gate's Kali (offensive) and Arch (crypto /
   isolation / evidence benches) backbones are gate infrastructure, not
   repo code; their NOT RUN status is recorded by the gate thread. The
