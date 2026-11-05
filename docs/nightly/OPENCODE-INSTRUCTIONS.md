@@ -1216,6 +1216,19 @@ do, and none becomes a gate MUST until behaviour-proven here.
   segment; v0.15.1 scopes the startup check to the live tail and
   was proven against the real 2,120-entry log before redeploy.)
 
+- **GMSI-119 — External-state snapshot provenance is provable
+  from the receipt stream.** When a verdict depends on fetched
+  external state (a provider's model catalog, a price list, a
+  revocation feed), the receipt must bind which snapshot decided
+  it: the endpoint it came from, when it was fetched, and for
+  which key owner — so a later probe can compare the receipt's
+  subject against the deciding snapshot and catch a stale or
+  poisoned snapshot changing what the system refuses or allows.
+  (Conduit Router v1.3.0 gate, 2026-11-04: per-owner model-list
+  snapshots became the truth for availability, and a caller-named
+  model absent from the caller's snapshot is refused — catalog
+  freshness is now a live dependency of routing correctness.)
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
