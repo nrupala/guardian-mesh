@@ -13,6 +13,23 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.16.0",
+    date: "2026-11-04",
+    summary: "WO-17 v1 conformance suite: named tests for protocol-firewall rules (RG-7), boundary edges, session authorization combinations, tenant isolation (DC-16), proof tamper behaviour (EV-2), and in-process chaos drills (RG-8), runnable with the full suite or alone via `cargo test conformance_`.",
+    highlights: [
+      "RG-7 PF table exercises PF-1, PF-12, PF-13, PF-14, PF-15, PF-16, PF-17, PF-18 and POLICY_RATE through the service surface, asserting the verdict and the rule_id in both the structured reason and the proof",
+      "RG-7 boundary cases cover the enforced 64 KiB payload limit and the ML-DSA-65 signature-length budget at each edge and one byte past it; the PF-16 future window is exercised at its exact edge, while the PF-15 5000 ms stale edge is named unexercised because the check samples the wall clock internally (GMSI-112)",
+      "RG-7 authorization table covers no session, bogus session, valid session, and escalation with and without the codebase's only approval scaffolding (dual-control policy change)",
+      "RG-7 tenant isolation proves an exhausted budget, a tenant policy deny, and tenant audit partitions do not leak across tenants",
+      "RG-7 / EV-2 tamper cases reject mutated verdict, rule ids, timestamp, issuing node and signature bytes, plus truncated and garbage envelopes, without panicking",
+      "RG-8 chaos drills: restart fails closed while the persisted audit chain still verifies and pre-restart proofs still verify, a corrupted audit log is detected and degrades the next startup, and a revoked session can no longer evaluate",
+      "HONESTY BOUNDARY: multi-node chaos (killing a node of a cluster) is NOT in this release — no cluster exists yet (WO-16 DC-1/DC-3 open); CM-8 non-catalogued/direct-access probes are WO-27, not WO-17"
+    ],
+    gateVerdict: "TBD",
+    tests: "Tests: TBD by Wright verification.",
+    status: "Release candidate"
+  },
+  {
     version: "0.15.1",
     date: "2026-11-03",
     summary: "Fix for the v0.15.0 deploy defect: the degraded-mode startup trigger now verifies the live tail segment of the audit log instead of the entire history, so a daemon with a historical chain interleave (production, 2026-10-26/27) starts normally while tampering with the current segment still fails closed.",
