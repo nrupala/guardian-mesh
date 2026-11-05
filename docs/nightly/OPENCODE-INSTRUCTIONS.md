@@ -229,6 +229,17 @@ with the cluster program, not a nightly slice).
 Spec-as-tests in CI: PF table, boundary rules, authorization
 combinations, tenant isolation, tamper behaviour; kill-mid-verdict
 chaos cases (spec RG-7, RG-8).
+Status: **v1 SHIPPED 2026-11-04 as v0.16.0** — the named
+conformance suite (13 `conformance_` tests: PF table per implemented
+rule, payload/signature/timestamp boundaries, §5 authorization
+matrix, DC-16 tenant isolation, EV-2 proof-tamper table) plus the
+in-process RG-8 chaos slice (restart-fails-closed, corrupt-log
+detection, revoked-session stop), a dedicated CI step
+(`cargo test conformance_`), and docs/CONFORMANCE.md (PR #88, gate
+PASS WITH FINDINGS — guardian-mesh-wo17-2026-11-04). Multi-node
+chaos is NOT built (no cluster exists — WO-16 DC-1/DC-3 open);
+CM-8 non-catalogued probes remain WO-27. **WO-17 stays OPEN** for
+those extensions.
 
 ### WO-18 (P3) Deployment matrix
 Sidecar form (DP-3), edge profile (DP-6), CLI (CC-4), MCP server
@@ -1228,6 +1239,18 @@ do, and none becomes a gate MUST until behaviour-proven here.
   snapshots became the truth for availability, and a caller-named
   model absent from the caller's snapshot is refused — catalog
   freshness is now a live dependency of routing correctness.)
+
+- **GMSI-120 — An escalated verdict must have a provable
+  resolution path, or be declared terminal.** A conformance suite
+  must be able to prove that an approval, by the role the spec
+  names, resolves an ESCALATE to a final verdict within a stated
+  bound — or the specification must declare ESCALATE
+  terminal-by-design for that action class, in which case the
+  suite pins the declaration. (WO-17 gate F3, 2026-11-04: the
+  daemon has no per-request escalation approval path; dual-control
+  policy approval does not resolve an individual escalated
+  evaluation, and installing the escalation list via an approved
+  policy change still yields ESCALATE.)
 
 ## Development home and engine routing
 
@@ -2321,3 +2344,43 @@ GMSI filed by this run's own gate: GMSI-117 (pre-authentication
 degraded/BLOCK verdicts are a declared policy surface) and
 GMSI-118 (startup/deploy integrity gates proven against the
 production data they will judge).
+
+WO-17 v1 run (2026-11-04, tenth nightly entry in this ledger's
+run history): pack refreshed first (PR #87, GMSI-119). Sources:
+no open issues; PR #77 (dependabot) open, owner's call. WO-17
+built on the laptop in a fresh clone (lane: OpenCode big-pickle;
+first session died on a TLS handshake error after editing, before
+committing — a continuation pass reconciled the tree against the
+task and committed 1005ccb; the continuation's own summary
+overstated the file set and was corrected by Wright's direct diff
+read: 8 files, +961/-3, main.rs +855/-0 tests-only). Wright
+verification: cargo 240/240 (baseline 227, +13 conformance),
+conformance filter 13/13, WebUI build + lint green, process-level
+SIGKILL chaos proof 7/7 (restart SERVING, node_id stable;
+corrupted-tail process leg NOT RUN — a Health-only workspace
+holds no persisted audit log; proven in-suite), local box-e2e
+14/16 (PF-18 local-environmental; stale Health check). Gate PASS
+WITH FINDINGS (guardian-mesh-wo17-2026-11-04): F1 PF-18 local
+environmental; F2 box-e2e stale Health check (OPEN, 9th
+occurrence); F3 no per-request escalation approval path exists
+(-> GMSI-120); F4 PF-15 exact 5000/5001 ms edge unexercised
+(accepted, GMSI-112). Shipped: PR #88 merged 1aee18bc (v0.16.0);
+box E2E 15/16 with PF-18 PASS (100/15/0) — gm-deploy's "NOT
+certified" rests on F2 alone, as in the three prior releases;
+production proof governs. Live: Health SERVING, degraded=false,
+node_id node-dd2cf1a350e0, build 0.16.0@1aee18bc, binary sha256
+a4f0cd98... == installed == attested; attestation VALID, signer
+== pin dd2cf1a3...; self-cert cert-20261105-000045 ACTIVE
+(evidence a851062b...); box dist asset index-DMSGxZF5.js ==
+merged build == Pages asset; guardian.aimlds.org unauthenticated
+302. RC entry filed; v0.16.0 in soak to 2026-11-11. NOT RUN:
+cargo audit (tool absent), Kali/Arch benches (not built,
+standing). Standing fodder carried: PR #77 (owner's call); F2
+stale harness check; gm-attest --pin flag (WO-13 F3); WO-15 F5
+in-memory tenant state; laptop->box bundle scp has no trust route
+(base64-over-lane file recovery used instead). Next: WO-18 (P3,
+Part C tenth — deployment matrix, sidecar form first). WO-17
+stays open for the cluster chaos + CM-8 extensions (WO-27).
+
+GMSI filed by this run's own gate: GMSI-120 (an escalated verdict
+must have a provable resolution path, or be declared terminal).
