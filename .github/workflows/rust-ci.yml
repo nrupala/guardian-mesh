@@ -35,3 +35,6 @@ jobs:
 
       - name: Test
         run: cargo test --verbose
+
+      - name: Conformance suite (WO-17 / RG-7, RG-8)
+        run: cargo test conformance_

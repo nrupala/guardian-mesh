@@ -5378,5 +5378,860 @@ mod tests {
         assert_eq!(resp2.verdict, "ALLOW");
     }
 
+    // ── WO-17 conformance suite (RG-7, RG-8) ─────────────────────
+    // Every test below is named `conformance_` so the suite can be
+    // selected on its own with `cargo test conformance_` (WO-17 §1, §7).
+    //
+    // Rules exercised through the service surface: PF-1, PF-12, PF-13,
+    // PF-14, PF-15, PF-16, PF-17, PF-18 and POLICY_RATE (the nine rules
+    // the daemon implements and counts). PF-2..PF-11 are not implemented
+    // by the daemon as separately enforceable rules; PF-5 shares the PF-1
+    // size check and has no distinct rule id, so it has no case of its
+    // own. See WO17-RESULT.md.
+
+    fn conformance_now_ns() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64
+    }
+
+    fn conformance_envelope(sealed: &SealedEnvelope) -> ProtoSealedEnvelope {
+        ProtoSealedEnvelope {
+            payload: sealed.payload.clone(),
+            payload_type: sealed.payload_type.clone(),
+            crc32c: sealed.crc32c_digest,
+            ml_dsa_65_signature: sealed.ml_dsa_65_signature.clone(),
+            timestamp: sealed.timestamp,
+            nonce: sealed.nonce.to_vec(),
+        }
+    }
+
+    fn conformance_action(action_type: &str) -> ActionDescriptor {
+        ActionDescriptor {
+            action_type: action_type.to_string(),
+            context: "test".into(),
+            target: "panel".into(),
+            metadata: Default::default(),
+        }
+    }
+
+    async fn conformance_request(
+        service: &GuardianMeshService,
+        session_id: &str,
+        sealed: &SealedEnvelope,
+    ) -> EvaluateRequest {
+        let envelope = conformance_envelope(sealed);
+        let hmac_tag = {
+            let bus = service.bus.read().await;
+            bus.compute_hmac(session_id, &envelope.payload).unwrap()
+        };
+        EvaluateRequest {
+            firewalled: Some(FirewalledRequest {
+                envelope: Some(envelope),
+                source_enclave: "webui".into(),
+                handshake_session: session_id.to_string(),
+                hmac_tag,
+            }),
+            action: Some(conformance_action("TOOL_CALL")),
+        }
+    }
+
+    async fn conformance_handshake_tenant(
+        service: &GuardianMeshService,
+        vk: &VerifyingKey<MlDsa65>,
+        tenant_id: &str,
+    ) -> HandshakeResponse {
+        service
+            .handshake(Request::new(HandshakeRequest {
+                spiffe_id: String::new(),
+                svid_leaf_der: Vec::new(),
+                svid_signature: Vec::new(),
+                source_enclave: "webui".into(),
+                source_public_key: vk.encode().to_vec(),
+                tenant_id: tenant_id.to_string(),
+            }))
+            .await
+            .unwrap()
+            .into_inner()
+    }
+
+    async fn conformance_simulate(
+        service: &GuardianMeshService,
+        req: EvaluateRequest,
+    ) -> EvaluateResponse {
+        service.simulate(Request::new(req)).await.unwrap().into_inner()
+    }
+
+    fn conformance_assert_block_rule(resp: &EvaluateResponse, rule: &str) {
+        assert_eq!(resp.verdict, "BLOCK", "expected BLOCK for {rule}");
+        assert!(
+            resp.reasons.iter().any(|r| r.rule_id == rule),
+            "expected rule_id {rule} in reasons {:?}",
+            resp.reasons.iter().map(|r| r.rule_id.clone()).collect::<Vec<_>>()
+        );
+        let proof = resp.proof.as_ref().expect("BLOCK must carry a proof");
+        assert!(
+            proof.rule_ids.iter().any(|id| id.as_str() == rule),
+            "expected {rule} in proof.rule_ids {:?}",
+            proof.rule_ids
+        );
+    }
+
+    async fn conformance_verify(
+        service: &GuardianMeshService,
+        envelope: ProtoSealedEnvelope,
+    ) -> bool {
+        service
+            .verify_proof(Request::new(VerifyProofRequest {
+                proof_envelope: Some(envelope),
+            }))
+            .await
+            .unwrap()
+            .into_inner()
+            .valid
+    }
+
+    fn conformance_config(ws: &str, out: &str) -> Config {
+        let mut config = Config::default();
+        config.workspace_dir = ws.to_string();
+        config.output_dir = out.to_string();
+        config
+    }
+
+    #[tokio::test]
+    async fn conformance_rg7_pf_table_blocks_each_implemented_rule() {
+        // Simulation is used for the request-shape rules because real
+        // Evaluate turns a PF BLOCK into `permission_denied` with no
+        // verdict body; Simulate returns the verdict plus the structured
+        // rule_id in both `reasons` and `proof.rule_ids`.
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+
+        // PF-1: payload over the 64 KiB envelope budget.
+        let oversized = SealedEnvelope::new(vec![b'a'; 65 * 1024], b"test".to_vec(), &sk);
+        let req = conformance_request(&service, &session.session_id, &oversized).await;
+        conformance_assert_block_rule(&conformance_simulate(&service, req).await, "PF-1");
+
+        // PF-12: unknown top-level field.
+        let unknown = b"{\"actionType\":\"TOOL_CALL\",\"context\":\"test\",\"target\":\"panel\",\"metadata\":{},\"unknownField\":\"bad\"}";
+        let sealed = SealedEnvelope::new(unknown.to_vec(), b"test".to_vec(), &sk);
+        let req = conformance_request(&service, &session.session_id, &sealed).await;
+        conformance_assert_block_rule(&conformance_simulate(&service, req).await, "PF-12");
+
+        // PF-13: nesting depth 5 (> 4), with only PF-12-approved
+        // top-level fields so PF-12 cannot be the rule that fires.
+        let deep = b"{\"actionType\":\"TOOL_CALL\",\"context\":\"test\",\"target\":\"panel\",\"metadata\":{\"a\":{\"b\":{\"c\":{\"d\":\"x\"}}}}}";
+        let sealed = SealedEnvelope::new(deep.to_vec(), b"test".to_vec(), &sk);
+        let req = conformance_request(&service, &session.session_id, &sealed).await;
+        conformance_assert_block_rule(&conformance_simulate(&service, req).await, "PF-13");
+
+        // PF-14: reuse a nonce a real Evaluate already burned. Simulate
+        // peeks (does not consume), so the first request is real.
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = conformance_request(&service, &session.session_id, &sealed).await;
+        let real = service.evaluate(Request::new(req.clone())).await.unwrap().into_inner();
+        assert_eq!(real.verdict, "ALLOW");
+        conformance_assert_block_rule(&conformance_simulate(&service, req).await, "PF-14");
+
+        // PF-15: stale timestamp (6s old; the exact 5000/5001ms edge is
+        // a wall-clock race and is covered by the boundary test below).
+        let mut stale = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        stale.timestamp = conformance_now_ns().saturating_sub(6_000_000_000);
+        let req = conformance_request(&service, &session.session_id, &stale).await;
+        conformance_assert_block_rule(&conformance_simulate(&service, req).await, "PF-15");
+
+        // PF-16: timestamp 2s in the future.
+        let mut future = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        future.timestamp = conformance_now_ns().saturating_add(2_000_000_000);
+        let req = conformance_request(&service, &session.session_id, &future).await;
+        conformance_assert_block_rule(&conformance_simulate(&service, req).await, "PF-16");
+
+        // PF-17: ML-DSA-65 signature length below the format budget.
+        let mut short_sig = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        short_sig.ml_dsa_65_signature = vec![0u8; 2_419];
+        let req = conformance_request(&service, &session.session_id, &short_sig).await;
+        conformance_assert_block_rule(&conformance_simulate(&service, req).await, "PF-17");
+    }
+
+    #[tokio::test]
+    async fn conformance_rg7_pf18_rate_limit_returns_throttle_with_rule_id() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+
+        // Prime this session's PF-18 window to its 100 msg/s ceiling.
+        for _ in 0..100 {
+            assert_eq!(
+                service.firewall.check_rate_limit(&session.session_id).unwrap(),
+                None
+            );
+        }
+
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = conformance_request(&service, &session.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+
+        assert_eq!(resp.verdict, "THROTTLE");
+        assert!(
+            resp.reasons.iter().any(|r| r.rule_id == "PF-18"),
+            "expected PF-18 in reasons {:?}",
+            resp.reasons.iter().map(|r| r.rule_id.clone()).collect::<Vec<_>>()
+        );
+        let proof = resp.proof.as_ref().expect("THROTTLE must carry a proof");
+        assert!(proof.rule_ids.iter().any(|id| id.as_str() == "PF-18"));
+    }
+
+    #[tokio::test]
+    async fn conformance_rg7_policy_rate_returns_throttle_with_rule_id() {
+        let mut config = Config::default();
+        config.policy_throttle_rate = 1;
+        let service = test_service_with_config(config);
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+
+        // Prime the policy-configured limiter, then the next request
+        // through the daemon must be a POLICY_RATE THROTTLE.
+        assert_eq!(
+            service
+                .firewall
+                .check_policy_rate(&session.session_id, 1)
+                .unwrap(),
+            None
+        );
+
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = conformance_request(&service, &session.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+
+        assert_eq!(resp.verdict, "THROTTLE");
+        assert!(
+            resp.reasons.iter().any(|r| r.rule_id == "POLICY_RATE"),
+            "expected POLICY_RATE in reasons {:?}",
+            resp.reasons.iter().map(|r| r.rule_id.clone()).collect::<Vec<_>>()
+        );
+        let proof = resp.proof.as_ref().expect("THROTTLE must carry a proof");
+        assert!(proof.rule_ids.iter().any(|id| id.as_str() == "POLICY_RATE"));
+    }
+
+    #[tokio::test]
+    async fn conformance_rg7_boundary_payload_size_and_signature_length() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+
+        // PF-1: exactly 64 KiB of valid JSON (trailing whitespace is
+        // legal JSON) is processed, not rejected for PF-1.
+        let mut at_limit = PAYLOAD.to_vec();
+        at_limit.resize(64 * 1024, b' ');
+        let sealed = SealedEnvelope::new(at_limit, b"test".to_vec(), &sk);
+        let req = conformance_request(&service, &session.session_id, &sealed).await;
+        let resp = conformance_simulate(&service, req).await;
+        assert_eq!(resp.verdict, "ALLOW");
+        assert!(
+            !resp.reasons.iter().any(|r| r.rule_id == "PF-1"),
+            "64 KiB payload must not be rejected by PF-1"
+        );
+
+        // PF-1: one byte over the limit is rejected with PF-1 named.
+        let mut over_limit = PAYLOAD.to_vec();
+        over_limit.resize(64 * 1024 + 1, b' ');
+        let sealed = SealedEnvelope::new(over_limit, b"test".to_vec(), &sk);
+        let req = conformance_request(&service, &session.session_id, &sealed).await;
+        conformance_assert_block_rule(&conformance_simulate(&service, req).await, "PF-1");
+
+        // PF-17: both ends of [2420, 3500] pass the format check (they
+        // then fail signature verification, never PF-17)...
+        for len in [2_420usize, 3_500] {
+            let mut sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+            sealed.ml_dsa_65_signature = vec![0u8; len];
+            let req = conformance_request(&service, &session.session_id, &sealed).await;
+            let resp = conformance_simulate(&service, req).await;
+            assert!(
+                !resp.reasons.iter().any(|r| r.rule_id == "PF-17"),
+                "signature length {len} must pass PF-17"
+            );
+            assert!(
+                resp.reasons.iter().any(|r| r.rule_id == "SIGNATURE"),
+                "signature length {len} must fail signature verification, got {:?}",
+                resp.reasons.iter().map(|r| r.rule_id.clone()).collect::<Vec<_>>()
+            );
+        }
+
+        // ...and one byte outside either end is rejected with PF-17.
+        for len in [2_419usize, 3_501] {
+            let mut sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+            sealed.ml_dsa_65_signature = vec![0u8; len];
+            let req = conformance_request(&service, &session.session_id, &sealed).await;
+            conformance_assert_block_rule(&conformance_simulate(&service, req).await, "PF-17");
+        }
+    }
+
+    #[tokio::test]
+    async fn conformance_rg7_boundary_timestamp_windows() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+
+        // PF-16 future window, exact edge: +1000ms is processed (elapsed
+        // time only moves the timestamp further into the past), +2000ms
+        // is rejected with PF-16 named. This is the exact-edge case;
+        // it is deterministic because the check runs after `now`.
+        let mut at_edge = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        at_edge.timestamp = conformance_now_ns().saturating_add(1_000_000_000);
+        let req = conformance_request(&service, &session.session_id, &at_edge).await;
+        let resp = conformance_simulate(&service, req).await;
+        assert_eq!(resp.verdict, "ALLOW");
+        assert!(!resp.reasons.iter().any(|r| r.rule_id == "PF-16"));
+
+        let mut beyond = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        beyond.timestamp = conformance_now_ns().saturating_add(2_000_000_000);
+        let req = conformance_request(&service, &session.session_id, &beyond).await;
+        conformance_assert_block_rule(&conformance_simulate(&service, req).await, "PF-16");
+
+        // PF-15 stale window: 4s is inside the window and processed,
+        // 6s (one second beyond the 5s threshold) is rejected with
+        // PF-15 named. The literal 5000/5001ms edge is not deterministically
+        // testable through the daemon: the clock is sampled inside the
+        // check, so a slow call can push an exactly-5000ms envelope over
+        // the boundary (GMSI-112 forbids relying on that race). Named in
+        // WO17-RESULT.md as an unexercised exact edge.
+        let mut inside = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        inside.timestamp = conformance_now_ns().saturating_sub(4_000_000_000);
+        let req = conformance_request(&service, &session.session_id, &inside).await;
+        let resp = conformance_simulate(&service, req).await;
+        assert_eq!(resp.verdict, "ALLOW");
+        assert!(!resp.reasons.iter().any(|r| r.rule_id == "PF-15"));
+
+        let mut one_second_beyond = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        one_second_beyond.timestamp = conformance_now_ns().saturating_sub(6_000_000_000);
+        let req = conformance_request(&service, &session.session_id, &one_second_beyond).await;
+        conformance_assert_block_rule(&conformance_simulate(&service, req).await, "PF-15");
+    }
+
+    #[tokio::test]
+    async fn conformance_rg7_authorization_session_state_matrix() {
+        // (no session): no firewalled request at all -> denied.
+        let (plain, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&plain, &vk).await;
+
+        let no_session = EvaluateRequest {
+            firewalled: None,
+            action: Some(conformance_action("TOOL_CALL")),
+        };
+        let err = plain.evaluate(Request::new(no_session)).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+
+        // (bogus session id): denied at the session check.
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let bogus = EvaluateRequest {
+            firewalled: Some(FirewalledRequest {
+                envelope: Some(conformance_envelope(&sealed)),
+                source_enclave: "webui".into(),
+                handshake_session: "bogus-session-id".into(),
+                hmac_tag: Vec::new(),
+            }),
+            action: Some(conformance_action("TOOL_CALL")),
+        };
+        let err = plain.evaluate(Request::new(bogus)).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+
+        // (valid session, normal action): ALLOW.
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = conformance_request(&plain, &session.session_id, &sealed).await;
+        let resp = plain.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "ALLOW");
+
+        // (no session, escalation action) and (bogus session, escalation
+        // action): the action never reaches the Arbiter, so both are denied.
+        let mut escalate_config = Config::default();
+        escalate_config.policy_escalate_actions = vec!["TOOL_CALL".to_string()];
+        let escalate = test_service_with_config(escalate_config);
+        let (esc_sk, esc_vk) = generate_keypair();
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &esc_sk);
+        let esc_no_session = EvaluateRequest {
+            firewalled: None,
+            action: Some(conformance_action("TOOL_CALL")),
+        };
+        let err = escalate
+            .evaluate(Request::new(esc_no_session))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+        let esc_bogus = EvaluateRequest {
+            firewalled: Some(FirewalledRequest {
+                envelope: Some(conformance_envelope(&sealed)),
+                source_enclave: "webui".into(),
+                handshake_session: "bogus-session-id".into(),
+                hmac_tag: Vec::new(),
+            }),
+            action: Some(conformance_action("TOOL_CALL")),
+        };
+        let err = escalate
+            .evaluate(Request::new(esc_bogus))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+
+        // (valid session, escalation action, no approval): ESCALATE.
+        let esc_session = open_session(&escalate, &esc_vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &esc_sk);
+        let req = conformance_request(&escalate, &esc_session.session_id, &sealed).await;
+        let resp = escalate.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "ESCALATE");
+        assert!(resp.reasons.iter().any(|r| r.rule_id == "POLICY_ESCALATION"));
+
+        // (valid session, escalation action, with approval): the only
+        // approval scaffolding the codebase exposes is dual-control for
+        // policy bundles, so use it to install the escalation list, then
+        // evaluate. The verdict is still ESCALATE: there is no per-request
+        // escalation approval path (reported in WO17-RESULT.md).
+        let (admin, _admin_dir, sk_alice, sk_bob) = test_service_with_admins();
+        let (current_hash, bundled_rules) = {
+            let policy = admin.policy.read().await;
+            let bundle = policy.bundle();
+            (bundle.content_hash(), bundle.rules.clone())
+        };
+        let proposed = PolicyBundle {
+            version: 2,
+            rules: bundled_rules.clone(),
+            escalate_actions: vec!["TOOL_CALL".to_string()],
+            prev_hash: current_hash,
+        };
+        let canonical = proposed.to_canonical_string();
+        let rule_messages = bundled_rules
+            .iter()
+            .map(|r| PolicyRuleMessage {
+                action_type: r.action_type.clone(),
+                allow: r.allow,
+                priority: r.priority,
+            })
+            .collect::<Vec<_>>();
+        let sig_alice = sk_alice.sign(canonical.as_bytes());
+        let propose = admin
+            .propose_policy_change(Request::new(ProposePolicyChangeRequest {
+                pgp_signature: String::new(),
+                version: 2,
+                rules: rule_messages,
+                escalate_actions: vec!["TOOL_CALL".to_string()],
+                prev_hash: proposed.prev_hash.clone(),
+                proposer: "alice".into(),
+                proposer_signature: sig_alice.to_bytes().to_vec(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(propose.accepted, "policy proposal refused: {}", propose.message);
+        let sig_bob = sk_bob.sign(canonical.as_bytes());
+        let approve = admin
+            .approve_policy_change(Request::new(ApprovePolicyChangeRequest {
+                pgp_signature: String::new(),
+                change_id: propose.change_id,
+                approver: "bob".into(),
+                approver_signature: sig_bob.to_bytes().to_vec(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(approve.applied, "policy approval refused: {}", approve.message);
+
+        let (admin_sk, admin_vk) = generate_keypair();
+        let admin_session = open_session(&admin, &admin_vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &admin_sk);
+        let req = conformance_request(&admin, &admin_session.session_id, &sealed).await;
+        let resp = admin.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(
+            resp.verdict, "ESCALATE",
+            "admin approval of the policy change is not an escalation approval; no per-request path exists"
+        );
+    }
+
+    #[tokio::test]
+    async fn conformance_rg7_tenant_budget_does_not_leak_across_tenants() {
+        let mut config = Config::default();
+        config.tenants = vec!["tenant-a".to_string(), "tenant-b".to_string()];
+        config.tenant_rate_budget = 1;
+        config.tenant_budget_window_ms = 60_000;
+        let service = test_service_with_config(config);
+
+        let (sk_a, vk_a) = generate_keypair();
+        let (sk_b, vk_b) = generate_keypair();
+        let hs_a = conformance_handshake_tenant(&service, &vk_a, "tenant-a").await;
+        let hs_b = conformance_handshake_tenant(&service, &vk_b, "tenant-b").await;
+
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_a);
+        let req = conformance_request(&service, &hs_a.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "ALLOW");
+
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_a);
+        let req = conformance_request(&service, &hs_a.session_id, &sealed).await;
+        let err = service.evaluate(Request::new(req)).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::ResourceExhausted);
+
+        // Tenant B is unaffected by tenant A's exhausted budget.
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_b);
+        let req = conformance_request(&service, &hs_b.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "ALLOW");
+    }
+
+    #[tokio::test]
+    async fn conformance_rg7_tenant_policy_does_not_leak_across_tenants() {
+        let mut config = Config::default();
+        config.tenants = vec!["tenant-a".to_string(), "tenant-b".to_string()];
+        config.tenant_rate_budget = 10;
+        let service = test_service_with_config(config);
+
+        {
+            let mut tenants = service.tenants.lock().unwrap();
+            let bundle = guardian_meshd::policy::PolicyBundle {
+                version: 1,
+                rules: vec![guardian_meshd::policy::PolicyRule {
+                    action_type: "TOOL_CALL".to_string(),
+                    allow: false,
+                    priority: 100,
+                }],
+                escalate_actions: vec![],
+                prev_hash: "0".repeat(64),
+            };
+            tenants.set_policy("tenant-a", bundle).unwrap();
+        }
+
+        let (sk_a, vk_a) = generate_keypair();
+        let (sk_b, vk_b) = generate_keypair();
+        let hs_a = conformance_handshake_tenant(&service, &vk_a, "tenant-a").await;
+        let hs_b = conformance_handshake_tenant(&service, &vk_b, "tenant-b").await;
+
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_a);
+        let req = conformance_request(&service, &hs_a.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "BLOCK");
+        assert!(resp.reasons.iter().any(|r| r.rule_id == "DC-15"));
+
+        // The same TOOL_CALL under tenant B is allowed.
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_b);
+        let req = conformance_request(&service, &hs_b.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "ALLOW");
+    }
+
+    #[tokio::test]
+    async fn conformance_rg7_tenant_audit_partitions_are_isolated() {
+        let mut config = Config::default();
+        config.tenants = vec!["tenant-a".to_string(), "tenant-b".to_string()];
+        config.tenant_rate_budget = 10;
+        let service = test_service_with_config(config);
+
+        let (sk_a, vk_a) = generate_keypair();
+        let (sk_b, vk_b) = generate_keypair();
+        let hs_a = conformance_handshake_tenant(&service, &vk_a, "tenant-a").await;
+        let hs_b = conformance_handshake_tenant(&service, &vk_b, "tenant-b").await;
+
+        for _ in 0..2 {
+            let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_a);
+            let req = conformance_request(&service, &hs_a.session_id, &sealed).await;
+            let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+            assert_eq!(resp.verdict, "ALLOW");
+        }
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk_b);
+        let req = conformance_request(&service, &hs_b.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "ALLOW");
+
+        let status_a = service
+            .tenant_status(Request::new(TenantStatusRequest {
+                tenant_id: "tenant-a".to_string(),
+                requester_tenant: String::new(),
+                confirmations: 0,
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        let status_b = service
+            .tenant_status(Request::new(TenantStatusRequest {
+                tenant_id: "tenant-b".to_string(),
+                requester_tenant: String::new(),
+                confirmations: 0,
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(status_a.audit_entries, 2, "tenant A must see only its two entries");
+        assert_eq!(status_b.audit_entries, 1, "tenant B must see only its one entry");
+    }
+
+    #[tokio::test]
+    async fn conformance_rg7_ev2_tampered_proofs_are_invalid() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = conformance_request(&service, &session.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "ALLOW");
+
+        let envelope = resp.proof_envelope.clone().expect("proof envelope");
+        let proof = <AuditProof as prost::Message>::decode(envelope.payload.as_slice())
+            .expect("sealed proof payload must decode");
+        assert!(
+            conformance_verify(&service, envelope.clone()).await,
+            "the untampered proof must verify"
+        );
+
+        // Verdict mutation: payload changes while crc/signature do not.
+        let mut tampered = proof.clone();
+        tampered.verdict = "BLOCK".to_string();
+        let mut env = envelope.clone();
+        env.payload = tampered.encode_to_vec();
+        assert!(!conformance_verify(&service, env).await, "verdict mutation must be invalid");
+
+        // Rule/reason mutation.
+        let mut tampered = proof.clone();
+        tampered.rule_ids = vec!["PF-12".to_string()];
+        let mut env = envelope.clone();
+        env.payload = tampered.encode_to_vec();
+        assert!(!conformance_verify(&service, env).await, "rule mutation must be invalid");
+
+        // Timestamp mutation inside the signed proof payload.
+        let mut tampered = proof.clone();
+        tampered.timestamp = tampered.timestamp.wrapping_add(1);
+        let mut env = envelope.clone();
+        env.payload = tampered.encode_to_vec();
+        assert!(!conformance_verify(&service, env).await, "timestamp mutation must be invalid");
+
+        // Issuer/issuing_node mutation.
+        let mut tampered = proof.clone();
+        tampered.issuing_node = "node-other".to_string();
+        let mut env = envelope.clone();
+        env.payload = tampered.encode_to_vec();
+        assert!(!conformance_verify(&service, env).await, "issuer mutation must be invalid");
+
+        // Signature bytes mutation.
+        let mut env = envelope.clone();
+        env.ml_dsa_65_signature[0] ^= 0xFF;
+        assert!(!conformance_verify(&service, env).await, "signature mutation must be invalid");
+
+        // Truncated envelope.
+        let mut env = envelope.clone();
+        env.payload.truncate(env.payload.len() / 2);
+        assert!(!conformance_verify(&service, env).await, "truncated envelope must be invalid");
+
+        // Garbage-bytes envelope (must return invalid, never panic).
+        let garbage = ProtoSealedEnvelope {
+            payload: vec![0xDE, 0xAD, 0xBE, 0xEF],
+            payload_type: b"garbage".to_vec(),
+            crc32c: 0,
+            ml_dsa_65_signature: vec![0xAB; 3_309],
+            timestamp: 0,
+            nonce: vec![0u8; 32],
+        };
+        assert!(!conformance_verify(&service, garbage).await, "garbage envelope must be invalid");
+    }
+
+    #[tokio::test]
+    async fn conformance_chaos_restart_fails_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws = dir.path().join("ws").to_string_lossy().into_owned();
+        let out = dir.path().join("out").to_string_lossy().into_owned();
+        let mut config = conformance_config(&ws, &out);
+        config.ensure_dirs().unwrap();
+
+        let (sk, vk) = generate_keypair();
+        let (session_id, proof_envelope) = {
+            let service = GuardianMeshService::new(config).unwrap();
+            let session = open_session(&service, &vk).await;
+            let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+            let req = conformance_request(&service, &session.session_id, &sealed).await;
+            let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+            assert_eq!(resp.verdict, "ALLOW");
+            (session.session_id, resp.proof_envelope.unwrap())
+        };
+
+        // Same workspace, fresh process state: the old session is gone.
+        let mut config = conformance_config(&ws, &out);
+        config.ensure_dirs().unwrap();
+        let service = GuardianMeshService::new(config).unwrap();
+
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = EvaluateRequest {
+            firewalled: Some(FirewalledRequest {
+                envelope: Some(conformance_envelope(&sealed)),
+                source_enclave: "webui".into(),
+                handshake_session: session_id.clone(),
+                hmac_tag: Vec::new(),
+            }),
+            action: Some(conformance_action("TOOL_CALL")),
+        };
+        let err = service.evaluate(Request::new(req)).await.unwrap_err();
+        assert_eq!(
+            err.code(),
+            tonic::Code::PermissionDenied,
+            "a pre-restart session must fail closed"
+        );
+
+        // The persisted audit chain still verifies after the restart.
+        let audit = service
+            .read_audit_log(Request::new(ReadAuditLogRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        let verification = audit.verification.expect("audit verification");
+        assert!(
+            verification.verified,
+            "persisted audit chain must verify after restart: {}",
+            verification.status_message
+        );
+
+        // The pre-restart proof still verifies offline.
+        let verified = service
+            .verify_proof(Request::new(VerifyProofRequest {
+                proof_envelope: Some(proof_envelope),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(
+            verified.valid,
+            "pre-restart proof must verify after restart: {}",
+            verified.reason
+        );
+    }
+
+    #[tokio::test]
+    async fn conformance_chaos_corrupt_audit_log_detected() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws = dir.path().join("ws").to_string_lossy().into_owned();
+        let out = dir.path().join("out").to_string_lossy().into_owned();
+        let mut config = conformance_config(&ws, &out);
+        config.ensure_dirs().unwrap();
+        let audit_dir = config.audit_dir();
+
+        {
+            let service = GuardianMeshService::new(config).unwrap();
+            let (sk, vk) = generate_keypair();
+            let session = open_session(&service, &vk).await;
+            for _ in 0..2 {
+                let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+                let req = conformance_request(&service, &session.session_id, &sealed).await;
+                let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+                assert_eq!(resp.verdict, "ALLOW");
+            }
+
+            // Flip one byte of the persisted verdict in every audit file.
+            let mut corrupted_any = false;
+            for entry in std::fs::read_dir(&audit_dir).unwrap() {
+                let path = entry.unwrap().path();
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if !(name.starts_with("audit_") && name.ends_with(".jsonl")) {
+                    continue;
+                }
+                let content = std::fs::read_to_string(&path).unwrap();
+                if content.contains("|ALLOW|") {
+                    std::fs::write(&path, content.replace("|ALLOW|", "|ALLOX|")).unwrap();
+                    corrupted_any = true;
+                }
+            }
+            assert!(corrupted_any, "expected at least one persisted ALLOW entry to corrupt");
+
+            // The strict ReadAuditLog verification reports the break.
+            let audit = service
+                .read_audit_log(Request::new(ReadAuditLogRequest {}))
+                .await
+                .unwrap()
+                .into_inner();
+            let verification = audit.verification.expect("audit verification");
+            assert!(
+                !verification.verified,
+                "corrupted audit log must not verify: {}",
+                verification.status_message
+            );
+        }
+
+        // A restart judges the live tail and enters degraded mode.
+        let mut config = conformance_config(&ws, &out);
+        config.ensure_dirs().unwrap();
+        let service = GuardianMeshService::new(config).unwrap();
+        let health = service
+            .health(Request::new(HealthRequest {}))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(health.degraded, "a corrupt audit tail must degrade the daemon");
+        assert_eq!(health.degraded_trigger, "audit-chain-verification-failed");
+    }
+
+    #[tokio::test]
+    async fn conformance_chaos_revoked_session_stops() {
+        let (service, _dir, sk_alice, sk_bob) = test_service_with_admins();
+        let (sk, vk) = generate_keypair();
+        let session = conformance_handshake_tenant(&service, &vk, "").await;
+
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = conformance_request(&service, &session.session_id, &sealed).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "ALLOW");
+
+        let canonical = canonical_revocation_string(
+            RevocationKind::Session,
+            &session.session_id,
+            "conformance revocation",
+            "alice",
+        );
+        let sig_alice = sk_alice.sign(canonical.as_bytes());
+        let propose = service
+            .propose_revocation(Request::new(ProposeRevocationRequest {
+                pgp_signature: String::new(),
+                kind: "SESSION".to_string(),
+                target_id: session.session_id.clone(),
+                reason: "conformance revocation".to_string(),
+                proposer: "alice".to_string(),
+                proposer_signature: sig_alice.to_bytes().to_vec(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(propose.accepted, "revocation proposal refused: {}", propose.message);
+
+        let sig_bob = sk_bob.sign(canonical.as_bytes());
+        let approve = service
+            .approve_revocation(Request::new(ApproveRevocationRequest {
+                pgp_signature: String::new(),
+                change_id: propose.change_id,
+                approver: "bob".to_string(),
+                approver_signature: sig_bob.to_bytes().to_vec(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(approve.applied, "revocation approval refused: {}", approve.message);
+
+        // The next Evaluate with the revoked session is denied.
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = EvaluateRequest {
+            firewalled: Some(FirewalledRequest {
+                envelope: Some(conformance_envelope(&sealed)),
+                source_enclave: "webui".into(),
+                handshake_session: session.session_id.clone(),
+                hmac_tag: Vec::new(),
+            }),
+            action: Some(conformance_action("TOOL_CALL")),
+        };
+        let err = service.evaluate(Request::new(req)).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+
+        let status = service
+            .revocation_status(Request::new(RevocationStatusRequest {
+                kind: "SESSION".to_string(),
+                target_id: session.session_id.clone(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(status.revoked);
+    }
+
 }
 

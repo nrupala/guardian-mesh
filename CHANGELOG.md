@@ -6,6 +6,27 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-04
+
+### Added
+- **WO-17 v1: named conformance suite for RG-7 and in-process RG-8 chaos drills.** New tests live in the test module of `guardian-meshd/src/main.rs`, are all prefixed `conformance_`, are grouped by section comments, and run both with the full `cargo test` suite and alone via `cargo test conformance_`.
+  - **RG-7 PF table**: one case per implemented protocol-firewall rule, asserting the verdict and the `rule_id` in the structured reason and the proof — PF-1, PF-12, PF-13, PF-14, PF-15, PF-16, PF-17, PF-18 and POLICY_RATE. Request-shape rules use the existing Simulate surface (real Evaluate converts a PF BLOCK to `permission_denied` with no verdict body); the throttle rules use real Evaluate after priming the existing limiters.
+  - **RG-7 boundaries**: the enforced 64 KiB payload limit and the ML-DSA-65 signature-length budget are exercised at each edge and one byte past it. The PF-16 future window is exercised at its exact edge (+1000 ms processed, +2000 ms rejected). The PF-15 stale window is exercised with the existing margins (4 s processed, 6 s rejected); the literal 5000/5001 ms edge is not deterministically reachable through the daemon because the check samples the wall clock internally (GMSI-112), and is named as an unexercised exact edge in `WO17-RESULT.md`.
+  - **RG-7 authorization table**: normal and escalation actions across no session, bogus session, valid session, and escalation with and without the codebase's only approval scaffolding (dual-control policy change). The real behaviour is encoded: there is no per-request escalation approval path, so an approved policy change that installs the escalation list still yields `ESCALATE`.
+  - **RG-7 tenant isolation (DC-16)**: tenant A's exhausted budget does not block tenant B; tenant A's policy deny (DC-15) does not block the same action for tenant B; tenant audit partitions stay separate (asserted through TenantStatus).
+  - **RG-7 / EV-2 tamper behaviour**: a real sealed proof is mutated field by field (verdict, rule ids, timestamp, issuing node, signature bytes), plus a truncated envelope and a garbage-bytes envelope; VerifyProof returns NOT VALID in every case and never panics.
+  - **RG-8 chaos drills (in-process provable slice)**: restart on the same workspace fails closed for the old session while the persisted audit chain still verifies and pre-restart proofs still verify; a corrupted persisted audit log is reported invalid by the strict verification path and degrades the next startup (`audit-chain-verification-failed`); a revoked session is denied on the next Evaluate.
+  - **CI**: one new step in `.github/workflows/rust-ci.yml` after the existing test step, named `Conformance suite (WO-17 / RG-7, RG-8)`, running `cargo test conformance_`.
+  - **Docs**: new `docs/CONFORMANCE.md` maps each suite section to RG-7/RG-8, shows how to run the suite, and states the explicit non-claims.
+  - Version bumped `0.15.1` → `0.16.0` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md`, `webui/src/data/releases.ts`).
+- **HONESTY BOUNDARY**: multi-node chaos (killing a node of a cluster) is NOT in this release — no cluster exists yet (WO-16 DC-1/DC-3 open); CM-8 non-catalogued/direct-access probes are WO-27, not WO-17.
+
+### Tests
+Tests: Wright verification on the exact gated tree — cargo test 240/240 (154 lib + 86 bin; baseline 227, +13 conformance tests), `cargo test conformance_` 13/13 standalone, WebUI npm ci + build (drift guard) + lint green. Process-level chaos proof against the release binary (Wright): SIGKILL mid-burst -> restart on the same workspace SERVING, not degraded, node_id stable — 7/7 (corrupted-tail process leg NOT RUN: a Health-only workspace holds no persisted audit log; that leg is proven in-suite and was proven at process level in the WO-16 run). Local production harness (box-e2e) 14/16: PF-18 local-environmental miss (loaded VM; this change touches no production code — production-box proof governs) and the standing stale Health-fields harness check.
+
+### Gate Verdict
+Gate verdict: PASS WITH FINDINGS (guardian-mesh-wo17-2026-11-04).
+
 ## [0.15.1] - 2026-11-03
 
 ### Fixed
