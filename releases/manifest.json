@@ -673,5 +673,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-05T00:20:45-06:00",
     "message": "Merge pull request #87 from nrupala/wright/pack-refresh-gmsi-20261104"
+  },
+  {
+    "release": 80,
+    "tag": "release/v80",
+    "previous_tag": "release/v79",
+    "sha": "1aee18bc7d44b8d143fee4b347b3b43552488def",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-05T01:19:01-06:00",
+    "message": "Merge pull request #88 from nrupala/wright/wo17-conformance-suite"
   }
 ]
