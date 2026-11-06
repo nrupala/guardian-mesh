@@ -1,0 +1,36 @@
+# Guardian Mesh local sidecar example (WO-18 profile 1 / DP-3).
+#
+# The workload shares the guardian's network namespace via
+# network_mode: "service:guardian-mesh" - the compose analogue of a Kubernetes
+# sidecar - so it reaches the guardian at 127.0.0.1:50051.
+#
+# Build and run from this directory: docker compose up --build
+services:
+  guardian-mesh:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: guardian-mesh:0.17.0
+    environment:
+      # PLACEHOLDER ONLY. Override from your shell or an .env file, for example
+      # GUARDIAN_MESH_HANDSHAKE_SECRET="$(cat secret.txt)".
+      # Never commit a real handshake secret.
+      GUARDIAN_MESH_HANDSHAKE_SECRET: "${GUARDIAN_MESH_HANDSHAKE_SECRET:-REPLACE-ME-NOT-A-REAL-SECRET}"
+    volumes:
+      - guardian-data:/data
+    ports:
+      # Loopback-published for local development only. In orchestration the
+      # sidecar is pod-local and needs no published port.
+      - "127.0.0.1:50051:50051"
+    restart: unless-stopped
+
+  workload-example:
+    # REPLACE WITH YOUR WORKLOAD. This busybox sleep is a stand-in only.
+    image: busybox:1.36
+    command: ["sh", "-c", "sleep 365d"]
+    # Shares the guardian's network namespace - the compose analogue of the
+    # Kubernetes sidecar. Replace this service with your workload.
+    network_mode: "service:guardian-mesh"
+
+volumes:
+  guardian-data:

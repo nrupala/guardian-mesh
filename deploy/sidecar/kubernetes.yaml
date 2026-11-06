@@ -1,0 +1,122 @@
+# Guardian Mesh sidecar example (WO-18 profile 1 / DP-3).
+#
+# The guardian runs as a second container in the SAME Pod as the workload, so
+# both share the pod network namespace and the workload reaches the guardian at
+# 127.0.0.1:50051. There is deliberately NO Service: a sidecar is pod-local.
+#
+# Apply order: create the Secret from your secret manager, apply the PVC, then
+# apply the Deployment. This file includes a PLACEHOLDER Secret only so the
+# example is self-contained; never commit or deploy a real secret.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: guardian-mesh
+type: Opaque
+stringData:
+  # PLACEHOLDER: create the real Secret from your secret manager. Never commit
+  # a real handshake secret. The daemon reads this key at run time.
+  handshake-secret: "REPLACE-ME-NOT-A-REAL-SECRET"
+---
+# The workspace volume holds the daemon signing key and the hash-chained audit
+# log. Losing it loses proof continuity (WO-3 persistence). emptyDir is
+# acceptable for trials only, never for production.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: guardian-mesh-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guarded-workload-example
+  labels:
+    app: guarded-workload-example
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: guarded-workload-example
+  template:
+    metadata:
+      labels:
+        app: guarded-workload-example
+    spec:
+      # Pod-level non-root defaults make the mounted RWO volume writable by
+      # the guardian's uid/gid 10001 (fsGroup).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: workload
+          # REPLACE WITH YOUR WORKLOAD. This busybox sleep is only a stand-in
+          # that keeps the Pod alive; it is not a sample application.
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep 365d"]
+        - name: guardian-mesh
+          # Build and push the repo Dockerfile under your own registry if you
+          # do not use this reference name.
+          image: ghcr.io/nrupala/guardian-mesh:0.17.0
+          imagePullPolicy: IfNotPresent
+          env:
+            # The handshake secret is injected at run time from a Secret and is
+            # never baked into the image.
+            - name: GUARDIAN_MESH_HANDSHAKE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: guardian-mesh
+                  key: handshake-secret
+            # Addressing/workspace defaults, restated for clarity.
+            - name: GUARDIAN_MESH_WORKSPACE
+              value: /data/workspace
+            - name: GUARDIAN_MESH_OUTPUT
+              value: /data/output
+            - name: GUARDIAN_MESH_BIND_ADDR
+              value: 0.0.0.0
+            - name: GUARDIAN_MESH_PORT
+              value: "50051"
+          ports:
+            - name: grpc
+              containerPort: 50051
+          volumeMounts:
+            - name: guardian-data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # The daemon does not implement the standard gRPC health service.
+          # These TCP probes only prove the listener is up; the daemon's own
+          # Health RPC is the application-level check.
+          readinessProbe:
+            tcpSocket:
+              port: 50051
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 50051
+            initialDelaySeconds: 10
+            periodSeconds: 20
+      volumes:
+        - name: guardian-data
+          persistentVolumeClaim:
+            claimName: guardian-mesh-data

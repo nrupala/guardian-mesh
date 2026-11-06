@@ -1,0 +1,17 @@
+# Keep the build context minimal.
+
+# Version control and build output.
+.git
+target
+
+# WebUI dependencies and build artifacts are not needed by the daemon build.
+webui/node_modules
+webui/dist
+
+# Local runtime state.
+guardian-mesh-data
+.release-gate
+
+# This run's scratch/result files.
+WO*-RESULT.md
+WO*-TASK*

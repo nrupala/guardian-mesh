@@ -6,6 +6,24 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-05
+
+### Added
+- **WO-18 profile 1: sidecar form (DP-3).** A container/sidecar form of the existing single-node daemon for orchestrated workloads, plus an orchestrated sidecar example. This release claims exactly WO-18 profile 1 (DP-3); the edge profile (DP-6), CLI (CC-4) and MCP surface (CC-5) are not part of it and remain target.
+  - **`Dockerfile` (repo root, multi-stage)**: `rust:1-bookworm` builder installs `protobuf-compiler` for the `tonic-prost-build` step, copies only the root manifest/lockfile and `guardian-meshd/` (manifest, `build.rs`, `proto/`, `src/`), accepts an optional `GUARDIAN_MESH_GIT_COMMIT` build arg, and builds the workspace release binary `guardian-meshd`. The `debian:bookworm-slim` runtime creates non-root user `guardian` (uid/gid 10001), copies the binary to `/usr/local/bin/guardian-meshd`, sets `WORKDIR /app` (the program-dir guard requires the workspace to live outside it), defaults `GUARDIAN_MESH_WORKSPACE=/data/workspace`, `GUARDIAN_MESH_OUTPUT=/data/output`, `GUARDIAN_MESH_BIND_ADDR=0.0.0.0` and `GUARDIAN_MESH_PORT=50051`, and declares `VOLUME ["/data"]`, `EXPOSE 50051` and `USER guardian`. No handshake secret, key or other secret is baked into the image.
+  - **`.dockerignore` (repo root)**: excludes `.git`, `target`, `webui/node_modules`, `webui/dist`, `guardian-mesh-data`, `.release-gate`, and this run's scratch/result files.
+  - **`deploy/sidecar/kubernetes.yaml`**: one file with a `Deployment` (`guarded-workload-example`) running a placeholder `busybox:1.36` workload container and a `ghcr.io/nrupala/guardian-mesh:0.17.0` guardian sidecar in the same Pod (shared network namespace), a 1Gi RWO `PersistentVolumeClaim` (`guardian-mesh-data`) for the signing key and hash-chained audit log (WO-3 persistence), and a placeholder `Secret` (`guardian-mesh`, key `handshake-secret`). The sidecar takes the secret from `secretKeyRef`, mounts the workspace at `/data`, declares requests/limits (100m/128Mi, 500m/512Mi), runs non-root uid 10001 with a read-only root filesystem and all capabilities dropped, and uses TCP readiness/liveness probes on 50051 (the daemon has no standard gRPC health service; its own Health RPC is the application-level check). There is deliberately NO Service: a sidecar is pod-local at `127.0.0.1:50051`.
+  - **`deploy/sidecar/docker-compose.yaml`**: local sidecar example with a `guardian-mesh` service built from the repo Dockerfile, a clearly-placeholder `GUARDIAN_MESH_HANDSHAKE_SECRET`, a named `guardian-data` volume at `/data`, loopback-only published port `127.0.0.1:50051:50051`, and a `workload-example` busybox stand-in using `network_mode: "service:guardian-mesh"` (the compose analogue of the Kubernetes sidecar).
+  - **`docs/SIDECAR.md`**: documents what the sidecar form is, building it (including the `GUARDIAN_MESH_GIT_COMMIT` build arg), running standalone, Docker Compose, Kubernetes apply order and persistence, the full configuration table of every `GUARDIAN_MESH_*` variable the daemon actually reads with container defaults, how the workload calls the guardian at `127.0.0.1:50051` with the same verdict protocol and proofs as every profile (DP-8), the workload's fail-closed duty (no answer = do not act, BLOCK by default), and the explicit non-claims.
+  - Version bumped `0.16.0` -> `0.17.0` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md`, `webui/src/data/releases.ts`); the image tags in both deploy files are `0.17.0`.
+- **HONESTY BOUNDARY**: this release is packaging of the existing single-node daemon. It adds no new verdict capability and no clustering (WO-16 DC-1/DC-3 remain open). It is NOT forced routing (CM-4): nothing captures the workload's traffic, the workload must call the guardian, and omitting the call is still possible. There is no TEE attestation and no external anchoring (designed, not built). DP-6 edge profile, CC-4 CLI and CC-5 MCP surface remain target. No daemon behaviour changed. License: Apache License 2.0 plus the Payment Rider.
+
+### Tests
+Tests: TBD by Wright verification.
+
+### Gate Verdict
+Gate verdict: TBD.
+
 ## [0.16.0] - 2026-11-04
 
 ### Added

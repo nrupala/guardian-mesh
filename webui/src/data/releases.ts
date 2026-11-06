@@ -13,6 +13,23 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.17.0",
+    date: "2026-11-05",
+    summary: "WO-18 profile 1: sidecar form (DP-3) - a multi-stage container image of the existing single-node daemon, Kubernetes and Docker Compose sidecar examples, and honest deployment documentation.",
+    highlights: [
+      "Multi-stage Dockerfile builds the guardian-meshd release binary on rust:1-bookworm and ships it on debian:bookworm-slim as non-root uid/gid 10001",
+      "Runtime image defaults the workspace to /data/workspace, output to /data/output, bind address to 0.0.0.0 and port to 50051; the handshake secret is injected at run time and is never baked into the image",
+      "deploy/sidecar/kubernetes.yaml defines a pod-local guardian sidecar beside a placeholder workload, a Secret example, and a PersistentVolumeClaim for the signing key and hash-chained audit log",
+      "deploy/sidecar/docker-compose.yaml provides the local analogue: the workload shares the guardian's network namespace and reaches it at 127.0.0.1:50051",
+      "docs/SIDECAR.md documents build, run, compose, Kubernetes, every real GUARDIAN_MESH_* variable, the workload's fail-closed duty, and the explicit non-claims",
+      "HONESTY BOUNDARY: this is packaging of the existing single-node daemon - no new verdict capability, no clustering (WO-16 DC-1/DC-3 open), and NOT forced routing (CM-4): nothing captures the workload's traffic, so omitting the call to the guardian is still possible",
+      "Also NOT in this release: DP-6 edge profile, CC-4 CLI and CC-5 MCP surface remain target; no TEE attestation or external anchoring (designed, not built)"
+    ],
+    gateVerdict: "TBD",
+    tests: "Tests: TBD by Wright verification.",
+    status: "Release candidate"
+  },
+  {
     version: "0.16.0",
     date: "2026-11-04",
     summary: "WO-17 v1 conformance suite: named tests for protocol-firewall rules (RG-7), boundary edges, session authorization combinations, tenant isolation (DC-16), proof tamper behaviour (EV-2), and in-process chaos drills (RG-8), runnable with the full suite or alone via `cargo test conformance_`.",
