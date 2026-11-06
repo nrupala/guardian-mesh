@@ -1252,6 +1252,20 @@ do, and none becomes a gate MUST until behaviour-proven here.
   evaluation, and installing the escalation list via an approved
   policy change still yields ESCALATE.)
 
+- **GMSI-121 — Repo↔live drift proof, continuous per deploy
+  path.** Guardian Mesh must be able to prove, on a cadence and
+  not only at release time, that the deployed artifact for each
+  deploy path equals the repo head that path deploys from —
+  bytes or a behaviour marker only current code produces, per
+  GMSI-9's discipline — and alert the day the two diverge, in
+  either direction (live ahead of repo is drift, not freshness).
+  (onsmartgrid consolidation gate, 2026-11-05: production ran
+  12 days ahead of its repo, Oct 24–Nov 5, with the divergence
+  invisible to every watcher; the batch that closed it was a
+  repo-integrity gate, not a product release. The same gate's
+  page-proof gap is a repeat filing of GMSI-48 and its
+  money-surface signed-cell note carries no new input.)
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
