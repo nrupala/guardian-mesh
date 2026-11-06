@@ -736,5 +736,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-06T13:44:52-06:00",
     "message": "ci: declare top-level permissions (contents: read) \u2014 disposition CodeQL actions/missing-workflow-permissions"
+  },
+  {
+    "release": 87,
+    "tag": "release/v87",
+    "previous_tag": "release/v86",
+    "sha": "4e01da6b4d08ef623a722338bc32239844765716",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-06T13:46:07-06:00",
+    "message": "ci: declare top-level permissions (contents: read) \u2014 disposition CodeQL actions/missing-workflow-permissions"
   }
 ]
