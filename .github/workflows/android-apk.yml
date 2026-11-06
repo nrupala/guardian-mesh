@@ -11,6 +11,9 @@ defaults:
   run:
     working-directory: webui
 
+permissions:
+  contents: read
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
