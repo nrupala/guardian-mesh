@@ -763,5 +763,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-06T13:48:33-06:00",
     "message": "fix(webui): generate 2FA secret with crypto.getRandomValues, not Math.random \u2014 disposition CodeQL js/insecure-randomness"
+  },
+  {
+    "release": 90,
+    "tag": "release/v90",
+    "previous_tag": "release/v89",
+    "sha": "3db65d5cb5a937c520762f9815a0dc3f8b62bcb2",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-06T13:55:05-06:00",
+    "message": "docs: add TEST-PLAN.md from real CI (Rust CI, PR Gate, Nightly Fuzz, WebUI CI, CodeQL)"
   }
 ]
