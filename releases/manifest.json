@@ -709,5 +709,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-06T01:07:03-06:00",
     "message": "Merge pull request #92 from nrupala/docs/wo18-inflight-ledger"
+  },
+  {
+    "release": 84,
+    "tag": "release/v84",
+    "previous_tag": "release/v83",
+    "sha": "ac6f0997ef120a1f5b61aceb5a2f91a640c2ab4e",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-06T13:33:31-06:00",
+    "message": "Add CodeQL workflow for Rust (build-mode: none) \u2014 replace actions-only default setup"
   }
 ]
