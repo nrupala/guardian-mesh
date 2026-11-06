@@ -244,6 +244,18 @@ those extensions.
 ### WO-18 (P3) Deployment matrix
 Sidecar form (DP-3), edge profile (DP-6), CLI (CC-4), MCP server
 surface (CC-5) — one profile per run, in that order.
+Status 2026-11-05: **profile 1 (DP-3 sidecar form) BUILT, NOT
+SHIPPED** — PR #91 (draft) carries the Dockerfile, sidecar
+manifests (Kubernetes + compose), docs/SIDECAR.md and the
+v0.17.0 version surfaces; Wright-verified cargo 240/240,
+conformance 13/13, WebUI green, gate machine pass PASS. The
+release is BLOCKED on its core acceptance: the image was never
+built — every registry pull from the laptop SSH lane fails on
+Docker Desktop's interactive-session credential binding, and
+no other verifier-controlled container venue was available
+(gate pack guardian-mesh-wo18-2026-11-05, verdict BLOCKED).
+WO-18 stays OPEN; the next run retries the image build +
+container behaviour proof first, then ships or reports again.
 
 ## Part D — Work orders from the v3.1 amendment (2026-10-15)
 
