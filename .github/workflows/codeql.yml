@@ -1,0 +1,44 @@
+# CodeQL for Rust — copy to .github/workflows/codeql.yml at repo birth.
+#
+# BUILD MODE: none — and for Rust it WORKS (unlike Go). Proven 2026-11-06: a house
+# repo's matrix workflow (python + rust with build-mode none + js-ts) completed
+# green with the Rust leg extracting under none.
+#
+# COVERAGE TRAP: the matrix must name the product's own languages explicitly.
+# CodeQL's DEFAULT SETUP once analysed only the "actions" language on a Rust
+# product in this estate — a green-looking setup under which no analysis of the
+# product code existed at all.
+#
+# REPLACE main with the repo's actual default branch (see ci.yml).
+# DONE means: the first run after the first push has been READ and is green.
+name: "CodeQL — Rust"
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "23 5 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: rust
+          build-mode: none
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:rust"
