@@ -700,5 +700,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-06T00:21:24-06:00",
     "message": "Merge pull request #90 from nrupala/docs/pack-refresh-gmsi121"
+  },
+  {
+    "release": 83,
+    "tag": "release/v83",
+    "previous_tag": "release/v82",
+    "sha": "de733dc9fcaa8a456a574db535f67979188e75f5",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-06T01:07:03-06:00",
+    "message": "Merge pull request #92 from nrupala/docs/wo18-inflight-ledger"
   }
 ]
