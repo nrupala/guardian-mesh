@@ -12,10 +12,11 @@ services:
       dockerfile: Dockerfile
     image: guardian-mesh:0.17.0
     environment:
-      # PLACEHOLDER ONLY. Override from your shell or an .env file, for example
-      # GUARDIAN_MESH_HANDSHAKE_SECRET="$(cat secret.txt)".
-      # Never commit a real handshake secret.
-      GUARDIAN_MESH_HANDSHAKE_SECRET: "${GUARDIAN_MESH_HANDSHAKE_SECRET:-REPLACE-ME-NOT-A-REAL-SECRET}"
+      # Passed through from your shell or an .env file, for example
+      # GUARDIAN_MESH_HANDSHAKE_SECRET="$(cat secret.txt)". No literal value,
+      # not even a placeholder, is written here. Never commit a real
+      # handshake secret.
+      - GUARDIAN_MESH_HANDSHAKE_SECRET
     volumes:
       - guardian-data:/data
     ports:

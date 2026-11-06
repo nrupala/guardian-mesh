@@ -16,7 +16,7 @@ type: Opaque
 stringData:
   # PLACEHOLDER: create the real Secret from your secret manager. Never commit
   # a real handshake secret. The daemon reads this key at run time.
-  handshake-secret: "REPLACE-ME-NOT-A-REAL-SECRET"
+  handshake-secret: REPLACE-ME-NOT-A-REAL-SECRET
 ---
 # The workspace volume holds the daemon signing key and the hash-chained audit
 # log. Losing it loses proof continuity (WO-3 persistence). emptyDir is
