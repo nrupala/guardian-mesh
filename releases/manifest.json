@@ -718,5 +718,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-06T13:33:31-06:00",
     "message": "Add CodeQL workflow for Rust (build-mode: none) \u2014 replace actions-only default setup"
+  },
+  {
+    "release": 85,
+    "tag": "release/v85",
+    "previous_tag": "release/v84",
+    "sha": "e30a866febe95906f915800bcc12275e51000528",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-06T13:43:25-06:00",
+    "message": "ci: declare top-level permissions (contents: read) \u2014 disposition CodeQL actions/missing-workflow-permissions"
   }
 ]
