@@ -8,8 +8,11 @@ import { useAuth } from "../lib/auth"
 
 function randomBase32(len = 16): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+  const bytes = new Uint8Array(len)
+  crypto.getRandomValues(bytes)
   let s = ""
-  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * 32)]
+  // 256 is a multiple of 32, so byte % 32 is uniform over the alphabet.
+  for (let i = 0; i < len; i++) s += chars[bytes[i] % 32]
   return s
 }
 
