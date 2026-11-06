@@ -754,5 +754,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-06T13:47:25-06:00",
     "message": "ci: declare top-level permissions (contents: read) \u2014 disposition CodeQL actions/missing-workflow-permissions"
+  },
+  {
+    "release": 89,
+    "tag": "release/v89",
+    "previous_tag": "release/v88",
+    "sha": "845f35b02e2239e6b7408a384a2fa5fc00fcddf6",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-06T13:48:33-06:00",
+    "message": "fix(webui): generate 2FA secret with crypto.getRandomValues, not Math.random \u2014 disposition CodeQL js/insecure-randomness"
   }
 ]
