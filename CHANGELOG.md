@@ -6,7 +6,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
-## [0.17.0] - 2026-11-05
+## [0.17.0] - 2026-11-06
 
 ### Added
 - **WO-18 profile 1: sidecar form (DP-3).** A container/sidecar form of the existing single-node daemon for orchestrated workloads, plus an orchestrated sidecar example. This release claims exactly WO-18 profile 1 (DP-3); the edge profile (DP-6), CLI (CC-4) and MCP surface (CC-5) are not part of it and remain target.
@@ -19,10 +19,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **HONESTY BOUNDARY**: this release is packaging of the existing single-node daemon. It adds no new verdict capability and no clustering (WO-16 DC-1/DC-3 remain open). It is NOT forced routing (CM-4): nothing captures the workload's traffic, the workload must call the guardian, and omitting the call is still possible. There is no TEE attestation and no external anchoring (designed, not built). DP-6 edge profile, CC-4 CLI and CC-5 MCP surface remain target. No daemon behaviour changed. License: Apache License 2.0 plus the Payment Rider.
 
 ### Tests
-Tests: TBD by Wright verification.
+Tests: cargo test (workspace root) 240/240 (154 lib + 86 bin) and cargo test conformance_ 13/13, Wright-verified 2026-11-06 on the PR head (identical counts to the 2026-11-05 verification of the same tree); WebUI npm ci + build + lint green. Container proof (Wright, podman on Wright's VM, 2026-11-06): the shipped Dockerfile built unmodified (image 83.2 MB); Health SERVING with PF counters 18/18 and build identity 0.17.0@9bda0b22; signed Evaluate ALLOW with proof VALID; container box-e2e 15/16 (sole miss PF-18 burst timing on the contended sandbox VM — the standing local-environmental class, PASS on the production box at every prior release); container restart on the same volume kept the signing-key fingerprint and node_id unchanged and the pre-restart proof still verifies VALID; the daemon runs as uid 10001; the image env carries no secret.
 
 ### Gate Verdict
-Gate verdict: TBD.
+Gate verdict: PASS WITH FINDINGS — Release Gate 2026-11-06 (guardian-mesh-wo18-retry-2026-11-06). The 2026-11-05 gate was BLOCKED because the image had never been built; this retry built it and behaviour-proved it (see Tests). Findings: PF-18 local-environmental (standing); base-image tags float (low, standing); kubectl dry-run of the sidecar manifest NOT RUN (no cluster context).
 
 ## [0.16.0] - 2026-11-04
 
