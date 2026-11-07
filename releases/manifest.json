@@ -772,5 +772,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-06T13:55:05-06:00",
     "message": "docs: add TEST-PLAN.md from real CI (Rust CI, PR Gate, Nightly Fuzz, WebUI CI, CodeQL)"
+  },
+  {
+    "release": 91,
+    "tag": "release/v91",
+    "previous_tag": "release/v90",
+    "sha": "113942408bbaa699062138bf0a8e01462660aeb6",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-06T17:36:33-06:00",
+    "message": "attribution: drop referral code (board decision 2026-10-26 \u2014 keep attribution, drop code)"
   }
 ]
