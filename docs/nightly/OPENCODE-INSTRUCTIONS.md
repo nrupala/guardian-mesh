@@ -244,18 +244,27 @@ those extensions.
 ### WO-18 (P3) Deployment matrix
 Sidecar form (DP-3), edge profile (DP-6), CLI (CC-4), MCP server
 surface (CC-5) — one profile per run, in that order.
-Status 2026-11-05: **profile 1 (DP-3 sidecar form) BUILT, NOT
-SHIPPED** — PR #91 (draft) carries the Dockerfile, sidecar
-manifests (Kubernetes + compose), docs/SIDECAR.md and the
-v0.17.0 version surfaces; Wright-verified cargo 240/240,
-conformance 13/13, WebUI green, gate machine pass PASS. The
-release is BLOCKED on its core acceptance: the image was never
-built — every registry pull from the laptop SSH lane fails on
-Docker Desktop's interactive-session credential binding, and
-no other verifier-controlled container venue was available
-(gate pack guardian-mesh-wo18-2026-11-05, verdict BLOCKED).
-WO-18 stays OPEN; the next run retries the image build +
-container behaviour proof first, then ships or reports again.
+Status 2026-11-06: **profile 1 (DP-3 sidecar form) SHIPPED as
+v0.17.0** — PR #91 merged 3dd6aeb9. The 2026-11-05 gate was
+BLOCKED on the never-built image; the 2026-11-06 retry built
+the shipped Dockerfile unmodified (podman on Wright's VM) and
+behaviour-proved the container end to end: Health SERVING with
+PF counters 18/18 and build identity 0.17.0@9bda0b22, signed
+Evaluate ALLOW + proof VALID, restart on the same volume kept
+the fingerprint/node_id and the pre-restart proof verifies
+VALID, daemon uid 10001, no secret in the image env. Gate PASS
+WITH FINDINGS (guardian-mesh-wo18-retry-2026-11-06): F1 PF-18
+local-environmental (standing; PASS on the production box at
+this deploy, 100/15/0); F2 base-image tags float (low,
+standing); kubectl dry-run NOT RUN (no cluster context).
+Production v0.17.0 live 2026-11-06: build 0.17.0@3dd6aeb9,
+binary sha256 a2374b93... == installed == attested,
+attestation VALID signer == pin dd2cf1a3..., self-cert
+cert-20261107-000046 ACTIVE, box E2E 15/16 (sole miss the
+standing stale Health-fields harness check), box dist asset
+== merged build == Pages asset, site 302. RC soak to
+2026-11-13. WO-18 stays OPEN; the next run takes profile 2
+(DP-6 edge profile).
 
 ## Part D — Work orders from the v3.1 amendment (2026-10-15)
 
@@ -2410,3 +2419,68 @@ stays open for the cluster chaos + CM-8 extensions (WO-27).
 
 GMSI filed by this run's own gate: GMSI-120 (an escalated verdict
 must have a provable resolution path, or be declared terminal).
+
+WO-18 profile 1 retry run (2026-11-06, eleventh nightly entry):
+the 2026-11-05 BLOCKED gate's single missing leg — the built
+image — was produced and behaviour-proved, clearing the way to
+ship v0.17.0. Sources: pack unchanged on main; the day's other
+main commits (CI workflows, NOTICE, TEST-PLAN.md, one WebUI
+page) carry no daemon-code delta — guardian-meshd/src verified
+byte-identical between the gated tree and the merged tree. No
+new Guardian Mesh Spec Inputs arrived; no pack refresh was
+needed ahead of the build. Venue: the laptop's Docker Desktop
+pulls fail identically from the SSH lane (interactive-session
+credential binding; zero cached images), so the image was
+built on Wright's VM with podman 4.9.3 (nested user namespace:
+crun + cgroupfs manager + host networking; registry pulls via
+the egress proxy's mirror cache; the proxy CA was
+volume-mounted into the builder stage only — a build-time
+mount, not a Dockerfile change and not in the image). Container
+proof: guardian-mesh:0.17.0, 83.2 MB; Health SERVING, PF
+18/18, build 0.17.0@9bda0b22; signed Evaluate ALLOW, proof
+VALID; container box-e2e 15/16 fresh-boot (sole miss PF-18
+burst timing on the contended sandbox VM); restart on the
+same volume kept fingerprint e329cadb.../node and the
+pre-restart proof verifies VALID after it; daemon uid 10001;
+image env carries no secret. Wright re-verification on the
+gated tree and again on the stamped tree: cargo 240/240,
+conformance_ 13/13, WebUI ci+build+lint green; scanner PASS
+(0 secrets, 0 vulns). Gate PASS WITH FINDINGS
+(guardian-mesh-wo18-retry-2026-11-06): F1 PF-18
+local-environmental (standing class); F2 base-image tags
+float (low, standing); F3 one podman restart cycle SIGKILLed
+under sandbox memory pressure (exit 137, OOMKilled=false, no
+daemon error; plain start stable — environmental, not a
+product finding); F4 the v0.16.0 public release-log entry
+still carried TBD stamps on main — filled from its gate pack
+in the same stamp carry. Stamps: CHANGELOG [0.17.0] dated
+2026-11-06 (the ship date; the 2026-11-05 gate was BLOCKED,
+so the lane's 2026-11-05 date would have been a false claim)
+with tests + gate lines; release-log entries for 0.17.0 and
+0.16.0 stamped. Shipped: PR #91 merged 3dd6aeb9 (CI green
+incl. CodeQL; require-pr fails on the merge commit itself, as
+it is not a PR — it passed on the PR pre-merge); cross-built
+aarch64 via cargo-zigbuild (zig 0.13.0 fetched to the run dir;
+gm-deploy's in-process build step cannot run its shell-string
+command in this sandbox — the standing --binary route was
+used); box E2E 15/16 with PF-18 PASS (100/15/0) — gm-deploy's
+"NOT certified" rests on the stale Health-fields check alone,
+as in prior releases; production proof governs. Live: Health
+SERVING, degraded=false, node_id node-dd2cf1a350e0, build
+0.17.0@3dd6aeb9, binary sha256 a2374b93... == installed ==
+attested; attestation VALID, signer == pin dd2cf1a3...,
+package at /opt/guardian-mesh/guardian-meshd-0.17.0.
+attestation.json; self-cert cert-20261107-000046 ACTIVE
+(evidence = retry verdict sha256 69629475...); box dist asset
+index-m1MnmXPN.js (sha256 030f0f09...) == merged build ==
+Pages asset; guardian.aimlds.org unauthenticated 302. RC
+entry filed; v0.17.0 in soak to 2026-11-13. NOT RUN: kubectl
+dry-run (no cluster context), cargo audit (tool absent; OSV
+covered), Kali/Arch benches (not built, standing). Standing
+fodder carried: PR #77 (owner's call); stale harness check
+(10th occurrence); base-image digest pinning for the sidecar
+form. Next: WO-18 profile 2 (DP-6 edge profile). WO-18 stays
+open for profiles 2-4; WO-17 stays open for the cluster chaos
++ CM-8 extensions (WO-27); WO-16 stays open for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: none.
