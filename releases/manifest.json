@@ -781,5 +781,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-06T17:36:33-06:00",
     "message": "attribution: drop referral code (board decision 2026-10-26 \u2014 keep attribution, drop code)"
+  },
+  {
+    "release": 92,
+    "tag": "release/v92",
+    "previous_tag": "release/v91",
+    "sha": "3dd6aeb9e3f4c43dac0045ba520b236f6c067d86",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-07T02:35:08-06:00",
+    "message": "Merge pull request #91 from nrupala/wright/wo18-sidecar-form"
   }
 ]
