@@ -817,5 +817,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-08T01:14:13-06:00",
     "message": "Merge pull request #95 from nrupala/wright/ledger-wo18-edge-2026-11-07"
+  },
+  {
+    "release": 96,
+    "tag": "release/v96",
+    "previous_tag": "release/v95",
+    "sha": "39bb194eee5a239c3efeffcb22c8e70c6e6a7ebb",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-08T12:55:49-06:00",
+    "message": "Merge pull request #77 from nrupala/dependabot/npm_and_yarn/webui/npm_and_yarn-b244b93465"
   }
 ]
