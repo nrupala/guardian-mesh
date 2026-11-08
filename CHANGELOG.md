@@ -6,6 +6,24 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-07
+
+### Added
+- **WO-18 profile 2: edge profile (DP-6).** A resource-capped, offline deployment form of the existing single-node daemon for small ARM/x86 gateways and industrial PCs. This release claims exactly WO-18 profile 2 (DP-6); the CLI (CC-4) and MCP surface (CC-5) are not part of it and remain target.
+  - **`deploy/edge/guardian-meshd.service`**: systemd unit for the bare-metal/gateway form. Runs `/usr/local/bin/guardian-meshd` as a dedicated non-root `guardian` user (created with `useradd --system`), reads an optional `EnvironmentFile=-/etc/guardian-mesh/guardian-mesh.env`, works from `/run/guardian-mesh` outside the workspace (the program-dir guard requires it), and defaults `GUARDIAN_MESH_WORKSPACE=/var/lib/guardian-mesh/workspace`, `GUARDIAN_MESH_OUTPUT=/var/lib/guardian-mesh/output`, `GUARDIAN_MESH_BIND_ADDR=127.0.0.1` (loopback; `0.0.0.0` is an operator choice, never the default) and `GUARDIAN_MESH_PORT=50051`. Ceilings `MemoryMax=256M`, `CPUQuota=50%`, `TasksMax=64` are the systemd form of the DP-6 configurable ceilings, each commented as a starting value for a small gateway with measured guidance in `docs/EDGE.md` and one place to change. Hardening: `NoNewPrivileges=true`, `ProtectSystem=strict` with `ReadWritePaths=/var/lib/guardian-mesh`, `ProtectHome=true`, `PrivateTmp=true`, `Restart=on-failure`, `RestartSec=5`. No secret value in the unit; the handshake secret comes from the EnvironmentFile.
+  - **`deploy/edge/guardian-mesh.env.example`**: every real `GUARDIAN_MESH_*` runtime variable an edge deployment may set, each with a one-line comment - workspace, output, bind, port, node id, policy throttle rate, escalation actions, policy admin keys, revocation bound, SPIFFE settings, OpenPGP admin keys, tenants and tenant budget/window, and degraded-mode settings. The handshake secret line carries no value, not even a placeholder literal; it is comment-only and points at deploy-time injection.
+  - **`deploy/edge/docker-compose.yaml`**: the container form. One `guardian-mesh` service built from the repo `Dockerfile`, image `guardian-mesh:0.18.0`, with `mem_limit: 256m` and `cpus: 0.5` (the same starting ceilings as the systemd unit, in one place), loopback-only published port `127.0.0.1:50051:50051`, named volume `guardian-data:/data`, handshake secret passed through from the shell environment with no literal value, and `restart: unless-stopped`. Header records that this is the edge profile - resource-capped and offline, with no network egress needed or used.
+  - **`docs/EDGE.md`**: documents the edge profile honestly - what it is; the systemd and container forms and when each fits; ceilings (what is configurable, where, and the statement that ceilings are enforced by systemd/the container runtime, NOT by a daemon setting, with the starting values and how to change them); offline operation (the daemon makes no outbound calls, verdicts and proof verification are fully local - no licence check, no telemetry, no update check - and no edge-to-core sync is built because BM-7 is design); persistence (`/var/lib/guardian-mesh` or `/data` holds the signing key and hash-chained audit log, and losing it loses proof continuity, WO-3); a table of every real runtime `GUARDIAN_MESH_*` variable; the fail-closed duty (no answer = BLOCK); and explicit non-claims.
+  - Version bumped `0.17.0` -> `0.18.0` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md`, `webui/src/data/releases.ts`); the new image tag in `deploy/edge/docker-compose.yaml` is `0.18.0`. The sidecar files' `0.17.0` tags are unchanged: they name the release that introduced them.
+- **HONESTY BOUNDARY**: this release is packaging and configuration of the existing single-node daemon. It adds no new verdict capability and no clustering (WO-16 DC-1/DC-3 remain open). NO edge-to-core sync is built (BM-7 is design): an edge guardian's proofs verify locally and travel only when an operator carries them; nothing uploads automatically. No measured footprint numbers are stated; every resource value is a ceiling, and Wright measures the daemon under the ceiling during verification. It is NOT forced routing (CM-4). There is no TEE attestation and no external anchoring (designed, not built). License: Apache License 2.0 plus the Payment Rider.
+- **NOT in this release**: CC-4 CLI and CC-5 MCP surface remain target; BM-7 edge-to-core sync is not built; no daemon behaviour change.
+
+### Tests
+Tests: TBD by Wright verification.
+
+### Gate Verdict
+Gate verdict: TBD.
+
 ## [0.17.0] - 2026-11-06
 
 ### Added

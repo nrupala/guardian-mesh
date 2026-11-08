@@ -13,6 +13,22 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.18.0",
+    date: "2026-11-07",
+    summary: "WO-18 profile 2: edge profile (DP-6) - a resource-capped, offline deployment form of the existing single-node daemon for small ARM/x86 gateways and industrial PCs, with systemd and Docker Compose forms and honest deployment documentation.",
+    highlights: [
+      "deploy/edge/guardian-meshd.service runs the daemon as a dedicated non-root guardian user under systemd-level ceilings (MemoryMax=256M, CPUQuota=50%, TasksMax=64), with hardening and a loopback bind default",
+      "deploy/edge/guardian-mesh.env.example lists every real GUARDIAN_MESH_* runtime variable an edge deployment may set; the handshake secret has no value, not even a placeholder",
+      "deploy/edge/docker-compose.yaml provides the container form with mem_limit 256m and cpus 0.5, a loopback-only published port, a named guardian-data volume and the handshake secret passed through from the shell with no literal value",
+      "docs/EDGE.md documents the profile, when to use each form, the honest statement that ceilings are enforced by systemd or the container runtime rather than a daemon setting, fully local offline verdict operation, persistence and proof continuity (WO-3), the real configuration table, the workload's fail-closed duty, and explicit non-claims",
+      "HONESTY BOUNDARY: this is packaging and configuration of the existing single-node daemon - no new verdict capability, no clustering (WO-16 DC-1/DC-3 open), no edge-to-core sync (BM-7 is design, not shipped), not forced routing (CM-4), and no measured footprint numbers are stated - the listed values are ceilings",
+      "Also NOT in this release: CC-4 CLI and CC-5 MCP surface remain target; no TEE attestation or external anchoring (designed, not built); no daemon behaviour change"
+    ],
+    gateVerdict: "TBD by Wright verification",
+    tests: "TBD by Wright verification (this run executed no tests and no builds)",
+    status: "Release candidate"
+  },
+  {
     version: "0.17.0",
     date: "2026-11-06",
     summary: "WO-18 profile 1: sidecar form (DP-3) - a multi-stage container image of the existing single-node daemon, Kubernetes and Docker Compose sidecar examples, and honest deployment documentation.",
