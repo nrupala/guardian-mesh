@@ -266,6 +266,33 @@ standing stale Health-fields harness check), box dist asset
 2026-11-13. WO-18 stays OPEN; the next run takes profile 2
 (DP-6 edge profile).
 
+
+Status 2026-11-07: **profile 2 (DP-6 edge profile) SHIPPED as
+v0.18.0** — PR #94 merged 6107c602. deploy/edge/ carries the
+systemd form (MemoryMax=256M / CPUQuota=50% / TasksMax=64
+ceilings, loopback bind default, hardening) and the compose
+form (mem_limit 256m / cpus 0.5), an env example with the
+handshake secret comment-only, and docs/EDGE.md. The honest
+core: ceilings are enforced by systemd/the container runtime —
+the daemon has NO ceiling setting in config.rs — and no
+edge-to-core sync is built (BM-7 design). Gate PASS WITH
+FINDINGS (guardian-mesh-wo18-edge-2026-11-07): offline verdict
+operation behaviour-proven in a loopback-only network
+namespace (Health SERVING, Evaluate ALLOW, proof VALID, all
+egress unreachable); measured footprint RSS 5.8–10.2 MB, peak
+10.6 MB (>24x headroom under the 256M ceiling); container
+proof on the shipped image (fingerprint stable across a
+same-volume re-run, pre-restart proof VALID). F3: ceiling
+enforcement NOT RUN in the verifying sandbox (nested cgroup
+controllers not delegated) — GMSI-122 filed. Production
+v0.18.0 live 2026-11-07: build 0.18.0@6107c602, binary sha256
+3083e08d... == installed == attested, attestation VALID
+signer == pin dd2cf1a3..., self-cert cert-20261108-000047
+ACTIVE, box E2E 15/16 (PF-18 PASS 100/15/0), box dist asset
+== merged build == Pages asset, site 302. RC soak to
+2026-11-14. WO-18 stays OPEN; the next run takes profile 3
+(CC-4 CLI).
+
 ## Part D — Work orders from the v3.1 amendment (2026-10-15)
 
 Owner-directed the same day as v3.0: the product boundary charter
@@ -1286,6 +1313,20 @@ do, and none becomes a gate MUST until behaviour-proven here.
   repo-integrity gate, not a product release. The same gate's
   page-proof gap is a repeat filing of GMSI-48 and its
   money-surface signed-cell note carries no new input.)
+
+
+- **GMSI-122 — Ceiling-enforcement venue.** A resource-ceiling
+  claim (DP-6 class) can only be behaviour-proven where cgroup
+  controllers are actually delegated to the proving venue; a
+  nested sandbox that cannot enforce a ceiling must instead
+  (a) measure the real footprint under load, (b) state the
+  headroom against the shipped ceiling, and (c) name enforcement
+  NOT RUN with the venue defect as the reason — never let a
+  green suite stand in for an enforcement proof. (WO-18 edge
+  gate F3, 2026-11-07: the verifying sandbox's nested userns
+  delegates no memory/pids controllers — crun refuses every
+  limit flag — while the daemon's measured peak was 10.6 MB
+  against the shipped 256M ceiling.)
 
 ## Development home and engine routing
 
@@ -2484,3 +2525,78 @@ open for profiles 2-4; WO-17 stays open for the cluster chaos
 + CM-8 extensions (WO-27); WO-16 stays open for DC-1/DC-3.
 
 Guardian Mesh Spec Inputs filed by this run: none.
+
+WO-18 profile 2 run (2026-11-07, twelfth nightly entry):
+WO-18 profile 2 (DP-6 edge profile) built, verified, gated
+and shipped as v0.18.0. Sources: main at run start 3d38e0c7
+(unchanged since the 2026-11-06 ledger merge); pack 138,866 B
+identical; open PRs only #77 (dependabot, owner's call,
+untouched); no open issues; the day's four gate filings
+(linktary-internal, verdict-internal, sovereign-internal,
+play-mirror) grep-verified to carry no Guardian Mesh Spec
+Inputs — no pack refresh was needed ahead of the build.
+Build: laptop ONLINE (OpenCode 1.19.5); fresh clone
+D:\guardian-mesh-work\wo18edge at 3d38e0c7, branch
+wright/wo18-edge-profile; lane (free Zen big-pickle) produced
+one commit, 9 files +409/-3, zero Rust files; tree recovered
+by bundle, pushed tree 03f1da1b == lane tree asserted. The
+lane's result file is honest and substantive: no daemon
+ceiling setting exists (ceilings stay with the runtime), the
+unset-port fallback is find_free_port() (the artifacts set
+50051 explicitly), and the env example keeps the handshake
+secret comment-only because an empty assignment would set an
+empty secret. Wright verification on the pushed tree: cargo
+240/240 (workspace root), conformance_ 13/13, WebUI
+ci+build+lint green; scanner PASS (0 secrets, 0 vulns) on
+the gated and stamped trees; systemd unit parse-verified
+(systemd-analyze), compose YAML-verified. Behaviour proof:
+image from the shipped Dockerfile unmodified (83.2 MB,
+binary sha256 bcf9167d... == self-reported); container
+Health SERVING 0.18.0@53cafe11, Evaluate ALLOW + proof
+VALID, box-e2e 14/16; same-volume re-run kept fingerprint
+589493fa... and the pre-restart proof verifies VALID (the
+podman restart verb itself fails in this sandbox on a
+user-lookup defect — remove+run on the same volume is the
+equivalent leg). Offline: the image binary in a loopback-only
+network namespace — egress to 1.1.1.1:443 and to the sandbox
+proxy both "Network is unreachable" — Health SERVING,
+Evaluate ALLOW, proof VALID. Footprint: RSS 5.8-10.2 MB,
+peak VmHWM 10.6 MB after the burst suite, 6 threads. Gate
+PASS WITH FINDINGS (guardian-mesh-wo18-edge-2026-11-07):
+F1 PF-18 local-environmental (standing); F2 stale
+Health-fields harness check (standing); F3 ceiling
+enforcement NOT RUN (sandbox cgroup controllers not
+delegated; knobs read/parse-verified, viability proven by
+measured headroom) — GMSI-122 filed by this run; F4
+base-image tags float (low, standing). NOT RUN also: cargo
+audit (tool absent; OSV covered), Kali/Arch (not built).
+Stamps carried (2111bfcf): CHANGELOG [0.18.0] tests + gate
+lines, EDGE.md release record (measured footprint, offline
+proof, the F3 naming), releases.ts verdict/tests — the
+lane's "no measured numbers" honesty lines amended to point
+at the release record they now live in. Shipped: PR #94
+merged 6107c602 (CI all green incl. CodeQL on the stamped
+head); cross-built aarch64 via cargo-zigbuild with
+GUARDIAN_MESH_GIT_COMMIT=6107c602; gm-deploy --binary route
+(first execute aborted cleanly on the missing merged-tree
+WebUI dist — built, re-executed); box E2E 15/16 with PF-18
+PASS (100/15/0), sole miss the standing stale Health-fields
+check (11th occurrence) — gm-deploy's "NOT certified" rests
+on that check alone, as in prior releases. Live: Health
+SERVING, degraded=false, node node-dd2cf1a350e0, build
+0.18.0@6107c602, binary sha256 3083e08d... == installed ==
+attested; attestation VALID, signer == pin dd2cf1a3...,
+package at /opt/guardian-mesh/guardian-meshd-0.18.0.
+attestation.json; self-cert cert-20261108-000047 ACTIVE
+(evidence = gate verdict sha256 a2385166...); box dist asset
+index-BMYIWh8F.js (sha256 7c754e70...) == merged build ==
+Pages asset; guardian.aimlds.org unauthenticated 302. RC
+entry filed; v0.18.0 in soak to 2026-11-14. Standing fodder
+carried: PR #77 (owner's call); stale harness check; base-
+image digest pinning. Next: WO-18 profile 3 (CC-4 CLI).
+WO-18 stays open for profiles 3-4; WO-17 stays open for the
+cluster chaos + CM-8 extensions (WO-27); WO-16 stays open
+for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-122
+(ceiling-enforcement venue), recorded in Part B above.
