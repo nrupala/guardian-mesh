@@ -1,0 +1,79 @@
+# Guardian Mesh edge profile (WO-18 profile 2 / DP-6) - systemd form.
+#
+# Bare-metal / gateway unit. This is packaging of the existing single-node
+# daemon: it adds no new verdict capability and changes no daemon behaviour.
+#
+# One-time host setup as root (creates the dedicated non-root service account
+# and the workspace directory):
+#
+#     useradd --system --no-create-home --shell /usr/sbin/nologin guardian
+#     install -d -o guardian -g guardian /var/lib/guardian-mesh
+#     install -d -o guardian -g guardian /etc/guardian-mesh
+#
+# Install the binary at /usr/local/bin/guardian-meshd and this unit at
+# /etc/systemd/system/guardian-meshd.service, then:
+#
+#     systemctl daemon-reload
+#     systemctl enable --now guardian-meshd
+#
+# No secret value is stored in this unit. The handshake secret is provided at
+# run time through the optional EnvironmentFile below; never put it here.
+
+[Unit]
+Description=Guardian Mesh daemon (edge profile, resource-capped)
+After=network.target
+
+[Service]
+Type=simple
+User=guardian
+Group=guardian
+
+# The optional environment file is where an operator supplies deployment
+# settings and the handshake secret. The leading '-' makes the file optional.
+EnvironmentFile=-/etc/guardian-mesh/guardian-mesh.env
+
+ExecStart=/usr/local/bin/guardian-meshd
+
+# WorkingDirectory is LOAD-BEARING: config.rs verify_no_program_dir_write
+# refuses to start when the workspace or output resolves inside the program
+# directory. /run/guardian-mesh is outside /var/lib/guardian-mesh, so the
+# workspace below is valid. RuntimeDirectory creates it with the right owner.
+WorkingDirectory=/run/guardian-mesh
+RuntimeDirectory=guardian-mesh
+RuntimeDirectoryMode=0755
+
+# Edge runtime defaults, matching the container image's shape. BIND_ADDR is
+# LOOPBACK on purpose: an edge guardian serves its local workload. Binding
+# 0.0.0.0 is an operator choice, never the default.
+Environment=GUARDIAN_MESH_WORKSPACE=/var/lib/guardian-mesh/workspace
+Environment=GUARDIAN_MESH_OUTPUT=/var/lib/guardian-mesh/output
+Environment=GUARDIAN_MESH_BIND_ADDR=127.0.0.1
+Environment=GUARDIAN_MESH_PORT=50051
+
+# --- DP-6 configurable resource ceilings (systemd form) ---
+# The daemon itself has no memory/CPU ceiling setting - systemd/cgroups
+# enforces these. Operators change the ceilings here, in ONE place.
+
+# Starting memory ceiling for a small ARM/x86 gateway; measured guidance lives
+# in docs/EDGE.md. Change ceilings here, in ONE place.
+MemoryMax=256M
+# Starting CPU ceiling for a small ARM/x86 gateway; measured guidance lives in
+# docs/EDGE.md. Change ceilings here, in ONE place.
+CPUQuota=50%
+# Starting task/thread ceiling for a small ARM/x86 gateway; measured guidance
+# lives in docs/EDGE.md. Change ceilings here, in ONE place.
+TasksMax=64
+
+# Hardening: no privilege escalation, read-only filesystem except the
+# workspace, no access to home directories, private /tmp.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/guardian-mesh
+ProtectHome=true
+PrivateTmp=true
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

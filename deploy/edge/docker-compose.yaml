@@ -1,0 +1,41 @@
+# Guardian Mesh edge profile (WO-18 profile 2 / DP-6) - container form.
+#
+# Resource-capped and offline: the daemon makes no outbound calls, so no
+# network egress is needed or used. This is packaging of the existing
+# single-node daemon; it adds no new verdict capability.
+#
+# Build and run from this directory: docker compose up --build
+services:
+  guardian-mesh:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: guardian-mesh:0.18.0
+
+    # DP-6 resource ceilings (container form): the same starting ceilings as
+    # the systemd unit, in ONE place. The container runtime enforces them; the
+    # daemon has no memory/CPU ceiling setting of its own.
+    mem_limit: 256m
+    cpus: 0.5
+
+    environment:
+      # Passed through from your shell or an .env file, for example
+      # GUARDIAN_MESH_HANDSHAKE_SECRET="$(cat secret.txt)". No literal value,
+      # not even a placeholder, is written here. Never commit a real secret.
+      - GUARDIAN_MESH_HANDSHAKE_SECRET
+
+    volumes:
+      # Holds the signing key and hash-chained audit log; losing it loses proof
+      # continuity (WO-3). Keep it on durable storage.
+      - guardian-data:/data
+
+    ports:
+      # Loopback-only on the host. Inside the container the image's default
+      # BIND_ADDR=0.0.0.0 is required for the published port to reach the
+      # listener; it is not reachable beyond the host loopback.
+      - "127.0.0.1:50051:50051"
+
+    restart: unless-stopped
+
+volumes:
+  guardian-data:
