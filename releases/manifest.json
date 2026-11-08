@@ -808,5 +808,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-08T00:54:26-06:00",
     "message": "Merge pull request #94 from nrupala/wright/wo18-edge-profile"
+  },
+  {
+    "release": 95,
+    "tag": "release/v95",
+    "previous_tag": "release/v94",
+    "sha": "edf1d10d8d68cf582afcec0441afe7d9f86c25fb",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-08T01:14:13-06:00",
+    "message": "Merge pull request #95 from nrupala/wright/ledger-wo18-edge-2026-11-07"
   }
 ]
