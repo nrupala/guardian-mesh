@@ -177,8 +177,18 @@ not answer" as permission to proceed.
 
 ## Release record
 
-- Measured footprint under the edge ceiling (256M / 50% CPU): **TBD by Wright
-  verification** - measured RSS for Health, a signed Evaluate and proof
-  verification inside the ceiling.
-- Tests: TBD by Wright verification.
-- Gate verdict: TBD.
+- Measured footprint (Wright verification, 2026-11-07): the shipped
+  image's daemon used 5.8–10.2 MB RSS with a 10.6 MB peak (VmHWM) across
+  Health, a signed Evaluate, proof verification and the e2e burst suite,
+  with 6 threads — over 24x headroom under the 256M starting ceiling.
+  Ceiling *enforcement* itself was NOT RUN in the verifying sandbox
+  (its nested cgroup controllers are not delegated); see the gate
+  verdict. Offline operation was behaviour-proven in a loopback-only
+  network namespace: Health SERVING, Evaluate ALLOW, proof VALID,
+  with all egress unreachable.
+- Tests: cargo test (workspace root) 240/240 and conformance_ 13/13,
+  Wright-verified 2026-11-07; WebUI ci + build + lint green; container
+  box-e2e 14/16 (the two standing local classes: PF-18 burst timing on
+  the contended sandbox VM and the stale Health-fields harness check).
+- Gate verdict: PASS WITH FINDINGS — Release Gate 2026-11-07
+  (guardian-mesh-wo18-edge-2026-11-07).

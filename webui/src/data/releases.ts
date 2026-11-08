@@ -21,11 +21,11 @@ export const RELEASES: Release[] = [
       "deploy/edge/guardian-mesh.env.example lists every real GUARDIAN_MESH_* runtime variable an edge deployment may set; the handshake secret has no value, not even a placeholder",
       "deploy/edge/docker-compose.yaml provides the container form with mem_limit 256m and cpus 0.5, a loopback-only published port, a named guardian-data volume and the handshake secret passed through from the shell with no literal value",
       "docs/EDGE.md documents the profile, when to use each form, the honest statement that ceilings are enforced by systemd or the container runtime rather than a daemon setting, fully local offline verdict operation, persistence and proof continuity (WO-3), the real configuration table, the workload's fail-closed duty, and explicit non-claims",
-      "HONESTY BOUNDARY: this is packaging and configuration of the existing single-node daemon - no new verdict capability, no clustering (WO-16 DC-1/DC-3 open), no edge-to-core sync (BM-7 is design, not shipped), not forced routing (CM-4), and no measured footprint numbers are stated - the listed values are ceilings",
+      "HONESTY BOUNDARY: this is packaging and configuration of the existing single-node daemon - no new verdict capability, no clustering (WO-16 DC-1/DC-3 open), no edge-to-core sync (BM-7 is design, not shipped), not forced routing (CM-4), and the listed values are ceilings - measured footprint lives in docs/EDGE.md",
       "Also NOT in this release: CC-4 CLI and CC-5 MCP surface remain target; no TEE attestation or external anchoring (designed, not built); no daemon behaviour change"
     ],
-    gateVerdict: "TBD by Wright verification",
-    tests: "TBD by Wright verification (this run executed no tests and no builds)",
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-11-07 (guardian-mesh-wo18-edge-2026-11-07)",
+    tests: "cargo test (workspace root) 240/240, conformance_ 13/13, WebUI ci+build+lint green (Wright-verified, 2026-11-07); container proof: Health SERVING at 0.18.0@53cafe11, Evaluate ALLOW + proof VALID, restart persistence on the same volume, fully offline verdict operation proven in a loopback-only namespace; measured footprint 5.8-10.2 MB RSS (peak 10.6 MB) vs the 256M ceiling",
     status: "Release candidate"
   },
   {
