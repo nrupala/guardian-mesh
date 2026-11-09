@@ -844,5 +844,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-09T01:12:41-06:00",
     "message": "Merge pull request #97 from nrupala/wright/wo18-cli-profile"
+  },
+  {
+    "release": 99,
+    "tag": "release/v99",
+    "previous_tag": "release/v98",
+    "sha": "c733678199b327e9aeb491aa5574e3e64b3f5f8c",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-09T01:39:53-06:00",
+    "message": "Merge pull request #98 from nrupala/wright/ledger-wo18-cli-2026-11-08"
   }
 ]
