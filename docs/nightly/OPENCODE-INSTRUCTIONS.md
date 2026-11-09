@@ -293,6 +293,34 @@ ACTIVE, box E2E 15/16 (PF-18 PASS 100/15/0), box dist asset
 2026-11-14. WO-18 stays OPEN; the next run takes profile 3
 (CC-4 CLI).
 
+Status 2026-11-08: **profile 3 (CC-4 CLI) SHIPPED as v0.19.0**
+— PR #97 merged f25cfd51c69af370b551faeb64b1d58d1653fe6b. The
+`gm` operator CLI (guardian-meshd/src/bin/gm.rs, no new
+dependencies) provides health / handshake / evaluate (real +
+--simulate) / verify / audit over gRPC: JSON on stdout, exit
+0 success / 1 refusal-or-invalid / 2 usage-transport-session
+errors with stderr-only diagnostics, session file 0600 holding
+the session key + signing seed as bearer secrets (never
+printed), proof envelopes saved as hex JSON. Gate PASS WITH
+FINDINGS (guardian-mesh-wo18-cli-2026-11-08): F1 (High, FIXED
+in the Wright carry) the lane's gm did not compile — build.rs
+generated server-only stubs; fixed with build_client(true) +
+the sealed_envelope encode idiom; F2 (Low, open) evaluate
+stdout does not name the proof file written; F3 base-image
+tags float (low, standing). Production v0.19.0 live
+2026-11-08: build 0.19.0@f25cfd51, binary sha256 e280e5c8...
+== installed == attested, attestation VALID signer == pin
+dd2cf1a3..., self-cert cert-20261109-000048 ACTIVE, box E2E
+15/16 (PF-18 PASS 100/15/0), **gm itself proven against the
+production daemon on the box** (health SERVING, handshake,
+evaluate TOOL_CALL -> ALLOW, verify VALID; its audit read
+reports the standing F4 production-history interleave — first
+break at entry 557, the documented 2026-10-26/27 segment,
+live tail clean by design since v0.15.1), box dist asset ==
+merged build == Pages asset, site 302. RC soak to
+2026-11-15. WO-18 stays OPEN; the next run takes profile 4
+(CC-5 MCP server surface) — the last WO-18 profile.
+
 ## Part D — Work orders from the v3.1 amendment (2026-10-15)
 
 Owner-directed the same day as v3.0: the product boundary charter
@@ -1343,6 +1371,23 @@ do, and none becomes a gate MUST until behaviour-proven here.
   leaves no privacy-preserving aggregate trace; the gate
   accepted this input as filed — not built there, not a
   condition of that release.)
+
+- **GMSI-124 — Operator-surface smoke proof.** Every shipped
+  client surface (CLI, MCP server, panel actions) must carry a
+  repeatable smoke proof a gate run can execute against a live
+  daemon: connect, health, handshake, one ALLOW evaluate, proof
+  verify, one audit read, plus the negative legs the surface
+  owns (no-session, tampered proof, unreachable endpoint), each
+  with its expected exit/result. A surface that ships without
+  its smoke proof is incomplete by definition. (WO-18 CLI gate,
+  2026-11-08: the CC-4 CLI's proof was necessarily ad-hoc —
+  gm-proof.sh in the run dir — because no in-repo proof exists
+  for any surface; CC-5's MCP surface should land with its
+  proof in-repo. Absorbing this input means the suite exists
+  in-repo and a gate run executes it against the release build;
+  until then it stands as filed input. Rules touched: CC-4/CC-5
+  acceptance; RG-7 — the smoke proof is the surface's
+  conformance slice.)
 
 ## Development home and engine routing
 
@@ -2616,3 +2661,110 @@ for DC-1/DC-3.
 
 Guardian Mesh Spec Inputs filed by this run: GMSI-122
 (ceiling-enforcement venue), recorded in Part B above.
+
+WO-18 profile 3 run (2026-11-08, thirteenth nightly entry):
+WO-18 profile 3 (CC-4 CLI) built, verified, gated and shipped
+as v0.19.0. Sources: main at run start 39bb194e — the only
+movement since the 2026-11-07 ledger merge was PR #77
+(dependabot webui npm group), merged by the OWNER himself
+2026-11-08T18:55:49Z; the standing "owner's call" item is
+closed by his own hand. Open PRs at start: none; open issues:
+none. The day's four gate filings (linktary-checkfix,
+linktary-magic-link-ttl, linktary-walkfix,
+linktary-signin-mechanics) were grep-verified: only
+linktary-magic-link-ttl carried a Guardian Mesh Spec Input
+(counter-only, no-identifier metric for expired/used/invalid
+auth callback outcomes). Filed as GMSI-123 by pack-refresh
+draft PR #96 (commit d8e1a920, one-file diff verified), merged
+d8e6b232; pack read-back on main: blob 680b3fea == pushed
+blob, 144,905 B. (One early check-runs response for PR #96
+showed a phantom failing JavaScript CodeQL run; the repo has
+no JavaScript CodeQL workflow — three direct reads showed the
+PR genuinely green.)
+Build: laptop ONLINE (OpenCode 1.19.5); fresh clone
+D:\guardian-mesh-work\wo18cli at d8e6b232, branch
+wright/wo18-cli-profile. Lane run 1 died ~2 min in hunting the
+tonic client API in the cargo registry (external_directory
+permission auto-rejected by design; no files changed). Run 2
+carried Wright's authoritative client-API reference in the
+task (GuardianMeshClient::connect, proto field shapes, the
+sealed-envelope/HMAC/seed idioms, "do not read outside the
+project root") and completed: lane commit 439cd6b, 8 files
++1504/-4 (new gm.rs 1128 lines + docs/CLI.md; Cargo.toml
+[[bin]] gm + version, VERSION, README, CHANGELOG, releases.ts,
+edge compose tag; sidecar tags stayed 0.17.0 — they name their
+introducing release). Lane tree 6afc2c50 == pushed tree
+asserted via the bundle; the 3 apparent SFTP diffs were pure
+CRLF. Lane result is candid (session-file endpoint precedence,
+verify/audit sessionless, proof-file hex encoding all
+disclosed). gm's contract: a verdict RETURNED in a response
+(ALLOW/BLOCK/THROTTLE/ESCALATE) prints JSON and exits 0 — the
+daemon's envelope-stage BLOCKs on real evaluates arrive as
+permission_denied RPC errors and exit 1; simulate CODE_EXECUTE
+returns its BLOCK in-response (both legs proven live).
+Wright verification on the pushed tree (fresh tarball
+checkout): the lane's code DID NOT COMPILE — build.rs had
+.build_client(false) (server-only stubs, no client the CLI
+could call), one ambiguous encode call, one unused import.
+Carry fixes 91a53eeb + 1017fc42 (build_client(true); the
+sealed_envelope encode idiom; import dropped) — the lane's
+"no daemon change needed" note falsified by the compile
+evidence, recorded on the PR and in the gate pack. After the
+carry: cargo 246/246 (240 baseline + gm's 6 unit tests),
+conformance_ 13/13, WebUI ci+build+lint green; scanner PASS
+(0 secrets, 0 vulns, 0 must-gate failures) on the gated and
+final trees. Behaviour proof (fresh local daemon on
+127.0.0.1:50061, driven only through the built gm): health
+SERVING 0.19.0; handshake exit 0, session file mode 600, no
+session_key/seed in stdout; evaluate TOOL_CALL ALLOW + proof
+saved; verify VALID; one flipped payload byte -> invalid exit
+1 (CRC reason); audit 1 entry chain verified; no-session
+evaluate exit 2 (empty stdout, stderr names handshake);
+simulate CODE_EXECUTE BLOCK JSON exit 0 and its proof verifies
+VALID; real CODE_EXECUTE BLOCK JSON exit 0 (Arbiter-stage);
+unreachable health exit 2 empty stdout.
+Gate PASS WITH FINDINGS (guardian-mesh-wo18-cli-2026-11-08):
+F1 compile carry (High, fixed, above); F2 (Low, open)
+evaluate stdout does not name the proof file; F3 base-image
+tags float (low, standing). NOT RUN: cargo audit (tool
+absent; OSV covered), Kali/Arch (not built).
+Stamps carried (923c7073): CHANGELOG [0.19.0] tests + gate
+lines, releases.ts tests + gateVerdict — the lane's
+unverified numbers replaced with the verified ones; CI on
+the stamped head all green (PR Gate, Rust CI, WebUI CI,
+CodeQL Rust). Shipped: PR #97 merged f25cfd51; merged-tree
+gm.rs + build.rs sha256-identical to the gated tree;
+cross-built aarch64 via cargo-zigbuild with
+GUARDIAN_MESH_GIT_COMMIT=f25cfd51 (the gm binary cross-built
+in the same invocation — CC-4's acceptance includes the CLI
+artefact itself); gm-deploy --binary route; box E2E 15/16
+with PF-18 PASS (100/15/0), sole miss the standing stale
+Health-fields check (12th occurrence) — gm-deploy's "NOT
+certified" rests on that check alone, as in prior releases.
+Live: Health SERVING, degraded=false, node
+node-dd2cf1a350e0, build 0.19.0@f25cfd51, binary sha256
+e280e5c8... == built == installed == attested; attestation
+VALID, signer == pin dd2cf1a3..., package at
+/opt/guardian-mesh/guardian-meshd-0.19.0.attestation.json
+(signed on the box with the production key under
+/home/ubuntu/guardian-mesh-data/workspace/keys/); self-cert
+cert-20261109-000048 ACTIVE (evidence = gate verdict sha256
+b93b379c...); gm (aarch64, sha256 e37a8455...) proven against
+the production daemon on the box: health/handshake/evaluate
+ALLOW/verify VALID; audit read reports the standing F4
+interleave at entry 557 (documented since v0.15.1; live tail
+clean). Box dist asset index-D1IKKPA3.js == merged build ==
+Pages asset; guardian.aimlds.org unauthenticated 302. RC
+entry filed; v0.19.0 in soak to 2026-11-15. Standing fodder
+carried: stale harness check; base-image digest pinning; the
+F4 production audit-history interleave (never rewritten, by
+design). Next: WO-18 profile 4 (CC-5 MCP server surface) —
+the LAST WO-18 profile; WO-18 closes when it ships.
+WO-18 stays open for profile 4; WO-17 stays open for the
+cluster chaos + CM-8 extensions (WO-27); WO-16 stays open
+for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-123
+(auth-callback outcome counters, via the refresh PR) and
+GMSI-124 (operator-surface smoke proof), recorded in Part B
+above.
