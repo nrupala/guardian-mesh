@@ -1,12 +1,16 @@
 [package]
 name = "guardian-meshd"
-version = "0.18.0"
+version = "0.19.0"
 edition = "2024"
 license = "Apache-2.0"
 
 [[bin]]
 name = "gm-attest"
 path = "src/bin/gm-attest.rs"
+
+[[bin]]
+name = "gm"
+path = "src/bin/gm.rs"
 
 [dependencies]
 anyhow = "1.0.102"

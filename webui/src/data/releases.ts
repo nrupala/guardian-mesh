@@ -13,6 +13,24 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.19.0",
+    date: "2026-11-08",
+    summary: "WO-18 profile 3: operator CLI (CC-4) - the gm binary is an operator client of the existing single-node daemon, with handshake, evaluate/simulate, verify and audit subcommands over gRPC, plus honest documentation of its session and proof files, exit codes and non-claims.",
+    highlights: [
+      "guardian-meshd/src/bin/gm.rs adds gm with hand-rolled argument parsing (no clap, no new dependencies): health, handshake, evaluate (real or --simulate), verify and audit, all JSON on stdout and errors on stderr",
+      "handshake generates a 32-byte seed, derives the ML-DSA-65 session keypair, opens the session as gm-cli and writes a session file (0600 on Unix) holding the hex session key and signing seed as bearer secrets; the default path is $HOME/.guardian-mesh/gm-session.json",
+      "evaluate seals the exact camelCase ActionDescriptor payload, HMACs it with the session key, calls Evaluate or Simulate, prints verdict/reasons/proof summary and saves the proof envelope as hex-encoded JSON beside the session file",
+      "verify rebuilds the proto envelope from the proof file and calls VerifyProof (exit 0 valid, 1 invalid, 2 transport/usage); audit calls ReadAuditLog and its --limit truncates the printed entries client-side only",
+      "Exit-code contract: 0 for a successful operation or any verdict returned in a response (BLOCK is success; scripts read the verdict from JSON), 1 for an invalid proof or unhealthy daemon, 2 for usage/session/transport/gRPC errors with no partial JSON on stdout",
+      "docs/CLI.md documents what the CLI is, build/install, each subcommand with worked examples and JSON shapes, the session file and TTL/expiry, the proof file and evaluate->verify flow, scripting notes, and explicit non-claims",
+      "HONESTY BOUNDARY: this is a client of the existing single-node daemon - it adds no new verdict capability, no clustering, no daemon-logic changes, and the CLI holds no policy authority; it asks the daemon like any other client",
+      "Also NOT in this release: CC-5 MCP surface remains target; no TEE attestation or external anchoring (designed, not built); no forced routing (CM-4)"
+    ],
+    gateVerdict: "PENDING",
+    tests: "NOT RUN by the build lane — Wright verifies independently",
+    status: "Release candidate"
+  },
+  {
     version: "0.18.0",
     date: "2026-11-07",
     summary: "WO-18 profile 2: edge profile (DP-6) - a resource-capped, offline deployment form of the existing single-node daemon for small ARM/x86 gateways and industrial PCs, with systemd and Docker Compose forms and honest deployment documentation.",
