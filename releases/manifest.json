@@ -826,5 +826,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-08T12:55:49-06:00",
     "message": "Merge pull request #77 from nrupala/dependabot/npm_and_yarn/webui/npm_and_yarn-b244b93465"
+  },
+  {
+    "release": 97,
+    "tag": "release/v97",
+    "previous_tag": "release/v96",
+    "sha": "d8e6b23201720dd5343e1f26729bd1fbb5b9508b",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-09T00:26:41-06:00",
+    "message": "Merge pull request #96 from nrupala/wright/pack-refresh-gmsi123-20261108"
   }
 ]
