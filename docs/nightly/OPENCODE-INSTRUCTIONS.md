@@ -1328,6 +1328,22 @@ do, and none becomes a gate MUST until behaviour-proven here.
   limit flag — while the daemon's measured peak was 10.6 MB
   against the shipped 256M ceiling.)
 
+- **GMSI-123 — Counter-only auth-outcome metrics.** Where a
+  surface deliberately logs nothing about authentication
+  outcomes (a no-logging discipline that must not be weakened),
+  Guardian Mesh must be able to prove the aggregate outcome
+  counts — expired vs used vs invalid, counter-only, carrying
+  no identifier, token fragment, or address — so a
+  delivery-latency problem can be distinguished from token
+  misuse from evidence, not inference. The counts themselves
+  must not become a state oracle: they are aggregate and
+  operator-facing only, never per-token or per-mailbox.
+  (Linktary v0.4.1 magic-link gate, 2026-11-08: the auth module
+  logs nothing by design, so an expired-link failure today
+  leaves no privacy-preserving aggregate trace; the gate
+  accepted this input as filed — not built there, not a
+  condition of that release.)
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
