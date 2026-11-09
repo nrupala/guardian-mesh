@@ -19,7 +19,7 @@ use guardian_meshd::proto::{
 };
 use guardian_meshd::sealed_envelope::SealedEnvelope;
 use hmac::{Hmac, KeyInit, Mac};
-use ml_dsa::{Keypair, MlDsa65, SignatureEncoding, SigningKey};
+use ml_dsa::{Keypair, MlDsa65, SigningKey};
 use rand::rngs::SysRng;
 use rand::TryRng;
 use serde::{Deserialize, Serialize};
