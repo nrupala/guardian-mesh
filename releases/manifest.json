@@ -835,5 +835,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-09T00:26:41-06:00",
     "message": "Merge pull request #96 from nrupala/wright/pack-refresh-gmsi123-20261108"
+  },
+  {
+    "release": 98,
+    "tag": "release/v98",
+    "previous_tag": "release/v97",
+    "sha": "f25cfd51c69af370b551faeb64b1d58d1653fe6b",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-09T01:12:41-06:00",
+    "message": "Merge pull request #97 from nrupala/wright/wo18-cli-profile"
   }
 ]
