@@ -386,7 +386,8 @@ async fn cmd_handshake(args: &[String], pre_endpoint: Option<String>) -> Result<
     let signing_key = SigningKey::<MlDsa65>::from_seed(&seed);
     let verifying_key = signing_key.verifying_key();
     let encoded_verifying_key = verifying_key.encode();
-    let verifying_key_bytes: Vec<u8> = encoded_verifying_key.as_ref().to_vec();
+    let encoded_bytes: &[u8] = encoded_verifying_key.as_ref();
+    let verifying_key_bytes: Vec<u8> = encoded_bytes.to_vec();
 
     let mut client = connect(&endpoint).await?;
     let handshake = client
