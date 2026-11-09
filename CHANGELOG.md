@@ -6,6 +6,25 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-08
+
+### Added
+- **WO-18 profile 3: operator CLI (CC-4).** The new `gm` binary is an operator client of the existing single-node daemon: it opens a handshake session, evaluates or simulates actions, verifies saved proofs and reads the audit log over gRPC. This release claims exactly WO-18 profile 3 (CC-4); the MCP surface (CC-5) is not part of it and remains target.
+  - **`guardian-meshd/src/bin/gm.rs`**: hand-rolled argument parsing (no clap, matching `gm-attest`), tokio + tonic, and no new dependencies. Subcommands: `health` (full HealthResponse as JSON, status as its enum name, exit 0 for SERVING/DEGRADED), `handshake [--tenant] [--session-file]` (generates a 32-byte seed, derives the ML-DSA-65 keypair, calls Handshake as `gm-cli`, writes the session file, prints only session_id/ttl_seconds/tenant_id/session_file), `evaluate` (seals the exact camelCase ActionDescriptor JSON, HMACs it with the session key, calls Evaluate or Simulate, prints the verdict/reasons/proof summary and saves the proof envelope), `verify` (rebuilds the proto envelope from the proof file and calls VerifyProof; exit 0 valid, 1 invalid), and `audit [--limit]` (ReadAuditLog; --limit truncates the printed entries client-side only). Every subcommand accepts `--endpoint` (default `http://127.0.0.1:50051`, `GM_ENDPOINT` fallback) and `--help`; unknown flags/subcommands exit 2.
+  - **Session file**: JSON with endpoint, session_id, hex session key, hex signing seed, tenant_id, created unix time and ttl_seconds. Created with mode 0600 on Unix. The session key and seed are bearer secrets and are never printed. The default path is `$HOME/.guardian-mesh/gm-session.json`; an expired session (daemon TTL, 300s) means re-running `gm handshake`.
+  - **Proof file**: JSON with hex-encoded payload, payload_type, crc32c, ml_dsa_65_signature, timestamp and nonce; default `gm-proof.json` beside the session file. The evaluate -> verify flow uses exactly this file.
+  - **Unit tests in `gm.rs`** (no daemon): payload field set and metadata map, session-file round-trip, proof-file round-trip, and argument-parsing errors (missing required flag, bad `--metadata` form, unknown flag) in the exit-2 class.
+  - **`docs/CLI.md`**: what the CLI is and is not, build/install, every subcommand with a worked example and JSON shape, the session file and its secrets/TTL, the proof file and evaluate -> verify flow, the exit-code contract (0/1/2, BLOCK-is-success), scripting notes, and explicit non-claims.
+  - Version bumped `0.18.0` -> `0.19.0` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md`, `webui/src/data/releases.ts`); the image tag in `deploy/edge/docker-compose.yaml` is `0.19.0`. The sidecar files' `0.17.0` tags are unchanged: they name the release that introduced them.
+- **HONESTY BOUNDARY**: this release is a client of the existing daemon. It adds no new verdict capability, no clustering, and no daemon-logic changes. The CLI holds no policy authority: it asks the daemon like any other client, and a BLOCK verdict is a successful CLI operation (the verdict is in the JSON, not the exit code). There is no TEE attestation and no external anchoring. It is NOT forced routing (CM-4). License: Apache License 2.0 plus the Payment Rider.
+- **NOT in this release**: CC-5 MCP surface remains target; no daemon behaviour change; no new verdict capability; no clustering (WO-16 DC-1/DC-3 remain open).
+
+### Tests
+Tests: cargo test (workspace root) 246/246 (154 lib + 6 gm + 86 bin) and cargo test conformance_ 13/13, Wright-verified 2026-11-08 on the PR head (after the Wright carry fixes in F1); WebUI npm ci + build + lint green. Behaviour proof (Wright, local daemon built from the verified tree, driven entirely through the shipped gm binary): health SERVING 0.19.0 exit 0; handshake exit 0 with the session file at mode 0600 and neither the session key nor the seed in stdout; evaluate TOOL_CALL -> ALLOW exit 0 with the proof envelope saved; verify -> valid exit 0; one flipped payload byte -> valid=false exit 1; audit lists the evaluation with the chain verified; evaluate with no session file -> exit 2 with empty stdout; simulate CODE_EXECUTE -> BLOCK verdict in JSON exit 0 and its proof verifies VALID; a real evaluate of CODE_EXECUTE -> BLOCK verdict in JSON exit 0 (verdict-stage block); health against an unreachable endpoint -> exit 2 with empty stdout.
+
+### Gate Verdict
+Gate verdict: PASS WITH FINDINGS — Release Gate 2026-11-08 (guardian-mesh-wo18-cli-2026-11-08). Findings: F1 (High, FIXED in the Wright carry) the lane's gm did not compile — build.rs generated server-only stubs, an ambiguous vk encode call, one unused import; fixed on the PR (build_client(true), the sealed_envelope encode idiom, the import) with the full suite green after; F2 (Low, open) evaluate's stdout does not name the proof file it wrote; F3 base-image tags float (low, standing). GMSI-124 filed (operator-surface smoke proof).
+
 ## [0.18.0] - 2026-11-07
 
 ### Added
