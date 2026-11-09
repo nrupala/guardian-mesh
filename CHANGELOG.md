@@ -20,10 +20,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **NOT in this release**: CC-5 MCP surface remains target; no daemon behaviour change; no new verdict capability; no clustering (WO-16 DC-1/DC-3 remain open).
 
 ### Tests
-Tests: NOT RUN by the build lane — Wright verifies independently.
+Tests: cargo test (workspace root) 246/246 (154 lib + 6 gm + 86 bin) and cargo test conformance_ 13/13, Wright-verified 2026-11-08 on the PR head (after the Wright carry fixes in F1); WebUI npm ci + build + lint green. Behaviour proof (Wright, local daemon built from the verified tree, driven entirely through the shipped gm binary): health SERVING 0.19.0 exit 0; handshake exit 0 with the session file at mode 0600 and neither the session key nor the seed in stdout; evaluate TOOL_CALL -> ALLOW exit 0 with the proof envelope saved; verify -> valid exit 0; one flipped payload byte -> valid=false exit 1; audit lists the evaluation with the chain verified; evaluate with no session file -> exit 2 with empty stdout; simulate CODE_EXECUTE -> BLOCK verdict in JSON exit 0 and its proof verifies VALID; a real evaluate of CODE_EXECUTE -> BLOCK verdict in JSON exit 0 (verdict-stage block); health against an unreachable endpoint -> exit 2 with empty stdout.
 
 ### Gate Verdict
-Gate verdict: PENDING — Wright stamps at ship.
+Gate verdict: PASS WITH FINDINGS — Release Gate 2026-11-08 (guardian-mesh-wo18-cli-2026-11-08). Findings: F1 (High, FIXED in the Wright carry) the lane's gm did not compile — build.rs generated server-only stubs, an ambiguous vk encode call, one unused import; fixed on the PR (build_client(true), the sealed_envelope encode idiom, the import) with the full suite green after; F2 (Low, open) evaluate's stdout does not name the proof file it wrote; F3 base-image tags float (low, standing). GMSI-124 filed (operator-surface smoke proof).
 
 ## [0.18.0] - 2026-11-07
 

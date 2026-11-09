@@ -26,8 +26,8 @@ export const RELEASES: Release[] = [
       "HONESTY BOUNDARY: this is a client of the existing single-node daemon - it adds no new verdict capability, no clustering, no daemon-logic changes, and the CLI holds no policy authority; it asks the daemon like any other client",
       "Also NOT in this release: CC-5 MCP surface remains target; no TEE attestation or external anchoring (designed, not built); no forced routing (CM-4)"
     ],
-    gateVerdict: "PENDING",
-    tests: "NOT RUN by the build lane — Wright verifies independently",
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-11-08 (guardian-mesh-wo18-cli-2026-11-08)",
+    tests: "246/246 cargo (Wright-verified 2026-11-08) + conformance_ 13/13; WebUI ci+build+lint green; behaviour proof through the shipped gm binary against a local daemon: health SERVING, handshake (session file 0600, no secret in stdout), evaluate ALLOW + proof saved, verify VALID, tampered proof invalid (exit 1), audit chain verified, no-session and unreachable-endpoint legs exit 2 with empty stdout, simulate and real BLOCK verdicts in JSON (exit 0)",
     status: "Release candidate"
   },
   {
