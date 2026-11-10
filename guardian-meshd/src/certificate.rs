@@ -173,6 +173,7 @@ impl CertificateRegistry {
         evidence_scope: String,
         tests: Tests,
         policy: String,
+        pf_outcomes: Option<String>,
         signing_key: &SigningKey<MlDsa65>,
     ) -> Result<IssuanceResult, String> {
         // Enforce evidence size cap
@@ -280,7 +281,7 @@ impl CertificateRegistry {
             evidence_scope: evidence_scope.clone(),
             tests: tests.clone(),
             policy: policy.clone(),
-            pf_outcomes: None,
+            pf_outcomes: pf_outcomes.clone(),
             issued_at,
             supersedes: superseded_serial.clone(),
         };
@@ -312,7 +313,7 @@ impl CertificateRegistry {
             evidence_scope,
             tests,
             policy,
-            pf_outcomes: None,
+            pf_outcomes,
             issued_at,
             supersedes: superseded_serial,
             fingerprint: fingerprint.clone(),
@@ -490,6 +491,7 @@ mod tests {
                     total: 10,
                 },
                 "gate-v1.0".to_string(),
+                None,
                 &sk,
             )
             .unwrap();
@@ -534,6 +536,7 @@ mod tests {
                     total: 1,
                 },
                 "gate".to_string(),
+                None,
                 &sk,
             )
             .unwrap();
@@ -573,6 +576,7 @@ mod tests {
                     total: 5,
                 },
                 "gate".to_string(),
+                None,
                 &sk,
             )
             .unwrap();
@@ -597,6 +601,7 @@ mod tests {
                     total: 1,
                 },
                 "gate".to_string(),
+                None,
                 &sk,
             )
             .unwrap();
@@ -640,6 +645,7 @@ mod tests {
                     total: 10,
                 },
                 "gate-v1".to_string(),
+                None,
                 &sk,
             )
             .unwrap();
@@ -667,6 +673,7 @@ mod tests {
                     total: 20,
                 },
                 "gate-v2".to_string(),
+                None,
                 &sk,
             )
             .unwrap();
@@ -713,6 +720,7 @@ mod tests {
                     total: 1,
                 },
                 "gate".to_string(),
+                None,
                 &sk,
             )
             .unwrap();
@@ -775,6 +783,7 @@ mod tests {
                     total: 1,
                 },
                 "gate".to_string(),
+                None,
                 &sk,
             )
             .unwrap();
@@ -820,6 +829,7 @@ mod tests {
                 total: 1,
             },
             "gate".to_string(),
+            None,
             &sk,
         );
 
@@ -855,6 +865,7 @@ mod tests {
                     total: 5,
                 },
                 "gate".to_string(),
+                None,
                 &sk,
             )
             .unwrap();
@@ -920,6 +931,7 @@ mod tests {
                     total: 5,
                 },
                 "gate".to_string(),
+                None,
                 &sk,
             )
             .unwrap();
@@ -942,5 +954,136 @@ mod tests {
         // Verify chain integrity
         let verification = vault.verify_chain(&audit_log);
         assert!(verification.verified, "Audit chain must verify after certificate event");
+    }
+
+    // WO-19: pf_outcomes wiring tests
+
+    #[test]
+    fn pf_outcomes_populated_in_sealed_and_stored() {
+        let dir = tempfile::tempdir().unwrap();
+        let (sk, vk) = generate_keypair();
+        let vault = Arc::new(VaultEnclave::new(1000, dir.path().join("aud")));
+        let registry =
+            CertificateRegistry::new(dir.path().join("reg"), vault, &vk)
+                .unwrap();
+
+        let evidence = b"test evidence";
+        let hash = hex::encode(Sha256::digest(evidence));
+        let pf_outcomes_value = "PF-1:passed=2,failed=0".to_string();
+
+        let result = registry
+            .issue_certificate(
+                "prod".to_string(),
+                "1.0".to_string(),
+                "PASS".to_string(),
+                evidence,
+                &hash,
+                "working-tree".to_string(),
+                Tests {
+                    passed: 5,
+                    failed: 0,
+                    total: 5,
+                },
+                "gate".to_string(),
+                Some(pf_outcomes_value.clone()),
+                &sk,
+            );
+        // Match instead of unwrap: unwrap's panic path Debug-formats the
+        // result of a key-handling call, which CodeQL flags as cleartext
+        // logging of sensitive information. Static message only.
+        let result = match result {
+            Ok(r) => r,
+            Err(_) => panic!("certificate issuance errored in pf_outcomes test"),
+        };
+
+        match result {
+            IssuanceResult::Issued {
+                serial,
+                fingerprint,
+                certificate,
+            } => {
+                // Parse the sealed payload as JSON
+                let payload_json: serde_json::Value = 
+                    serde_json::from_slice(&certificate.payload)
+                        .expect("sealed payload must be valid JSON");
+
+                // Verify pf_outcomes is present with the exact value
+                assert_eq!(
+                    payload_json.get("pf_outcomes").and_then(|v| v.as_str()),
+                    Some(pf_outcomes_value.as_str()),
+                    "sealed payload must contain pf_outcomes with exact value"
+                );
+
+                // Verify fingerprint equals hex(SHA-256(payload bytes))
+                let computed_fingerprint = hex::encode(Sha256::digest(&certificate.payload));
+                assert_eq!(
+                    fingerprint, computed_fingerprint,
+                    "fingerprint must equal hex(SHA-256(payload bytes))"
+                );
+
+                // Verify the stored certificate body carries the same value
+                let (status, body) = registry.get_status(&serial);
+                assert_eq!(status, CertificateStatus::Active);
+                let body = body.expect("certificate body must exist");
+                assert_eq!(
+                    body.pf_outcomes,
+                    Some(pf_outcomes_value),
+                    "stored certificate body must carry pf_outcomes"
+                );
+            }
+            IssuanceResult::Refused(_) => panic!("Expected issuance, got refusal"),
+        }
+    }
+
+    #[test]
+    fn pf_outcomes_none_omits_field() {
+        let dir = tempfile::tempdir().unwrap();
+        let (sk, vk) = generate_keypair();
+        let vault = Arc::new(VaultEnclave::new(1000, dir.path().join("aud")));
+        let registry =
+            CertificateRegistry::new(dir.path().join("reg"), vault, &vk)
+                .unwrap();
+
+        let evidence = b"test evidence";
+        let hash = hex::encode(Sha256::digest(evidence));
+
+        let result = registry
+            .issue_certificate(
+                "prod".to_string(),
+                "1.0".to_string(),
+                "PASS".to_string(),
+                evidence,
+                &hash,
+                "working-tree".to_string(),
+                Tests {
+                    passed: 5,
+                    failed: 0,
+                    total: 5,
+                },
+                "gate".to_string(),
+                None,
+                &sk,
+            );
+        // Match instead of unwrap (see pf_outcomes_populated_in_sealed_and_stored).
+        let result = match result {
+            Ok(r) => r,
+            Err(_) => panic!("certificate issuance errored in pf_outcomes test"),
+        };
+
+        match result {
+            IssuanceResult::Issued { certificate, .. } => {
+                // Parse the sealed payload as JSON
+                let payload_json: serde_json::Value = 
+                    serde_json::from_slice(&certificate.payload)
+                        .expect("sealed payload must be valid JSON");
+
+                // Verify pf_outcomes key does NOT exist (skip_serializing_if behaviour)
+                assert!(
+                    !payload_json.as_object().unwrap().contains_key("pf_outcomes"),
+                    "sealed payload must NOT contain pf_outcomes key when None (byte-compatibility with pre-0.21.0)"
+                );
+            }
+            IssuanceResult::Refused(_) => panic!("Expected issuance, got refusal"),
+        }
     }
 }

@@ -79,7 +79,7 @@ The certificate body is a JSON object with the following fields (in canonical or
   - **`failed`**: number of tests that failed
   - **`total`**: total number of tests run (`passed + failed` in most cases)
 - **`policy`**: The gate version string (e.g., `"gate-v1.2.0"`) naming the policy under which the verdict was issued.
-- **`pf_outcomes`**: OPTIONAL in v1. Reserved for GMSI-7 (measured per-rule Protocol Firewall outcomes once WO-19 lands). Until then, this field is `null` and MUST NOT carry placeholder or constant values. Future versions will populate this field with the daemon's measured PF pass/fail counts at issuance time.
+- **`pf_outcomes`**: OPTIONAL. Populated at issuance time (as of v0.21.0, WO-19/GMSI-7) with the daemon's measured per-rule Protocol Firewall outcomes in the canonical format `RULE:passed=<n>,failed=<n>` joined by `;` (e.g., `"PF-1:passed=10,failed=0;PF-14:passed=5,failed=2"`). Rules appear in lexicographic order (BTreeMap order). The value is taken from the live counters at the moment of issuance. When no PF outcomes have been measured yet on the daemon, this field is `null`. It MUST NOT ever carry placeholder or constant values.
 - **`issued_at`**: Issuance timestamp as Unix seconds (not nanoseconds; this is a coarser-grained timestamp than the envelope's `timestamp` field).
 - **`supersedes`**: The serial of the certificate this one supersedes, or `null` if this is the first certificate for the product. When a new certificate is issued for a product, the previous ACTIVE certificate's serial is recorded here, and that certificate's status transitions to SUPERSEDED.
 
@@ -199,3 +199,4 @@ A certificate that passes all three checks is valid. A certificate that fails an
 ## Version History
 
 - **v1** (2026-10-19, WO-6): Initial schema. `pf_outcomes` reserved but not populated.
+- **2026-11-10** (WO-19, GMSI-7, v0.21.0): `pf_outcomes` populated with measured per-rule Protocol Firewall outcomes at issuance time. Schema version remains 1 (populating a reserved field is its reserved use).

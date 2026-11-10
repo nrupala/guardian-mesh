@@ -6,6 +6,23 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-10
+
+### Added
+- **WO-19 completion: GMSI-7 pf_outcomes wiring.** Certificates now carry the daemon's measured per-rule Protocol Firewall pass/fail counts at issuance time, never constants. The `pf_outcomes` field is populated with the live counters in canonical format (`RULE:passed=<n>,failed=<n>` joined by `;`), or `null` when no outcomes have been measured yet. Schema version stays 1 (populating a reserved field is its reserved use).
+  - **`guardian-meshd/src/protocol_firewall.rs`**: new method `pf_outcomes_string()` on `ProtocolFirewall` returns `None` when `rule_counters()` is empty, otherwise returns the counters in BTreeMap-sorted order as the canonical string. Unit tests verify fresh firewall returns `None` and the exact canonical format after recording outcomes.
+  - **`guardian-meshd/src/certificate.rs`**: `issue_certificate` gains parameter `pf_outcomes: Option<String>` placed after `policy` and before `signing_key`. Used in both the `CertificateBodyForSealing` construction (with `skip_serializing_if` for byte-compatibility with pre-0.21.0 certificates) and the stored `Certificate`. All existing test call sites updated to pass `None`. Two new tests: one verifies populated `pf_outcomes` appears in the sealed payload JSON with the exact value and the stored certificate body carries it; the other verifies `None` omits the key entirely from the sealed JSON.
+  - **`guardian-meshd/src/main.rs`**: the `issue_certificate` gRPC handler computes `let pf_outcomes = self.firewall.pf_outcomes_string();` and passes it to certificate issuance. No other handler changes.
+  - **`specs/CERTIFICATE_SCHEMA.md`**: `pf_outcomes` field description updated to document the populated behaviour (measured outcomes in canonical format at issuance time, `null` when nothing measured, never constants). Schema history entry added for 2026-11-10 noting the populated behaviour. Example certificate remains `null` (fresh-daemon case).
+  - Version bumped `0.20.0` → `0.21.0` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md` updated date, `deploy/edge/docker-compose.yaml` image tag, `webui/src/data/releases.ts` new 0.21.0 entry).
+- **HONESTY BOUNDARY**: certificates now carry measured PF outcomes of the issuing daemon at issuance time; `null` when nothing measured; never constants. This does not change what a certificate certifies — the binding of verdict to evidence.
+- **NOT in this release**: Part D work orders WO-30/WO-22/WO-20 (cluster work) remain target; no clustering; no new dependencies; no proto changes; no changes to eviction, Health, Gatekeeper, or policy code beyond the three source files named above.
+
+### Tests and Gate Verdict
+Tests: Wright, independent, fresh checkout of PR #102 head, 2026-11-10: cargo test 261/261 (158 lib + 86 daemon bin + 11 gm-mcp + 6 gm; conformance subset 13/13 included); WebUI npm ci + build + lint clean, check:releases green. Wire proof 18/18 against a local daemon built from the verified tree: a certificate from an unmeasured daemon carries no pf_outcomes; after 3 real gm evaluates (Health 9 rules x passed=3, totals 27/27) the next certificate's sealed pf_outcomes equals the Health counters exactly; fingerprint recompute, ML-DSA-65 verification, supersession and tamper legs pass.
+
+Gate verdict: PASS WITH FINDINGS — Release Gate 2026-11-10 (guardian-mesh-wo19-pf-2026-11-10): F1 = GMSI-135 (repo-root Python client stubs stale, predate the WO-19 Health fields; daemon/gm/gm-mcp/WebUI clients all generate from the current proto). Standing NOT RUN: cargo audit (tool absent), Kali/Arch benches, ceiling enforcement (GMSI-122).
+
 ## [0.20.0] - 2026-11-09
 
 ### Added

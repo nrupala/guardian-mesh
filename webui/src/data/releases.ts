@@ -13,6 +13,21 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.21.0",
+    date: "2026-11-10",
+    summary: "WO-19 completion: GMSI-7 pf_outcomes wiring - certificates now carry the daemon's measured per-rule Protocol Firewall pass/fail counts at issuance time, never constants.",
+    highlights: [
+      "guardian-meshd/src/protocol_firewall.rs adds pf_outcomes_string() returning measured counters in canonical format (RULE:passed=<n>,failed=<n> joined by ;) or None when empty",
+      "guardian-meshd/src/certificate.rs issue_certificate gains pf_outcomes parameter (after policy, before signing_key); used in both CertificateBodyForSealing and stored Certificate",
+      "guardian-meshd/src/main.rs issue_certificate gRPC handler computes pf_outcomes = self.firewall.pf_outcomes_string() and passes it to certificate issuance",
+      "specs/CERTIFICATE_SCHEMA.md updated: pf_outcomes now populated at issuance time with measured outcomes in canonical format; null when no outcomes measured; schema version stays 1 (populating a reserved field)",
+      "HONESTY BOUNDARY: certificates now carry measured PF outcomes of the issuing daemon at issuance time; null when nothing measured; never constants; this does not change what a certificate certifies (the binding of verdict to evidence)"
+    ],
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-11-10 (guardian-mesh-wo19-pf-2026-11-10): F1 = GMSI-135 (repo-root Python client stubs stale). Standing NOT RUN: cargo audit, benches, ceiling enforcement (GMSI-122).",
+    tests: "cargo test 261/261 + conformance_ 13/13, WebUI ci/build/lint green, wire proof 18/18 (unmeasured cert omits pf_outcomes; measured cert's sealed pf_outcomes == Health counters) — Wright-verified 2026-11-10",
+    status: "Release candidate"
+  },
+  {
     version: "0.20.0",
     date: "2026-11-09",
     summary: "WO-18 profile 4: CC-5 MCP server surface - the new gm-mcp binary is a stdio MCP server that is an ordinary client of the existing single-node daemon, exposing health, evaluate/simulate, proof verification and audit as four MCP tools with in-memory sessions and fail-closed evaluate behaviour.",
