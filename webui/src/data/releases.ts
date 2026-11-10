@@ -13,6 +13,25 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.20.0",
+    date: "2026-11-09",
+    summary: "WO-18 profile 4: CC-5 MCP server surface - the new gm-mcp binary is a stdio MCP server that is an ordinary client of the existing single-node daemon, exposing health, evaluate/simulate, proof verification and audit as four MCP tools with in-memory sessions and fail-closed evaluate behaviour.",
+    highlights: [
+      "guardian-meshd/src/bin/gm-mcp.rs adds gm-mcp, a newline-delimited JSON-RPC 2.0 stdio MCP server with initialize version negotiation, notifications, ping, tools/list and tools/call; stdout carries protocol messages only and diagnostics go to stderr",
+      "Four tools: guardian_health (the gm health field set), guardian_evaluate (required action_type/context/target, optional metadata and simulate; returns the gm evaluate output plus a proof_envelope in the exact proof-file JSON shape), guardian_verify (rebuilds the proto envelope and calls VerifyProof) and guardian_audit (ReadAuditLog; limit truncates the printed entries client-side only)",
+      "Sessions are lazy and in-memory only: the first evaluate opens a handshake as gm-mcp, the session id/key/seed/TTL are cached, an expired session is re-handshaked before the call, and a session error triggers one re-handshake and one retry; the session key and seed are never written to stdout, stderr, a file or a tool result",
+      "guardian_evaluate fails closed: an unreachable daemon or transport failure returns isError=true stating that NO verdict was issued and the caller MUST treat the action as BLOCK, and the server keeps answering later requests (a following ping still returns a result)",
+      "Unit tests in gm-mcp.rs need no daemon and cover initialize negotiation, the exact four-tool catalogue with schemas, JSON-RPC -32601/-32700/-32600 errors, missing action_type and bad proof hex as tool errors naming the field, and proof-envelope round-trips",
+      "docs/MCP.md documents what gm-mcp is and is not, build/run, GM_ENDPOINT/GM_TENANT configuration, a generic MCP stdio client entry, the tool catalogue and result shapes, session handling, fail-closed behaviour, the GMSI-124 smoke proof and explicit non-claims",
+      "scripts/smoke.sh and scripts/smoke_mcp.py (GMSI-124, test scaffolding only) prove the operator surfaces: nine smoke legs including gm health/handshake/evaluate/verify/audit, a tampered-proof verify, an unreachable-endpoint exit code, live MCP tool calls and the MCP fail-closed legs",
+      "HONESTY BOUNDARY: this is a client surface of the existing daemon - no new verdict capability, no daemon changes, no clustering (WO-16 DC-1/DC-3 remain open), no TEE attestation and no external anchoring (designed, not built), and NOT forced routing (CM-4): an agent framework must choose to call the tools",
+      "Also NOT in this release: no new dependencies, no clustering and no daemon behaviour change; client access remains the existing proto/gRPC API and the gm CLI"
+    ],
+    gateVerdict: "Wright verification pending",
+    tests: "Wright verification pending",
+    status: "Release candidate"
+  },
+  {
     version: "0.19.0",
     date: "2026-11-08",
     summary: "WO-18 profile 3: operator CLI (CC-4) - the gm binary is an operator client of the existing single-node daemon, with handshake, evaluate/simulate, verify and audit subcommands over gRPC, plus honest documentation of its session and proof files, exit codes and non-claims.",
