@@ -880,5 +880,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-10T01:33:00-06:00",
     "message": "Merge pull request #101 from nrupala/wright/pack-ledger-wo18mcp-20261109"
+  },
+  {
+    "release": 103,
+    "tag": "release/v103",
+    "previous_tag": "release/v102",
+    "sha": "003524e1b950f35758c3553adebc282233bd5dbf",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-10T14:08:41-06:00",
+    "message": "Merge PR #102: WO-19 completion \u2014 measured pf_outcomes in certificates (GMSI-7), v0.21.0"
   }
 ]
