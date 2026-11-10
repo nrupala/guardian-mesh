@@ -521,6 +521,12 @@ and none becomes a gate MUST until behaviour-proven here.
   WO-6 certificates carry the daemon's measured per-rule PF
   pass/fail counts, never constants (WO-2 gate finding F2). The
   measurement itself is WO-19 (Health counters + session eviction).
+  CLOSED 2026-11-10 (WO-19 completion, v0.21.0): issuance now
+  snapshots the live counters into the sealed certificate body
+  (canonical `RULE:passed=<n>,failed=<n>` string; null when
+  nothing measured — never constants). Proven on the wire twice:
+  local proof 18/18 and the production certificate's sealed
+  pf_outcomes equal to the production Health counters exactly.
 - **GMSI-8 — Transport floor proof.** Filed seven times in one day
   (aimlds M1, Conduit filings F-R1, codetopo F-R1, FareSutra,
   LetsAskIt N1, KalaBodha, thinkwithfinance M3): GM must prove, per
@@ -1490,6 +1496,19 @@ until behaviour-proven here.
   (scripts/smoke.sh, 9/9 in the v0.20.0 gate). Absorbing this
   input means the panel legs join the same in-repo suite,
   driven against the served panel in a real browser.
+
+- **GMSI-135 — Repo-root Python client stubs are stale.**
+  (WO-19 completion gate, 2026-11-10.) The repo-root
+  `guardian_mesh_pb2.py` predates the WO-19 (v0.8.5) Health
+  fields — it carries no `protocol_firewall_rule_counters`
+  (0 references vs 5 in the WebUI's generated TS), so any
+  Python wire client built on it silently lacks the measured
+  counters this release exists to bind. Absorbing this input
+  means the root stubs are regenerated from
+  `guardian-meshd/proto/guardian_mesh.proto` (or generated in
+  CI, or the stale file is removed and the generation route
+  documented). The daemon, gm, gm-mcp and WebUI clients all
+  generate from the current proto and are unaffected.
 
 ## Development home and engine routing
 
@@ -2973,4 +2992,83 @@ DC-1/DC-3.
 Guardian Mesh Spec Inputs filed by this run: GMSI-125..133
 (2026-11-09 Conduit gate rounds, via the refresh PR) and
 GMSI-134 (panel-action smoke proof), recorded in Part B
+above.
+- 2026-11-10 (daytime) — **WO-19 COMPLETE as v0.21.0**
+  (PR #102, merged 003524e1; daytime instance of the nightly
+  program, owner-directed "Continue"): the WO-19 completion
+  slice — GMSI-7 pf_outcomes wiring. Note on work-order
+  determination: the pack's 2026-11-09 "Next: WO-19" line
+  named work this same pack records as SHIPPED 2026-10-24
+  (v0.8.5, eviction + Health counters); that entry's own
+  named follow-up — wiring the measured counters into WO-6
+  certificates (GMSI-7) — is what this run built. Built on
+  the laptop lane (claude-sonnet-4-5, commit 51a8d557 tree
+  1f5c1ecd); carried by Wright (git-data API, tree equality
+  asserted) as 229797f1 + verification stamp 2f44f850.
+  Change: ProtocolFirewall::pf_outcomes_string() (None on
+  empty counters; canonical BTreeMap-ordered string),
+  issue_certificate pf_outcomes parameter sealed + stored,
+  IssueCertificate handler snapshot; schema doc updated,
+  schema_version stays 1 (reserved-field population);
+  pf_outcomes=None omits the field (pre-0.21.0 payload
+  shape preserved). Wright independent verification (fresh
+  checkout, never the lane's numbers): cargo 261/261 (257
+  baseline + 4 new), conformance_ 13/13, WebUI ci/build/
+  lint + check:releases green. Wire proof 18/18 against a
+  local daemon from the verified tree: unmeasured-daemon
+  certificate carries NO pf_outcomes; after 3 real gm
+  evaluates the next certificate's sealed pf_outcomes
+  equals the Health counters exactly; fingerprint,
+  ML-DSA-65, supersession, tamper legs pass. Gate (pack
+  guardian-mesh-wo19-pf-2026-11-10): scanner PASS (0/0/0);
+  verdict PASS WITH FINDINGS — F1 = GMSI-135 filed (stale
+  repo-root Python stubs); F2 CodeQL 2 new cleartext-
+  logging alerts in the new certificate tests (panic-path
+  formatting of issuance results), fixed in-run by Wright
+  (match-binding + static panic messages; assertions
+  unchanged; pattern for future lanes: certificate tests
+  never format issuance results/reasons into panics);
+  final head 396f527f all checks green incl. CodeQL.
+  Production v0.21.0 live 2026-11-10: binary sha256
+  715092644689afb9df71e874bdf1a127821e52fee974af66b87
+  d22c3d06723eb (cross-built from merged main), backup
+  .bak-v0200 taken, both services active; box E2E 15/16
+  (sole miss the standing stale Health-fields harness
+  expectation — gm-deploy therefore stopped at NOT
+  certified and certification proceeded on direct
+  production proof, per standing practice). Direct proof
+  (box client): Health SERVING 0.21.0@003524e1, binary sha
+  match, degraded=false, fingerprint == pin dd2cf1a3…;
+  cert-20261110-000051 ACTIVE (a first issuance,
+  cert-20261110-000050, completed server-side during a
+  proof-client parse crash — multi-byte protobuf tag —
+  and was superseded by 000051; both carry identical
+  verdict/evidence): 000051's sealed pf_outcomes equals
+  the production Health counters exactly (9 rules,
+  incl. failures: PF-1 125/1 … POLICY_RATE 104/15;
+  totals 1061/1083), evidence = gate verdict sha256
+  fdb873a494…; VerifyProof VALID. Attestation installed
+  /opt/guardian-mesh/guardian-meshd-0.21.0.attestation.json,
+  gm-attest verify VALID, signer == pin. Public
+  unauthenticated 302; Pages parity: box-served asset ==
+  merged build asset == GitHub Pages asset
+  (index-DTZk_2JI.js). PR Gate failure on the merge push
+  is the require-pr job asserting PR context on a push —
+  structural, passed on the PR itself. Tooling findings
+  for the gm-deploy route: its --source build step is
+  broken (shell=False on a `cd … && …` string — use
+  --binary with a Wright-built binary), and cargo-zigbuild
+  needs ~/.cargo/bin + the zig dir on PATH. NOT RUN
+  (standing): cargo audit (tool absent), Kali/Arch
+  benches, ceiling enforcement (GMSI-122), authenticated
+  panel click-through (GMSI-134). v0.21.0 is a RELEASE
+  CANDIDATE (one-week soak; graduates 2026-11-17).
+  GMSI-7 CLOSED by this run. **WO-19 is CLOSED.** Next:
+  WO-30 (P1, docs-only threat model) heads Part D, then
+  WO-22, WO-20 in pack order; WO-17 stays open for the
+  cluster chaos + CM-8 extensions (WO-27); WO-16 stays
+  open for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-135
+(repo-root Python client stubs stale), recorded in §7
 above.
