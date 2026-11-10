@@ -321,6 +321,41 @@ merged build == Pages asset, site 302. RC soak to
 2026-11-15. WO-18 stays OPEN; the next run takes profile 4
 (CC-5 MCP server surface) — the last WO-18 profile.
 
+Status 2026-11-09: **profile 4 (CC-5 MCP server surface)
+SHIPPED as v0.20.0 — WO-18 COMPLETE.** PR #100 merged
+6f107e4f55ef882414c74ff53a50b4a019d26cb5. The `gm-mcp` binary
+(guardian-meshd/src/bin/gm-mcp.rs, no new dependencies) is a
+stdio MCP server (newline-delimited JSON-RPC 2.0) and an
+ordinary client of the existing daemon: four tools
+(guardian_health / guardian_evaluate / guardian_verify /
+guardian_audit), in-memory lazy handshake sessions with TTL
+and one re-handshake/retry (session key + seed never printed,
+logged or written), fail-closed evaluate (no answer =
+isError stating no verdict was issued; treat as BLOCK; the
+server keeps serving). docs/MCP.md documents the surface and
+its non-claims; docs/CLI.md's two "MCP not built" sentences
+updated. **GMSI-124 absorbed for the CLI + MCP surfaces**:
+scripts/smoke.sh + scripts/smoke_mcp.py are in-repo (9 legs;
+9/9 in Wright's verification). Gate PASS WITH FINDINGS
+(guardian-mesh-wo18-mcp-2026-11-09): F1 (Low, process; FIXED
+in-run) the laptop lane's git push failed — the fresh clone
+carries no GitHub credentials — so Wright carried the push
+via bundle + git-data API with the pushed tree proven
+identical to the lane's commit tree (41ce166c, modes
+included); F2 base-image tags float (low, standing). NO code
+findings — the lane's code compiled and passed as written.
+Production v0.20.0 live 2026-11-09: build 0.20.0@6f107e4f,
+binary sha256 0503ce5d... == installed == attested,
+attestation VALID signer == pin dd2cf1a3..., self-cert
+cert-20261110-000049 ACTIVE, box E2E 15/16 (PF-18 PASS
+100/15/0), **gm-mcp itself proven against the production
+daemon on the box** (live legs 6/6 via the shipped smoke
+driver: initialize, tools/list, health, evaluate ALLOW,
+verify VALID, audit), box dist asset == merged build ==
+Pages asset, site 302. RC soak to 2026-11-16. **WO-18 is
+CLOSED — all four profiles shipped (DP-3 v0.17.0, DP-6
+v0.18.0, CC-4 v0.19.0, CC-5 v0.20.0).**
+
 ## Part D — Work orders from the v3.1 amendment (2026-10-15)
 
 Owner-directed the same day as v3.0: the product boundary charter
@@ -1446,6 +1481,15 @@ until behaviour-proven here.
   gate, 2026-11-09.) GM must watch the top-up path: attempts
   per key per day never exceed the configured cap, including
   failure storms.
+
+- **GMSI-134 — Panel-action smoke proof.** (WO-18 MCP gate,
+  2026-11-09.) The last unabsorbed surface of GMSI-124: the
+  WebUI panel's live actions (handshake, evaluate, verify,
+  audit view) still have no in-repo repeatable smoke a gate
+  run can execute; the CLI and MCP surfaces now carry theirs
+  (scripts/smoke.sh, 9/9 in the v0.20.0 gate). Absorbing this
+  input means the panel legs join the same in-repo suite,
+  driven against the served panel in a real browser.
 
 ## Development home and engine routing
 
@@ -2825,4 +2869,108 @@ for DC-1/DC-3.
 Guardian Mesh Spec Inputs filed by this run: GMSI-123
 (auth-callback outcome counters, via the refresh PR) and
 GMSI-124 (operator-surface smoke proof), recorded in Part B
+above.
+
+WO-18 profile 4 run (2026-11-09, fourteenth nightly entry):
+WO-18 profile 4 (CC-5 MCP server surface) built, verified,
+gated and shipped as v0.20.0 — WO-18 COMPLETE. Sources: main
+at run start c7336781, identical to the 2026-11-08 ledger
+merge; open PRs none; open issues none. Gate filings since
+2026-11-08: eight packs dated 2026-11-09, grep-verified —
+four Conduit packs carried nine Guardian Mesh Spec Inputs
+(buyerfix 2, buyerfix2 2, buyerfix3 1, conduit-credits 4);
+the gate-agent and axiomcode packs filed none. Filed as
+GMSI-125..133 by pack-refresh draft PR #99 (one-file diff
+verified, 59 lines), merged 1601ba77; pack read-back on main:
+blob a9a8789c == pushed blob, 157,828 B.
+Build: laptop ONLINE (OpenCode 1.19.5; the lane ran via the
+fdroid-venv python after the VM refresh dropped system
+paramiko); fresh clone D:\guardian-mesh-work\wo18mcp at
+1601ba77, branch wright/wo18-mcp-profile. Lane run 1 died
+~10 min in on a lane TLS error (EPROTO) after writing
+gm-mcp.rs (1,048 lines) and the Cargo.toml bump. Run 2
+reviewed both, completed the remaining deliverables
+(docs/MCP.md, scripts/smoke.sh + smoke_mcp.py, version
+surfaces, CHANGELOG, CLI.md sentences, RESULT) and committed
+b7d3ae6 (11 files +2036/-8) — but its git push FAILED: the
+fresh clone carries no GitHub credentials. Wright carried
+the push: bundle from the laptop, git-data API push, then a
+mode-fix commit restoring the two scripts' 100755 bits —
+final pushed tree 41ce166c == lane tree exactly, commit
+ca0f73e4 (gate F1, process class; a credentialed push route
+for fresh laptop clones is the structural fix owed).
+Wright verification (fresh checkout of the pushed tree):
+cargo test 257/257 (154 lib + 86 bin + 6 gm + 11 gm-mcp —
+the lane's code compiled and passed AS WRITTEN, contrast
+the 2026-11-08 compile carry), conformance_ 13/13, WebUI
+ci+build+lint green; scanner PASS (0 secrets / 0 vulns /
+0 must-gate). Behaviour proof: the in-repo GMSI-124 smoke
+(scripts/smoke.sh) against a local daemon built from the
+verified tree — 9/9 PASS; Wright's direct stdio probe:
+malformed line -> -32700 (id null) and the server continues,
+unknown method -> -32601, initialize echoes 2025-03-26 with
+serverInfo version 0.20.0, simulate evaluate -> ALLOW with
+the proof_envelope round-tripping into guardian_verify, one
+flipped payload byte -> valid=false, missing action_type ->
+isError naming the field, ping answers last. Deep review:
+exactly the 11 named files; no daemon source, no gm.rs, no
+main.rs touched; no new dependencies; session key/seed have
+no print/log path (three eprintln sites are startup/IO
+diagnostics); licence named "Apache License 2.0 plus the
+Payment Rider" (the word "unmodified" appears only inside
+the prohibition sentence in docs/MCP.md).
+Gate PASS WITH FINDINGS (guardian-mesh-wo18-mcp-2026-11-09):
+F1 lane push carry (above); F2 base-image tags float (low,
+standing). GMSI-134 filed (panel-action smoke — the last
+unabsorbed GMSI-124 surface). Verdict + counts stamped into
+CHANGELOG [0.20.0] and releases.ts before merge (commit
+1956b7fe); CI on the stamped head all green (PR Gate, Rust
+CI, WebUI CI, CodeQL Rust).
+Shipped: PR #100 merged 6f107e4f55ef882414c74ff53a50b4a019d26cb5.
+Cross-built aarch64 (cargo-zigbuild, GUARDIAN_MESH_GIT_COMMIT=
+6f107e4f): daemon sha256 0503ce5d..., gm c3afa235...,
+gm-mcp c866fd55.... gm-deploy --binary route: backup
+.bak-v0190 taken, both services active, box E2E 15/16 with
+PF-18 PASS (100/15/0); sole miss the standing stale
+Health-fields harness check (13th occurrence) — gm-deploy's
+"NOT certified" rests on that check alone, as in prior
+releases. Direct production proof: Health SERVING,
+fingerprint == pin dd2cf1a3..., degraded=false, node
+node-dd2cf1a350e0, build 0.20.0@6f107e4f, binary sha ==
+built == installed. Self-cert cert-20261110-000049 ACTIVE
+(evidence = gate verdict sha256 93478f4c...), superseding
+cert-20261109-000048. Attestation: statement built against a
+real clone at 6f107e4f with the cross-build Cargo.lock
+(0465d039...); signed on the box with the production key;
+ATTESTATION VALID, signer == pin; installed at
+/opt/guardian-mesh/guardian-meshd-0.20.0.attestation.json.
+gm AND gm-mcp proven against the production daemon on the
+box: gm health/handshake/evaluate ALLOW/verify VALID;
+gm-mcp live legs 6/6 via the shipped smoke driver. gm audit
+reports the standing F4 interleave (first break at entry
+557; live tail clean by design since v0.15.1). Pages parity:
+box dist asset index-Ckz33qtb.js == merged build == GitHub
+Pages asset; guardian.aimlds.org unauthenticated 302. RC
+entry filed; v0.20.0 in soak to 2026-11-16.
+Run incident (Wright's, disclosed): a `--version` probe
+against the installed daemon binary accidentally BOOTED a
+second daemon instance on the box (the binary has no
+--version flag) on a loopback ephemeral port; discovered
+within ~2 minutes and killed by PID; no writes from it
+appear in the production workspace (audit dir mtime predates
+it) and the production proof above is clean. Lesson filed:
+never probe the daemon binary with flags it does not have.
+Standing fodder carried: stale harness check; base-image
+digest pinning; the F4 production audit-history interleave
+(never rewritten, by design); the credentialed-push-route
+fix owed (F1). Next: WO-18 is CLOSED. The pack's next
+highest-priority unfinished work follows Part C/D order —
+WO-19 (firewall session eviction + measured Health
+counters) heads Part C; WO-17 stays open for the cluster
+chaos + CM-8 extensions (WO-27); WO-16 stays open for
+DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-125..133
+(2026-11-09 Conduit gate rounds, via the refresh PR) and
+GMSI-134 (panel-action smoke proof), recorded in Part B
 above.
