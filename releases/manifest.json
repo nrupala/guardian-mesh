@@ -871,5 +871,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-10T01:13:04-06:00",
     "message": "Merge pull request #100 from nrupala/wright/wo18-mcp-profile"
+  },
+  {
+    "release": 102,
+    "tag": "release/v102",
+    "previous_tag": "release/v101",
+    "sha": "dc05cfbef688e090e60855f362a055026afe0425",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-10T01:33:00-06:00",
+    "message": "Merge pull request #101 from nrupala/wright/pack-ledger-wo18mcp-20261109"
   }
 ]
