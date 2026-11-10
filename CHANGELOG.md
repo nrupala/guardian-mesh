@@ -19,9 +19,9 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **NOT in this release**: Part D work orders WO-30/WO-22/WO-20 (cluster work) remain target; no clustering; no new dependencies; no proto changes; no changes to eviction, Health, Gatekeeper, or policy code beyond the three source files named above.
 
 ### Tests and Gate Verdict
-Tests: Wright verification pending
+Tests: Wright, independent, fresh checkout of PR #102 head, 2026-11-10: cargo test 261/261 (158 lib + 86 daemon bin + 11 gm-mcp + 6 gm; conformance subset 13/13 included); WebUI npm ci + build + lint clean, check:releases green. Wire proof 18/18 against a local daemon built from the verified tree: a certificate from an unmeasured daemon carries no pf_outcomes; after 3 real gm evaluates (Health 9 rules x passed=3, totals 27/27) the next certificate's sealed pf_outcomes equals the Health counters exactly; fingerprint recompute, ML-DSA-65 verification, supersession and tamper legs pass.
 
-Gate verdict: Wright verification pending
+Gate verdict: PASS WITH FINDINGS — Release Gate 2026-11-10 (guardian-mesh-wo19-pf-2026-11-10): F1 = GMSI-135 (repo-root Python client stubs stale, predate the WO-19 Health fields; daemon/gm/gm-mcp/WebUI clients all generate from the current proto). Standing NOT RUN: cargo audit (tool absent), Kali/Arch benches, ceiling enforcement (GMSI-122).
 
 ## [0.20.0] - 2026-11-09
 

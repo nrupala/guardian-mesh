@@ -23,8 +23,8 @@ export const RELEASES: Release[] = [
       "specs/CERTIFICATE_SCHEMA.md updated: pf_outcomes now populated at issuance time with measured outcomes in canonical format; null when no outcomes measured; schema version stays 1 (populating a reserved field)",
       "HONESTY BOUNDARY: certificates now carry measured PF outcomes of the issuing daemon at issuance time; null when nothing measured; never constants; this does not change what a certificate certifies (the binding of verdict to evidence)"
     ],
-    gateVerdict: "Wright verification pending",
-    tests: "Wright verification pending",
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-11-10 (guardian-mesh-wo19-pf-2026-11-10): F1 = GMSI-135 (repo-root Python client stubs stale). Standing NOT RUN: cargo audit, benches, ceiling enforcement (GMSI-122).",
+    tests: "cargo test 261/261 + conformance_ 13/13, WebUI ci/build/lint green, wire proof 18/18 (unmeasured cert omits pf_outcomes; measured cert's sealed pf_outcomes == Health counters) — Wright-verified 2026-11-10",
     status: "Release candidate"
   },
   {
