@@ -987,8 +987,14 @@ mod tests {
                 "gate".to_string(),
                 Some(pf_outcomes_value.clone()),
                 &sk,
-            )
-            .unwrap();
+            );
+        // Match instead of unwrap: unwrap's panic path Debug-formats the
+        // result of a key-handling call, which CodeQL flags as cleartext
+        // logging of sensitive information. Static message only.
+        let result = match result {
+            Ok(r) => r,
+            Err(_) => panic!("certificate issuance errored in pf_outcomes test"),
+        };
 
         match result {
             IssuanceResult::Issued {
@@ -1057,8 +1063,12 @@ mod tests {
                 "gate".to_string(),
                 None,
                 &sk,
-            )
-            .unwrap();
+            );
+        // Match instead of unwrap (see pf_outcomes_populated_in_sealed_and_stored).
+        let result = match result {
+            Ok(r) => r,
+            Err(_) => panic!("certificate issuance errored in pf_outcomes test"),
+        };
 
         match result {
             IssuanceResult::Issued { certificate, .. } => {
