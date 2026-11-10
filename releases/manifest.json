@@ -889,5 +889,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-10T14:08:41-06:00",
     "message": "Merge PR #102: WO-19 completion \u2014 measured pf_outcomes in certificates (GMSI-7), v0.21.0"
+  },
+  {
+    "release": 104,
+    "tag": "release/v104",
+    "previous_tag": "release/v103",
+    "sha": "4cdb6e186bed40bfc8d3978a02715dba103f1548",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-10T14:21:54-06:00",
+    "message": "Merge PR #103: WO-19 ledger \u2014 v0.21.0 complete, GMSI-7 closed, GMSI-135 filed, Next WO-30"
   }
 ]
