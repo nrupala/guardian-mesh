@@ -1160,6 +1160,8 @@ impl GuardianMesh for GuardianMeshService {
             Status::invalid_argument("tests field is required")
         })?;
 
+        let pf_outcomes = self.firewall.pf_outcomes_string();
+
         let result = self.certificates.issue_certificate(
             req.product,
             req.version,
@@ -1173,6 +1175,7 @@ impl GuardianMesh for GuardianMeshService {
                 total: tests.total,
             },
             req.policy,
+            pf_outcomes,
             &self.signing_key,
         );
 

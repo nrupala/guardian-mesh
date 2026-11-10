@@ -168,6 +168,26 @@ impl ProtocolFirewall {
         })
     }
 
+    /// Serialize measured per-rule outcomes for certificate issuance (GMSI-7).
+    /// Returns None when no outcomes have been measured yet.
+    /// Otherwise returns the canonical format:
+    /// `RULE:passed=<n>,failed=<n>` joined by `;` in BTreeMap order.
+    pub fn pf_outcomes_string(&self) -> Option<String> {
+        let counters = self.rule_counters();
+        if counters.is_empty() {
+            return None;
+        }
+        
+        let parts: Vec<String> = counters
+            .iter()
+            .map(|(rule, counter)| {
+                format!("{}:passed={},failed={}", rule, counter.passed, counter.failed)
+            })
+            .collect();
+        
+        Some(parts.join(";"))
+    }
+
     /// Number of live per-session firewall states (for eviction proofs).
     pub fn session_count(&self) -> usize {
         let sessions = self.sessions.lock().unwrap();
@@ -700,5 +720,27 @@ mod tests {
         
         // Session count should be zero (peeks don't create session state)
         assert_eq!(pf.session_count(), 0);
+    }
+
+    // WO-19: pf_outcomes_string tests
+
+    #[test]
+    fn pf_outcomes_string_fresh_firewall_returns_none() {
+        let pf = ProtocolFirewall::new();
+        assert_eq!(pf.pf_outcomes_string(), None);
+    }
+
+    #[test]
+    fn pf_outcomes_string_canonical_format() {
+        let pf = ProtocolFirewall::new();
+        pf.record_rule("PF-1", true);
+        pf.record_rule("PF-1", true);
+        pf.record_rule("PF-12", false);
+        
+        // BTreeMap order: "PF-1" before "PF-12"
+        assert_eq!(
+            pf.pf_outcomes_string(),
+            Some("PF-1:passed=2,failed=0;PF-12:passed=0,failed=1".to_string())
+        );
     }
 }
