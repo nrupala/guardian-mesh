@@ -4,8 +4,9 @@ Guardian Mesh v0.19.0 adds WO-18 profile 3: the `gm` operator CLI. It is a
 client of the existing single-node daemon for operators and scripts, covering
 the handshake, evaluate, verify and audit operations named by CC-4.
 
-This release claims only WO-18 profile 3 (CC-4). The MCP surface (CC-5) is not
-part of it and remains target.
+This document covers WO-18 profile 3 (CC-4), shipped in v0.19.0. The MCP surface
+(CC-5) shipped in v0.20.0 as the separate `gm-mcp` binary; see
+[MCP](MCP.md).
 
 ## What the CLI is
 
@@ -309,8 +310,8 @@ as permission to act; read `verdict`.
 - **Client, not new capability.** `gm` is a client of the existing single-node
   daemon. It adds no verdict capability, no daemon logic and no clustering
   (WO-16 DC-1/DC-3 remain open).
-- **CC-5 MCP is not built.** The MCP surface remains target. This CLI is not an
-  MCP server.
+- **CC-5 MCP is a separate binary.** The MCP surface shipped in 0.20.0 as the
+  separate `gm-mcp` binary (see [MCP](MCP.md)); this CLI is not an MCP server.
 - **No policy authority.** The CLI does not decide, override or amend policy. It
   asks the daemon like any other client.
 - **No TEE attestation and no external anchoring.** Both are designed, not
