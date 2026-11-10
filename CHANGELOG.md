@@ -23,10 +23,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **NOT in this release**: no clustering; no daemon behaviour change; no new dependencies; no TEE attestation or external anchoring. Client access remains the existing proto/gRPC API and the `gm` CLI.
 
 ### Tests
-Wright verification pending
+Tests: cargo test (workspace root) 257/257 (154 lib + 86 bin + 6 gm + 11 gm-mcp) and cargo test conformance_ 13/13, Wright-verified 2026-11-09 on the PR head; WebUI npm ci + build + lint green. Behaviour proof (Wright, local daemon built from the verified tree): the in-repo GMSI-124 smoke scripts/smoke.sh passes 9/9 (gm health/handshake/evaluate TOOL_CALL -> ALLOW/verify valid/tampered verify exit 1/audit/health-unreachable exit 2, MCP live legs, MCP fail-closed legs); Wright's direct stdio probe: malformed line -> -32700 with the server continuing, unknown method -> -32601, initialize echoes 2025-03-26 (serverInfo 0.20.0), simulate evaluate -> ALLOW with proof_envelope round-trip, one flipped payload byte via guardian_verify -> valid=false, missing action_type -> isError naming the field, ping answers last.
 
 ### Gate Verdict
-Wright verification pending
+Gate verdict: PASS WITH FINDINGS — Release Gate 2026-11-09 (guardian-mesh-wo18-mcp-2026-11-09). Findings: F1 (Low, process; FIXED in-run) the laptop lane could not push (fresh clone has no GitHub credentials) — Wright carried the push via bundle + git-data API with the final tree proven identical to the lane's commit; F2 base-image tags float (low, standing). No code findings: the lane's code compiled and passed as written. GMSI-134 filed (panel-action smoke proof — the last unabsorbed GMSI-124 surface).
 
 ## [0.19.0] - 2026-11-08
 

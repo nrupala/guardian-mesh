@@ -27,8 +27,8 @@ export const RELEASES: Release[] = [
       "HONESTY BOUNDARY: this is a client surface of the existing daemon - no new verdict capability, no daemon changes, no clustering (WO-16 DC-1/DC-3 remain open), no TEE attestation and no external anchoring (designed, not built), and NOT forced routing (CM-4): an agent framework must choose to call the tools",
       "Also NOT in this release: no new dependencies, no clustering and no daemon behaviour change; client access remains the existing proto/gRPC API and the gm CLI"
     ],
-    gateVerdict: "Wright verification pending",
-    tests: "Wright verification pending",
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-11-09 (guardian-mesh-wo18-mcp-2026-11-09): F1 lane push carried by Wright (process, fixed in-run); F2 base-image tags float (standing). GMSI-134 filed.",
+    tests: "cargo test 257/257 + conformance_ 13/13, WebUI ci/build/lint green, in-repo smoke 9/9 + direct stdio protocol negatives — Wright-verified 2026-11-09",
     status: "Release candidate"
   },
   {
