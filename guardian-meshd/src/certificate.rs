@@ -1031,7 +1031,7 @@ mod tests {
                     "stored certificate body must carry pf_outcomes"
                 );
             }
-            IssuanceResult::Refused(reason) => panic!("Expected issuance, got refusal: {}", reason),
+            IssuanceResult::Refused(_) => panic!("Expected issuance, got refusal"),
         }
     }
 
@@ -1083,7 +1083,7 @@ mod tests {
                     "sealed payload must NOT contain pf_outcomes key when None (byte-compatibility with pre-0.21.0)"
                 );
             }
-            IssuanceResult::Refused(reason) => panic!("Expected issuance, got refusal: {}", reason),
+            IssuanceResult::Refused(_) => panic!("Expected issuance, got refusal"),
         }
     }
 }
