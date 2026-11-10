@@ -862,5 +862,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-10T00:24:34-06:00",
     "message": "Merge pull request #99 from nrupala/wright/pack-refresh-gmsi125-133-20261109"
+  },
+  {
+    "release": 101,
+    "tag": "release/v101",
+    "previous_tag": "release/v100",
+    "sha": "6f107e4f55ef882414c74ff53a50b4a019d26cb5",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-10T01:13:04-06:00",
+    "message": "Merge pull request #100 from nrupala/wright/wo18-mcp-profile"
   }
 ]
