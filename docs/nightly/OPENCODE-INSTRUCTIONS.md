@@ -1389,6 +1389,64 @@ do, and none becomes a gate MUST until behaviour-proven here.
   acceptance; RG-7 — the smoke proof is the surface's
   conformance slice.)
 
+GMSI-125…133 were filed by the release gate's 2026-11-09 Conduit
+rounds (packs: release-gate-runs/conduit-buyerfix-2026-11-09,
+conduit-buyerfix2-2026-11-09, conduit-buyerfix3-2026-11-09,
+conduit-credits-2026-11-09). They queue behind the Part A work
+orders exactly as GMSI-6…124 do, and none becomes a gate MUST
+until behaviour-proven here.
+
+- **GMSI-125 — Wedged dashboard reads must be observable.**
+  (Conduit buyerfix gate, 2026-11-09.) A dashboard read that can
+  wedge must be *observable*: the page should surface (and
+  ideally report) refresh failures rather than only wording
+  them — in the filed escape the only witness to the class was
+  the owner's own walk. GM must be able to prove a wedged read
+  becomes a visible, reported failure on the surface itself.
+- **GMSI-126 — Every primary card read settles with words.**
+  (Conduit buyerfix gate, 2026-11-09; the round's F-3.) The
+  single-shot dashboard calls left after the purchase-path fix
+  are the same wedge class on non-money cards: GM should be
+  able to prove "every primary card read settles with words"
+  across the whole page, not only the purchase path.
+- **GMSI-127 — No key material in post-sign-in dashboard reads.**
+  (Conduit buyerfix round-2 gate, 2026-11-09.) A served page's
+  credential choice is a release surface: GM should be able to
+  prove, for a stall-model network, that post-sign-in dashboard
+  reads carry no key material (the round-2 regression shape).
+- **GMSI-128 — Observability ON for live-walk-accepted surfaces.**
+  (Conduit buyerfix round-2 gate, 2026-11-09; the round's F-3.)
+  Production Workers Logs observability must be ON for any
+  surface whose acceptance evidence is a live walk — filed as a
+  gate checklist candidate: a buyer-leg escape was diagnosable
+  only because the code carried its own evidence; the log
+  window itself was dark.
+- **GMSI-129 — Liveness of awaited shared state.** (Conduit
+  buyerfix round-3 gate, 2026-11-09.) Any initialization
+  promise awaited on a request path must carry (a) a deadline,
+  (b) a degraded path that serves from the durable source, and
+  (c) a regression that wedges the source and proves requests
+  still complete. Probe candidate: wedge the registry store in
+  a staging isolate and assert authenticated reads complete
+  inside the deadline + one store read.
+- **GMSI-130 — Metered balance == signed ledger sum.** (Conduit
+  credits gate, 2026-11-09.) GM must be able to prove, for any
+  metered key: balance == signed ledger sum, at any instant,
+  from outside the gateway process.
+- **GMSI-131 — Refusal means zero provider egress.** (Conduit
+  credits gate, 2026-11-09.) GM must be able to prove a
+  `blocked_credits` refusal produced zero provider egress
+  (correlate the audit chain with provider-call telemetry).
+- **GMSI-132 — Webhook/grant correspondence.** (Conduit credits
+  gate, 2026-11-09.) GM must detect a Stripe webhook delivered
+  but ungranted (event seen at the edge, no ledger grant within
+  N minutes) and a grant with no corresponding webhook
+  (impossible by construction — prove it stays so).
+- **GMSI-133 — Top-up attempts cap watch.** (Conduit credits
+  gate, 2026-11-09.) GM must watch the top-up path: attempts
+  per key per day never exceed the configured cap, including
+  failure storms.
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
