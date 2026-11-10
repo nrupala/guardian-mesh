@@ -853,5 +853,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-09T01:39:53-06:00",
     "message": "Merge pull request #98 from nrupala/wright/ledger-wo18-cli-2026-11-08"
+  },
+  {
+    "release": 100,
+    "tag": "release/v100",
+    "previous_tag": "release/v99",
+    "sha": "1601ba7774f801a3846e0498ac9c71041e6fb999",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-10T00:24:34-06:00",
+    "message": "Merge pull request #99 from nrupala/wright/pack-refresh-gmsi125-133-20261109"
   }
 ]
