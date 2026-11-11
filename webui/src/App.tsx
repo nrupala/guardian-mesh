@@ -10,6 +10,8 @@ import { ArchitecturePage } from "./pages/ArchitecturePage"
 import { GuidePage } from "./pages/GuidePage"
 import { AgentsPage } from "./pages/AgentsPage"
 import { ReleasesPage } from "./pages/ReleasesPage"
+import { PrivacyPage } from "./pages/PrivacyPage"
+import { TermsPage } from "./pages/TermsPage"
 import { LoginPage } from "./pages/LoginPage"
 import { LIVE_MODE } from "./lib/gmClient"
 import { Setup2FAPage } from "./pages/Setup2FAPage"
@@ -36,6 +38,8 @@ export default function App() {
             <Route path="help" element={<GuidePage />} />
             <Route path="agents" element={<AgentsPage />} />
             <Route path="releases" element={<ReleasesPage />} />
+            <Route path="privacy" element={<PrivacyPage />} />
+            <Route path="terms" element={<TermsPage />} />
             <Route
               path="panel"
               element={
