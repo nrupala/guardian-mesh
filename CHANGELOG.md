@@ -6,6 +6,10 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+### Added
+- **WebUI: Privacy and Terms pages + operator footer (compliance fix, 2026-11-11).** The WebUI carried no privacy page, no terms page, and no footer naming the operator — a standing asset-compliance exception for guardian.aimlds.org, confirmed absent at the origin on 2026-11-09 (the word "privacy" appeared zero times in the shipped bundle). New `webui/src/pages/PrivacyPage.tsx` (route `/privacy`) and `webui/src/pages/TermsPage.tsx` (route `/terms`), written from what the code and the repo's own documents support: the operator is 2351485 ALBERTA INC.; the panel is an internal, Cloudflare-Access-gated operator console; it handles Access sign-in identity and the daemon's own records (submitted actions, verdicts, sealed certificates, audit log); the site's own code sets no advertising/analytics cookies and loads no trackers (verified by source grep); no sale of personal information. The Terms page governs the website and console (authorized operator use, decisions remain the operator's, as-is) and points to the repo's `TERMS.md` Product Terms, which continue to control for the product itself. The site footer now names 2351485 ALBERTA INC. and links both pages. WebUI version bumped `0.0.0` → `0.1.0` in `webui/package.json` (webui-only change, per `docs/VERSIONING.md`; daemon `VERSION` untouched).
+- **HONESTY BOUNDARY**: this change adds two informational pages and a footer line. No daemon code, no proto, no panel behaviour, and no verdict behaviour changes.
+
 ## [0.22.0] - 2026-11-10
 
 ### Added

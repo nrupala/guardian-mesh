@@ -37,10 +37,15 @@ export function Layout() {
 
       <footer className="site-footer">
         <p>
-          Guardian Mesh is built by AIMLDS. This site describes the system as it
-          actually is — working parts and designs are labeled as such.
+          Guardian Mesh is built by AIMLDS and operated by 2351485 ALBERTA
+          INC. This site describes the system as it actually is — working
+          parts and designs are labeled as such.
         </p>
         <p className="footer-links">
+          <Link to="/privacy">Privacy</Link>
+          <span aria-hidden="true">·</span>
+          <Link to="/terms">Terms</Link>
+          <span aria-hidden="true">·</span>
           <a href="/guardian-mesh/llms.txt">llms.txt</a>
           <span aria-hidden="true">·</span>
           <a href="/guardian-mesh/guardian-mesh.json">Machine-readable description</a>
