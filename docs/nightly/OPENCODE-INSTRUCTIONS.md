@@ -1591,6 +1591,21 @@ MUST until behaviour-proven here.
   right class instead of consuming agent adjudication each
   cycle.
 
+- **GMSI-143 — Spec↔release status reconciliation.** (WO-30
+  gate, 2026-11-10.) The revised specification's
+  per-requirement status labels are maintained by hand and lag
+  shipped releases — seven confirmed instances at v0.22.0
+  (DP-3, CC-4, CC-5, DC-4/DC-5, DC-9, DC-14, DC-18/DC-19 all
+  labelled [TARGET] in the spec while their slices are shipped
+  and gate-proven). GM should be able to prove, per release,
+  that every requirement ID's spec status matches the release
+  record (shipped-in-version X / partial-with-named-slice /
+  target), so a stale label surfaces as a gate finding, not a
+  reader's discovery. The WO-30 threat model follows the
+  release record where the two disagree and notes the lag
+  where a row depends on it; reconciling the labels
+  themselves is a documentation follow-up this input tracks.
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
@@ -3153,3 +3168,102 @@ above.
 Guardian Mesh Spec Inputs filed by this run: GMSI-135
 (repo-root Python client stubs stale), recorded in §7
 above.
+- 2026-11-10 (nightly) — **WO-30 SHIPPED as v0.22.0**
+  (PR #105, merged c6ef0cd1; merge tree e04ca49d == the
+  stamped PR head tree): the threat model of record (SG-1).
+  specs/THREAT_MODEL.md (new): assets A-1..A-12, adversaries
+  ADV-1..ADV-7 (SG-1's five named — malicious agent,
+  compromised tenant, rogue administrator, supply-chain
+  attacker, network attacker — plus hostile guarded resource
+  and coercive/careless operator), the BM-1..BM-8 boundary
+  map in shipped form, and threat register TM-01..TM-25,
+  every countermeasure mapped to requirement IDs with honest
+  [SHIPPED]/[PARTIAL]/[TARGET] status + residual risk +
+  closing work order; §6 lists all 12 open risks in one
+  table; TM-21 (signing key is a host file; host compromise
+  is key compromise until SG-5/WO-23 and the HSM ladder/
+  WO-35) is named the highest carried risk. Revised spec:
+  SG-1 status [TARGET] -> [SHIPPED] (the document's
+  existence; maintained per release), no other status
+  changed. Version 0.22.0 on the standing surfaces. No
+  daemon code, no proto, no verdict behaviour change, no
+  new dependencies. Lane: the pack marks WO-30 docs-only,
+  Wright lane acceptable — authored by Wright (the laptop
+  was probed ONLINE at run start, LAPTOP-HTA1H418;
+  availability was not the reason). Wright verification
+  (authoring tree == pushed head for all 8 files, blob
+  hashes asserted at push): cargo 261/261 (identical to
+  the v0.21.0 baseline, as a docs-only change must
+  produce), conformance_ 13/13, WebUI ci/build/lint +
+  check:releases green (25 versions). Mechanical
+  acceptance: 84 distinct requirement IDs cited in the
+  model, 0 missing from the revised/formal specs;
+  TM-01..TM-25 each exactly once; every SG-1 adversary
+  carries >= 1 threat (ADV-6 treated inside TM-04/TM-05/
+  TM-17, cross-referenced in §5); status claims
+  spot-checked against shipped code (the WO-14
+  authenticators.rs honesty header among them). Pack
+  refresh first: PR #104 (merged e81a6b28; landed pack
+  blob af0b784b read back byte-identical, 175,918 B)
+  filed GMSI-136..142 from the 2026-11-10 gate rounds
+  (Codetopo v0.9.1 GMSI-1..5 -> 136..139; Gate Agent
+  v0.1.0 GMSI-GA-1..3 -> 140..142). Gate (pack
+  guardian-mesh-wo30-2026-11-10): scanner PASS (0/0/0);
+  verdict PASS WITH FINDINGS — F1 = GMSI-143 filed
+  (revised-spec status labels lag shipped releases in at
+  least seven places; the model follows the release
+  record and notes the lag). Production v0.22.0 live
+  2026-11-10: binary sha256 a0904704d0c37a327de95a25
+  005dde7af3700e888820391870849de5bf7b1fd1 (cross-built
+  from merged main c6ef0cd1, cargo-zigbuild + zig 0.14.1
+  + ~/.cargo/bin on PATH, as recorded), backup
+  .bak-v0210 taken, both services active; box E2E 15/16
+  (PF-18 PASS 100/15/0; sole miss the standing stale
+  Health-fields harness expectation, 15th occurrence —
+  gm-deploy stopped at NOT certified on that bar and
+  certification proceeded on direct production proof,
+  per standing practice). Direct proof (Wright's own box
+  client, written from the proto for this run): Health
+  SERVING, 0.22.0@c6ef0cd1, binary sha == built ==
+  installed, degraded=false, fingerprint == pin
+  dd2cf1a3...; self-cert cert-20261111-000052 ACTIVE,
+  verdict PASS WITH FINDINGS, evidence = gate verdict
+  sha256 069f3204..., its sealed pf_outcomes == the
+  production Health counters exactly (9 rules; totals
+  1061/1083), payload fingerprint recomputes,
+  VerifyProof VALID — superseding cert-20261110-000051.
+  Attestation: statement built against a real clone at
+  c6ef0cd1 (public-repo clone; the merge commit carries
+  a GitHub gpgsig header, so the object is not
+  reconstructible from the API record — the clone route
+  is the reliable one) with the cross-build Cargo.lock
+  (1f2c1a61...); installed
+  /opt/guardian-mesh/guardian-meshd-0.22.0.attestation.json,
+  gm-attest verify VALID, signer == pin, package
+  fingerprint 4d734592.... Pages parity: box-served
+  asset == merged build == GitHub Pages asset
+  (index-C9iYm8q-.js); public unauthenticated 302. Run
+  notes: (1) this VM's shell/python text writes were
+  intermittently dropped to 0 bytes for ~15 min mid-run
+  (binary-tool writes — cargo, npm, the gate scanner —
+  unaffected; the pack read-back during the window was
+  verified in-memory by blob hash, af0b784b == pushed);
+  (2) a pre-existing stray /home/ubuntu/guardian-meshd
+  .v080 process (PID 794125, an October binary) sits on
+  the box — not the production daemon (PID 4114455),
+  not touched. NOT RUN (standing): cargo audit (tool
+  absent), Kali/Arch benches, ceiling enforcement
+  (GMSI-122), authenticated panel click-through
+  (GMSI-134). v0.22.0 is a RELEASE CANDIDATE (one-week
+  soak; graduates 2026-11-17). **WO-30 is CLOSED; SG-1
+  is satisfied** (maintained per release from here;
+  WO-32's risk register builds on this file). Next:
+  WO-22 (P1, secure by default, SG-4), then WO-20 in
+  pack order; WO-17 stays open for the cluster chaos +
+  CM-8 extensions (WO-27); WO-16 stays open for
+  DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-136..142
+(pack refresh, from the 2026-11-10 Codetopo + Gate Agent
+gate rounds) and GMSI-143 (spec↔release status
+reconciliation), recorded in Part B above.
