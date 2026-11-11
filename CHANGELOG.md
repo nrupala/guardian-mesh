@@ -6,6 +6,20 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-11-10
+
+### Added
+- **WO-30: threat model of record (SG-1).** `specs/THREAT_MODEL.md` now exists and is maintained per release: assets A-1..A-12, adversaries ADV-1..ADV-7 (the five adversaries SG-1 names — malicious agent, compromised tenant, rogue administrator, supply-chain attacker, network attacker — plus hostile guarded resource and coercive/careless operator, which PC-2 and SG-5/SG-7 already assume), the BM-1..BM-8 trust-boundary map as it exists in shipped form, and a 25-threat register (TM-01..TM-25) grouped by adversary. Every threat names its attack path, its countermeasures by requirement ID with honest [SHIPPED]/[PARTIAL]/[TARGET] status, its residual risk, and the work order that closes the residual where one exists.
+  - The open risks are listed in one table in the model (§6): guardian bypass and say-one-do-another (CM-2/CM-3/CM-4/CM-5/CM-6 — WO-20/WO-21/WO-27), payload exfiltration (PC-1 — WO-24), insider evidence suppression (SG-7/PC-6 — WO-26), pre-head history rewrite (SG-5 — WO-23), tool/model rug-pull (PC-2 — WO-25), clock manipulation (SG-10), escalation rubber-stamping (SG-9/DC-20), exit-residue proof (SG-12), single-node availability (DC-1/DC-3 — WO-16 open), and the highest-severity carried risk, TM-21: the signing key is a file on the host, so host compromise is key compromise until SG-5 and the HSM custody ladder (WO-35) ship.
+  - `specs/GUARDIAN_MESH_REVISED_SPEC.md`: SG-1 status [TARGET] → [SHIPPED] (issued with this release; maintained per release, review recorded in each gate verdict). No other requirement status changed.
+  - Version bumped `0.21.0` → `0.22.0` (`VERSION`, `guardian-meshd/Cargo.toml`, `README.md` version line, `deploy/edge/docker-compose.yaml` image tag, `webui/src/data/releases.ts` new 0.22.0 entry).
+- **HONESTY BOUNDARY**: this release is documentation plus the version bump. No daemon code, no proto, and no verdict behaviour changes; the threat model claims no countermeasure that is not shipped, and its TARGET rows stay TARGET.
+- **NOT in this release**: WO-22 (secure by default, SG-4) and WO-20 (complete-mediation core) follow in pack order; no clustering; no new dependencies.
+
+### Tests and Gate Verdict
+Tests: Wright verification pending.
+Gate verdict: Wright verification pending.
+
 ## [0.21.0] - 2026-11-10
 
 ### Added

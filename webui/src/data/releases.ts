@@ -13,6 +13,21 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.22.0",
+    date: "2026-11-10",
+    summary: "WO-30: threat model of record (SG-1) - specs/THREAT_MODEL.md names the system's adversaries, assets and trust boundaries, and maps 25 threats (TM-01..TM-25) to their countermeasures by requirement ID with honest shipped/partial/target status and residual risk.",
+    highlights: [
+      "specs/THREAT_MODEL.md (new): assets A-1..A-12, adversaries ADV-1..ADV-7 (the five SG-1 adversaries plus hostile guarded resource and coercive/careless operator), the BM-1..BM-8 boundary map as it exists in shipped form, and a 25-threat register grouped by adversary",
+      "Every countermeasure cites revised-spec requirement IDs (PF, AZ, BM, DC, SG, CM, PC, EV, CP, RG) with [SHIPPED]/[PARTIAL]/[TARGET] status; threats whose deciding countermeasure is not built are listed as open risks in one table with the work order that closes each (WO-20, WO-21, WO-23, WO-24, WO-25, WO-26, WO-27, WO-35)",
+      "Highest open risk named plainly: TM-21 - the daemon signing key is a file on the host, so host compromise is key compromise until SG-5 external witnessing (WO-23) and the HSM custody ladder (WO-35) ship",
+      "specs/GUARDIAN_MESH_REVISED_SPEC.md: SG-1 status [TARGET] -> [SHIPPED] (model issued with this release, maintained per release); no other status changed - TARGET countermeasures inside the model stay TARGET",
+      "HONESTY BOUNDARY: this release adds the threat-model document and the version bump only - no daemon code, no proto, no verdict behaviour changes; the model claims no countermeasure that is not shipped"
+    ],
+    gateVerdict: "Wright verification pending",
+    tests: "Wright verification pending",
+    status: "Release candidate"
+  },
+  {
     version: "0.21.0",
     date: "2026-11-10",
     summary: "WO-19 completion: GMSI-7 pf_outcomes wiring - certificates now carry the daemon's measured per-rule Protocol Firewall pass/fail counts at issuance time, never constants.",
