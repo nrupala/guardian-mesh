@@ -17,8 +17,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **NOT in this release**: WO-22 (secure by default, SG-4) and WO-20 (complete-mediation core) follow in pack order; no clustering; no new dependencies.
 
 ### Tests and Gate Verdict
-Tests: Wright verification pending.
-Gate verdict: Wright verification pending.
+Tests: Wright, independent, on the PR #105 head tree, 2026-11-10: cargo test 261/261 (158 lib + 86 daemon bin + 11 gm-mcp + 6 gm; conformance subset 13/13 included) — identical count to the v0.21.0 baseline, as a docs-only change must produce; WebUI npm ci + build + lint clean, check:releases green (25 versions). Mechanical acceptance: 84 distinct requirement IDs cited in THREAT_MODEL.md, 0 missing from the revised/formal specifications; TM-01..TM-25 each present exactly once; every SG-1 named adversary carries at least one threat.
+Gate verdict: PASS WITH FINDINGS — Release Gate 2026-11-10 (guardian-mesh-wo30-2026-11-10): F1 = GMSI-143 (revised-spec status labels lag shipped releases in at least seven places; the threat model follows the release record and notes the lag). Standing NOT RUN: cargo audit (tool absent), Kali/Arch benches, ceiling enforcement (GMSI-122), authenticated panel click-through (GMSI-134).
 
 ## [0.21.0] - 2026-11-10
 

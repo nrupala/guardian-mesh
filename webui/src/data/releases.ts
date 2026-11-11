@@ -23,8 +23,8 @@ export const RELEASES: Release[] = [
       "specs/GUARDIAN_MESH_REVISED_SPEC.md: SG-1 status [TARGET] -> [SHIPPED] (model issued with this release, maintained per release); no other status changed - TARGET countermeasures inside the model stay TARGET",
       "HONESTY BOUNDARY: this release adds the threat-model document and the version bump only - no daemon code, no proto, no verdict behaviour changes; the model claims no countermeasure that is not shipped"
     ],
-    gateVerdict: "Wright verification pending",
-    tests: "Wright verification pending",
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-11-10 (guardian-mesh-wo30-2026-11-10): F1 = GMSI-143 (revised-spec status labels lag shipped releases in at least seven places; the threat model follows the release record and notes the lag). Standing NOT RUN: cargo audit, benches, ceiling enforcement (GMSI-122), panel click-through (GMSI-134).",
+    tests: "cargo test 261/261 + conformance_ 13/13 (identical count to the v0.21.0 baseline — docs-only change), WebUI ci/build/lint green, check:releases green (25 versions); mechanical acceptance: 84 requirement IDs cited in THREAT_MODEL.md, 0 missing from the specs; TM-01..TM-25 each exactly once — Wright-verified 2026-11-10",
     status: "Release candidate"
   },
   {
