@@ -111,7 +111,12 @@ Reading key: **Countermeasures** cite requirement IDs in
 specification) with their honest status. **Residual risk** names what
 remains true after the shipped countermeasures. **Closed by** names
 the work order or gate item that retires the residual risk, where one
-exists.
+exists. ADV-6 (hostile guarded resource) has no section of its own
+because its moves are the resource-side halves of TM-04 (executes
+other than judged), TM-05 (its receipts, if any, are unreconciled
+until CM-5 ships) and TM-17 (changes after approval) — it is treated
+inside those three threats, and the register claims no additional
+control for it.
 
 ### Malicious agent (ADV-1)
 
