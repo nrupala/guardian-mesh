@@ -898,5 +898,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-10T14:21:54-06:00",
     "message": "Merge PR #103: WO-19 ledger \u2014 v0.21.0 complete, GMSI-7 closed, GMSI-135 filed, Next WO-30"
+  },
+  {
+    "release": 105,
+    "tag": "release/v105",
+    "previous_tag": "release/v104",
+    "sha": "e81a6b285a3b9594babac67c474f224016094215",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-11T00:30:06-06:00",
+    "message": "Merge pull request #104 from nrupala/wright/pack-refresh-2026-11-10-nightly"
   }
 ]
