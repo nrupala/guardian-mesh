@@ -916,5 +916,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-11T00:49:19-06:00",
     "message": "Merge pull request #105 from nrupala/wright/wo30-threat-model"
+  },
+  {
+    "release": 107,
+    "tag": "release/v107",
+    "previous_tag": "release/v106",
+    "sha": "5a53ffec848ddee0dcbf811948c077cfc846774d",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-11T01:13:33-06:00",
+    "message": "Merge pull request #106 from nrupala/wright/pack-ledger-2026-11-10-nightly"
   }
 ]
