@@ -925,5 +925,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-11T01:13:33-06:00",
     "message": "Merge pull request #106 from nrupala/wright/pack-ledger-2026-11-10-nightly"
+  },
+  {
+    "release": 108,
+    "tag": "release/v108",
+    "previous_tag": "release/v107",
+    "sha": "e4f6090e85be3df68f7c1505a937613727139a24",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-11T10:41:26-06:00",
+    "message": "feat(webui): Privacy + Terms pages, footer naming 2351485 ALBERTA INC. (#107)"
   }
 ]
