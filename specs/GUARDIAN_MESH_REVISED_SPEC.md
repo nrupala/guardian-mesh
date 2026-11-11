@@ -478,7 +478,7 @@ is the highest-value target in any deployment and is specified as such.
 
 | ID | Requirement | Status |
 |----|-------------|--------|
-| SG-1 | **Threat model of record.** `specs/THREAT_MODEL.md` MUST exist in the repo and be maintained per release: named adversaries (malicious agent, compromised tenant, rogue administrator, supply-chain attacker, network attacker), assets, and the countermeasure for each threat, mapped to requirement IDs in this specification. | [TARGET] |
+| SG-1 | **Threat model of record.** `specs/THREAT_MODEL.md` MUST exist in the repo and be maintained per release: named adversaries (malicious agent, compromised tenant, rogue administrator, supply-chain attacker, network attacker), assets, and the countermeasure for each threat, mapped to requirement IDs in this specification. | [SHIPPED] — `specs/THREAT_MODEL.md` issued WO-30, v0.22.0; maintained per release |
 | SG-2 | **Anti-downgrade.** Authorization negotiation MUST NOT fall back: policy pins a minimum assurance per boundary and no weaker method may substitute at runtime (§5 addendum). | [TARGET] |
 | SG-3 | **Minimal pre-handshake surface.** Whatever answers before the two confirmations MUST be near-zero: no information leakage, flood-resistant, and unable to reach internal capabilities (Doctrine 0). | [PARTIAL] — Health only today |
 | SG-4 | **Secure by default.** The daemon MUST refuse to start in production posture with default or placeholder secrets (the built-in default handshake secret is demo-only and MUST hard-fail outside demo posture). A posture check ("guardian doctor") MUST scan a deployment's configuration and name every insecure setting. | [TARGET] — default secret exists today; removal is WO-22 |
