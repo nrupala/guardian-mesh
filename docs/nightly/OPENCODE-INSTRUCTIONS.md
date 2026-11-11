@@ -1510,6 +1510,87 @@ until behaviour-proven here.
   documented). The daemon, gm, gm-mcp and WebUI clients all
   generate from the current proto and are unaffected.
 
+GMSI-136…142 were filed by the release gate's 2026-11-10 rounds
+(packs: release-gate-runs/codetopo-v091-2026-11-10 and
+release-gate-runs/gate-agent-v010-2026-11-09, the latter's
+FIX-RECORD-2026-11-10 filing none). They queue behind the Part A
+work orders exactly as GMSI-6…135 do, and none becomes a gate
+MUST until behaviour-proven here.
+
+- **GMSI-136 — Commit-delta composition proof.** (Codetopo
+  v0.9.1 gate, 2026-11-10; the pack's GMSI-1.) A gate brief's
+  "data-only commit" characterisation of a main-branch delta was
+  wrong by four commits including a kernel change. GM should be
+  able to prove, for any gated release, the exact commit-delta
+  composition between the release commit and current main (code
+  vs data classified per commit), so a stale brief can never
+  silently widen a gate's scope. Evaluation input: release SHA +
+  main SHA; rule: ALLOW only when every delta commit is
+  classified and the pack names each; tampered proof → NOT
+  VALID.
+- **GMSI-137 — Secret-finding context verdict.** (Codetopo
+  v0.9.1 gate, 2026-11-10; the pack's GMSI-2, reinforced by its
+  GMSI-5.) The scanner's single secrets hit was a test-string
+  false lead whose resolution required reading the file's own
+  design comment — and the gate runner then mechanically counted
+  the already-adjudicated lead as a BLOCKER because it consumes
+  only the scanner's count. Spec: secret findings carry a
+  *context verdict* field (test-scope / literal-credential /
+  derived-at-runtime, with a pointer to the adjudicating pack)
+  that a verifier — and the runner — can re-check mechanically,
+  so a resolved lead stays resolved across both machine passes
+  instead of re-blocking every later gate.
+- **GMSI-138 — Repo-hygiene proof.** (Codetopo v0.9.1 gate,
+  2026-11-10; the pack's GMSI-3.) Medium hygiene drift
+  accumulates outside artifacts (workflow pinning alerts, a
+  dismissal comment overwritten by a probe). Spec: a
+  repo-hygiene proof (open medium alerts enumerated, dismissal
+  comments non-placeholder) as a standing input to future gates
+  of the repo under examination.
+- **GMSI-139 — Deployed==tree proof scope for embedded pages.**
+  (Codetopo v0.9.1 gate, 2026-11-10; the pack's GMSI-4.) The
+  DEPLOY-TREE-DIFF check's file-extension set cannot see pages
+  embedded as string literals in compiled sources (a Rust `.rs`
+  string here; the class is any non-script-extension source), so
+  it reported drift where deployed == tree in fact. Spec: the
+  deployed==tree proof indexes distinctive lines from ALL text
+  source files, or the check records "served script originates
+  outside the scanned set" as NOT RUN rather than FAIL when the
+  served lines match a non-scanned source file verbatim.
+- **GMSI-140 — Identity binding for repository-less releases.**
+  (Gate Agent v0.1.0 gate, 2026-11-09; the pack's GMSI-GA-1.) A
+  product can reach a fully armed gate yet be repository-less —
+  its identity pinnable only by a gate-side content manifest.
+  GM should be able to prove, for any gated release, the
+  identity binding between the verdict and the artefact
+  (manifest hash ↔ tree ↔ deployed bytes), and a gate brief
+  should be able to require "repo + tag OR filed content pin" as
+  a named precondition class, so the absence of version control
+  is a graded finding by construction rather than a gate lane's
+  discovery.
+- **GMSI-141 — Money-path proof: two separate legs.** (Gate
+  Agent v0.1.0 gate, 2026-11-09; the pack's GMSI-GA-2.) The
+  billing webhook's credit grant did not reconcile the paid
+  amount against the price of the service granted. Spec: for
+  any webhook that converts a payment event into service value,
+  the proof must show amount/price reconciliation and replay
+  idempotence as **two separate legs**; a gate that proves only
+  one leg must not be able to report the money path as covered.
+  (The filed run proved idempotence behaviourally and found
+  reconciliation absent by read.)
+- **GMSI-142 — Contract-truth proof for negative
+  declarations.** (Gate Agent v0.1.0 gate, 2026-11-09; the
+  pack's GMSI-GA-3.) A control's absence can be honestly
+  **disclosed** (the contract declares nothing) yet still
+  require a human read of the code to distinguish "undeclared"
+  from "unenforced". Spec: when a contract omits a control, the
+  machinery should be able to prove the omission is also true
+  in code (no enforcement exists to contradict the declaration,
+  and no enforcement exists that the declaration hides), so
+  disclosed absences grade mechanically as findings of the
+  right class instead of consuming agent adjudication each
+  cycle.
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
