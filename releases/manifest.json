@@ -934,5 +934,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-11T10:41:26-06:00",
     "message": "feat(webui): Privacy + Terms pages, footer naming 2351485 ALBERTA INC. (#107)"
+  },
+  {
+    "release": 109,
+    "tag": "release/v109",
+    "previous_tag": "release/v108",
+    "sha": "abe413cd0314adb81da08e42ebbc4be12028d2fe",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-12T00:26:30-06:00",
+    "message": "Merge pull request #108 from nrupala/wright/pack-refresh-2026-11-11-nightly"
   }
 ]
