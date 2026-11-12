@@ -1618,6 +1618,17 @@ MUST until behaviour-proven here.
   leaking through a surface that must be static). The Conduit
   Router's own tools/list is static by construction (a constant);
   this input asks GM to make that property provable, not assumed.
+- **GMSI-145 — Negative-start proof (refusal as a behaviour).**
+  (WO-22 gate, 2026-11-11.) WO-22's acceptance is a refusal: the
+  daemon must NOT start under an insecure posture. GM should be
+  able to prove refusal-to-start as a first-class behaviour —
+  the process exits non-zero, the FATAL line names the insecure
+  setting, and nothing listens on the configured port — for any
+  guarded service whose secure-by-default claim rests on a
+  startup gate. The proof is of an absence (no listener, no
+  service), not only of correct responses from a running server:
+  a gate that only tests running servers can never evidence the
+  one behaviour a startup gate exists to produce.
 
 ## Development home and engine routing
 
@@ -3280,3 +3291,99 @@ Guardian Mesh Spec Inputs filed by this run: GMSI-136..142
 (pack refresh, from the 2026-11-10 Codetopo + Gate Agent
 gate rounds) and GMSI-143 (spec↔release status
 reconciliation), recorded in Part B above.
+
+- 2026-11-11 (nightly) — **WO-22 SHIPPED as v0.23.0**
+  (PR #109, merged 0f840222; merge tree 4263f8f4 == the
+  stamped PR head tree; the build commit's tree 7e9c03f2 ==
+  the laptop lane's commit tree, bundle-proven): secure by
+  default (SG-4). config.rs gains Posture (Production /
+  Demo; GUARDIAN_MESH_POSTURE unset = production, invalid
+  values fail closed and are recorded), the
+  DEFAULT_HANDSHAKE_SECRET constant as the single source for
+  the demo fallback + default detection (unset / empty /
+  literal), posture_findings() (invalid posture blocking
+  everywhere; default secret blocking in production, warning
+  in demo; short secret, non-loopback production bind,
+  degraded mode, SPIFFE-not-required as named warnings) and
+  validate_posture(). main.rs real_main refuses to start on
+  blocking findings (FATAL naming each setting, exit 1,
+  before ensure_dirs); GuardianMeshService::new is NOT gated.
+  gm gains the doctor subcommand (local env only, contacts
+  no daemon; BLOCKING/warning lines; exit 0 / 2). Revised
+  spec: SG-4 [TARGET] -> [SHIPPED] (v0.23.0 scope note); no
+  other status changed. THREAT_MODEL.md unchanged — SG-1
+  maintenance review performed this run: no SG-4 /
+  default-secret row exists in the model. docs/CLI.md doctor
+  section; env example documents GUARDIAN_MESH_POSTURE and
+  the production refusal. Version 0.23.0 on the standing
+  surfaces. No new dependencies; no verdict path, firewall,
+  handshake-session, signing-key, or proto change. Lane:
+  laptop OpenCode (fresh clone D:\guardian-mesh-work\wo22 at
+  the refreshed main abe413cd; OpenCode now reports 1.19.5);
+  the lane's push failed on the clone's missing credentials
+  (standing pattern) and Wright carried it via bundle +
+  git-data API with the pushed tree proven identical to the
+  lane's commit tree. Wright verification (fresh checkout of
+  the pushed branch): cargo 268/268 (165 lib + 86 bin + 11
+  gm-mcp + 6 gm; baseline 261, +7 = exactly the new config
+  tests), conformance_ 13/13, WebUI ci/build/lint +
+  check:releases green (26 versions); behaviour proof 9/9 on
+  the built binaries (production+unset refused, FATAL names
+  GUARDIAN_MESH_HANDSHAKE_SECRET; production+literal
+  refused; unset-posture+unset refused; invalid posture
+  refused naming GUARDIAN_MESH_POSTURE; demo+default serves
+  Health; production+custom serves; gm doctor exit 2/0/0
+  across production-default / production-custom /
+  demo-default). Pack refresh first: PR #108 (merged
+  abe413cd; landed pack blob 85811161 read back
+  byte-identical, 182,821 B) filed GMSI-144 from the
+  2026-11-11 Conduit Router v1.5.0 gate round (the AxiomCode
+  slice-2 certification of the same day files no GMSI,
+  grep-verified). Gate (pack guardian-mesh-wo22-2026-11-11):
+  scanner PASS (0/0/0); verdict PASS WITH FINDINGS — F1
+  (Low, informational) the doctor warns SPIFFE-not-required
+  against the current production configuration (the shipped
+  deliberate posture; observed live on the box post-deploy:
+  doctor OK exit 0 with that single warning); F2 standing
+  GMSI-143 lag outside this WO. Production v0.23.0 live
+  2026-11-11: production env gained
+  GUARDIAN_MESH_POSTURE=production explicitly (backup
+  /etc/guardian-mesh/env.bak-v0220; the box already ran a
+  real 64-char handshake secret — name+length verified, the
+  value never read — so no rotation was needed); binary
+  sha256 3c63a7e6865933c14ade23e2451b1fd7402350f04110c307
+  34cf6243b7814b21 (cross-built from merged main 0f840222,
+  cargo-zigbuild 0.23.4 + zig 0.14.1 + ~/.cargo/bin on
+  PATH); backup .bak-v0220 taken, both services active; box
+  E2E 15/16 (PF-18 PASS 100/15/0; sole miss the standing
+  stale Health-fields harness check, 16th occurrence) —
+  gm-deploy stopped at NOT certified on that bar and
+  certification proceeded on direct production proof, per
+  standing practice. Direct proof (Wright's own box
+  client): Health SERVING, 0.23.0@0f840222, binary sha ==
+  built == installed, degraded=false, fingerprint == pin
+  dd2cf1a3...; self-cert cert-20261112-000053 ACTIVE, PASS
+  WITH FINDINGS, evidence = gate verdict sha256
+  cfca8ad2..., its sealed pf_outcomes == the production
+  Health counters exactly (9 rules; totals 1061/1083),
+  payload fingerprint recomputes, VerifyProof VALID —
+  superseding cert-20261111-000052. Attestation: statement
+  built against a real clone at 0f840222 with the
+  cross-build Cargo.lock (6646ab62...); installed
+  /opt/guardian-mesh/guardian-meshd-0.23.0.attestation.json,
+  gm-attest verify VALID, signer == pin, package
+  fingerprint 12ad49a5.... Pages parity: box dist asset ==
+  merged build == GitHub Pages asset (index-C5ZoEGUM.js);
+  public unauthenticated 302. NOT RUN (standing): cargo
+  audit (tool absent), Kali/Arch benches, ceiling
+  enforcement (GMSI-122), authenticated panel click-through
+  (GMSI-134). v0.23.0 is a RELEASE CANDIDATE (one-week soak;
+  graduates 2026-11-18). **WO-22 is CLOSED; SG-4 is
+  satisfied.** Next: WO-20 (P1, complete-mediation core) in
+  pack order; WO-17 stays open for the cluster chaos +
+  CM-8 extensions (WO-27); WO-16 stays open for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-144
+(pack refresh, from the 2026-11-11 Conduit Router v1.5.0
+gate round) and GMSI-145 (negative-start proof), recorded
+in Part B above.
