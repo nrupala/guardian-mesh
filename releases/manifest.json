@@ -943,5 +943,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-12T00:26:30-06:00",
     "message": "Merge pull request #108 from nrupala/wright/pack-refresh-2026-11-11-nightly"
+  },
+  {
+    "release": 110,
+    "tag": "release/v110",
+    "previous_tag": "release/v109",
+    "sha": "0f840222f82e66a1084f9c2afc554ea4b2c35405",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-12T01:02:05-06:00",
+    "message": "Merge pull request #109 from nrupala/wright/wo22-secure-by-default"
   }
 ]
