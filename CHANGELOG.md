@@ -26,8 +26,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **NOT in this release**: no clustering, no TEE attestation and no external anchoring (designed, not built); the threat model is unchanged because it has no SG-4 row to update.
 
 ### Tests and Gate Verdict
-Tests: Wright verification pending.
-Gate verdict: Wright verification pending.
+Tests: Wright, independent, fresh checkout of the PR #109 head tree (778d60a4; tree 7e9c03f2, byte-identical to the laptop lane's commit tree), 2026-11-11: cargo test 268/268 (165 lib + 86 daemon bin + 11 gm-mcp + 6 gm; conformance subset 13/13 included) — the v0.22.0 baseline was 261 and the +7 are exactly the new WO-22 config tests; WebUI npm ci + build + lint clean, check:releases green (26 versions). Behaviour proof (Wright's own harness against the built binaries, 9/9 legs): production + secret unset → exit 1, FATAL names GUARDIAN_MESH_HANDSHAKE_SECRET, never serves; production + the built-in literal as the secret → same refusal; posture unset (= production) + secret unset → same refusal; invalid posture value → exit 1, FATAL names GUARDIAN_MESH_POSTURE; demo + secret unset → serves, gm health SERVING; production + custom secret → serves, gm health SERVING; gm doctor: production+default → BLOCKING + exit 2, production+custom → OK + exit 0, demo+default → warning + exit 0.
+Gate verdict: PASS WITH FINDINGS — Release Gate 2026-11-11 (guardian-mesh-wo22-2026-11-11): scanner PASS (0 must-gate / 0 secrets / 0 vulns). F1 (Low, informational): the doctor warns SPIFFE-not-required against the current production configuration — the shipped deliberate posture, named by design. F2 (standing): GMSI-143's spec↔release status lag persists for IDs outside this WO (SG-4 itself is reconciled). Filed by this run: GMSI-145 (negative-start proof). SG-1 threat-model maintenance review performed: no SG-4 row exists in the model, no status changes. Judgment differential N/A (no verdict path changed). Standing NOT RUN: cargo audit (tool absent), Kali/Arch benches, ceiling enforcement (GMSI-122), authenticated panel click-through (GMSI-134).
 
 ## [0.22.0] - 2026-11-10
 

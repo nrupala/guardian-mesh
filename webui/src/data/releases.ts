@@ -23,8 +23,8 @@ export const RELEASES: Release[] = [
       "specs/GUARDIAN_MESH_REVISED_SPEC.md: SG-4 [TARGET] -> [SHIPPED] for the v0.23.0 refusal plus doctor scope; docs/CLI.md documents gm doctor; deploy/edge/guardian-mesh.env.example documents GUARDIAN_MESH_POSTURE and the production refusal",
       "HONESTY BOUNDARY: this release is config/startup/CLI plus docs and the version bump only - no new dependencies, no proto changes, no verdict-path, firewall, handshake-session or signing-key handling changes"
     ],
-    gateVerdict: "Wright verification pending",
-    tests: "Wright verification pending",
+    gateVerdict: "PASS WITH FINDINGS — Release Gate 2026-11-11 (guardian-mesh-wo22-2026-11-11): scanner PASS (0/0/0); F1 doctor SPIFFE-not-required warning on the current production config (shipped deliberate posture, named by design); F2 standing GMSI-143 status lag outside this WO; GMSI-145 filed (negative-start proof)",
+    tests: "Wright, independent, fresh checkout of PR #109 head (tree == lane tree): cargo test 268/268 (conformance 13/13); WebUI ci+build+lint clean, check:releases green (26 versions); behaviour proof 9/9 legs — production+default refused (exit 1, FATAL names the setting), production+literal refused, invalid posture refused, demo+default serves, production+custom serves, gm doctor exit 2/0/0 across production-default / production-custom / demo-default",
     status: "Release candidate"
   },
   {
