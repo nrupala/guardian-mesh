@@ -1605,6 +1605,19 @@ MUST until behaviour-proven here.
   release record where the two disagree and notes the lag
   where a row depends on it; reconciling the labels
   themselves is a documentation follow-up this input tracks.
+- **GMSI-144 — Static discovery proof for open MCP surfaces.**
+  (Conduit Router v1.5.0 gate, 2026-11-11.) A server that opens
+  MCP discovery to anonymous callers (initialize / ping /
+  tools/list) must serve a fully static tools/list carrying no
+  per-key state — no usage, no vault material, no caller-specific
+  annotation can leak through discovery. GM should be able to
+  prove, for any server that opens discovery, that the anonymous
+  tools/list output is byte-identical across callers and across
+  keys: two anonymous calls and one keyed call produce the same
+  bytes; any difference is a BLOCK-grade finding (state is
+  leaking through a surface that must be static). The Conduit
+  Router's own tools/list is static by construction (a constant);
+  this input asks GM to make that property provable, not assumed.
 
 ## Development home and engine routing
 
