@@ -2132,6 +2132,16 @@ fn real_main() {
     rt.block_on(async {
         let config = Config::default();
 
+        if let Err(findings) = config.validate_posture() {
+            for finding in findings {
+                eprintln!(
+                    "FATAL: posture check failed: {}: {}",
+                    finding.setting, finding.message
+                );
+            }
+            std::process::exit(1);
+        }
+
         config.ensure_dirs().expect("failed to create data directories");
 
         if let Err(e) = config.verify_no_program_dir_write() {

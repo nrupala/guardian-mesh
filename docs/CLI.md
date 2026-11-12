@@ -6,7 +6,8 @@ the handshake, evaluate, verify and audit operations named by CC-4.
 
 This document covers WO-18 profile 3 (CC-4), shipped in v0.19.0. The MCP surface
 (CC-5) shipped in v0.20.0 as the separate `gm-mcp` binary; see
-[MCP](MCP.md).
+[MCP](MCP.md). v0.23.0 adds `gm doctor` (WO-22, SG-4), a local configuration
+scan that names insecure settings and contacts no daemon.
 
 ## What the CLI is
 
@@ -224,6 +225,39 @@ returned and verified the full log. It does not ask the daemon to limit the
 audit read; `verification.entries_checked` still describes the daemon's full
 check. Exit 0 on success, 2 on usage/transport errors.
 
+## `gm doctor`
+
+Scans the local configuration environment and names every insecure setting. It
+reads the same `GUARDIAN_MESH_*` environment variables the daemon reads at
+startup, builds the configuration in-process, and contacts no daemon.
+`--endpoint` is accepted and ignored.
+
+```bash
+GUARDIAN_MESH_POSTURE=production gm doctor
+```
+
+Output is plain lines, not JSON:
+
+```text
+posture: production
+BLOCKING GUARDIAN_MESH_HANDSHAKE_SECRET: the daemon is using the built-in default handshake secret, which is public in the source code; set GUARDIAN_MESH_HANDSHAKE_SECRET to a deployment-specific value (demo posture permits the default for local demonstration only)
+warning GUARDIAN_MESH_REQUIRE_SPIFFE: SPIFFE attestation is not required in production posture; set GUARDIAN_MESH_REQUIRE_SPIFFE=1 to require SVID attestation at handshake
+doctor: FAIL — 1 blocking finding(s)
+```
+
+Each finding is one of:
+
+- `BLOCKING` - the daemon refuses to start in this posture.
+- `warning` - insecure or notable, but startup is not refused.
+
+`GUARDIAN_MESH_POSTURE` defaults to `production`. Production posture refuses the
+built-in default handshake secret at startup. `demo` is for local demonstration
+only: it allows the default secret, and the doctor still names it as a warning.
+An invalid posture value is a blocking finding in every posture.
+
+Exit 0 when there are no blocking findings, 2 when any blocking finding is
+present (a normal result, not a usage error).
+
 ## Session file
 
 The default session file is `$HOME/.guardian-mesh/gm-session.json`.
@@ -288,7 +322,7 @@ must not be shared.
 |---|---|
 | `0` | Successful operation, or any verdict returned in a response (including `BLOCK`, `THROTTLE` and `ESCALATE`). |
 | `1` | `verify`: the daemon reports the proof invalid. `health`: the daemon is reachable but not `SERVING`/`DEGRADED`. |
-| `2` | Usage, session, proof-file, transport, connection or gRPC error. Error on stderr; no partial JSON on stdout. |
+| `2` | Usage, session, proof-file, transport, connection or gRPC error (error on stderr; no partial JSON on stdout), or `doctor`: one or more blocking findings (a normal result, printed on stdout). |
 
 The **BLOCK-is-success** rule is deliberate: a `BLOCK` verdict is a successful
 CLI operation, and scripts read the verdict from the JSON. Do not treat exit 0
