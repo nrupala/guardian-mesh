@@ -13,6 +13,21 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.23.0",
+    date: "2026-11-11",
+    summary: "WO-22: secure by default (SG-4) - production posture (the default) refuses to start with the built-in default handshake secret, and the new gm doctor scans the configuration environment and names every insecure setting.",
+    highlights: [
+      "guardian-meshd/src/config.rs adds the Posture enum (production, demo; unset means production), the public DEFAULT_HANDSHAKE_SECRET constant, default-secret detection, PostureFinding and Config::validate_posture(), with unit tests covering parsing, default detection, blocking and demo warnings",
+      "guardian-meshd/src/main.rs refuses to start in production posture when the built-in default handshake secret is in use, printing FATAL: posture check failed: <setting>: <message> to stderr and exiting 1 before creating directories",
+      "guardian-meshd/src/bin/gm.rs adds the doctor subcommand: it reads the local environment, contacts no daemon, prints posture and one line per finding (BLOCKING or warning), and exits 2 when any blocking finding is present",
+      "specs/GUARDIAN_MESH_REVISED_SPEC.md: SG-4 [TARGET] -> [SHIPPED] for the v0.23.0 refusal plus doctor scope; docs/CLI.md documents gm doctor; deploy/edge/guardian-mesh.env.example documents GUARDIAN_MESH_POSTURE and the production refusal",
+      "HONESTY BOUNDARY: this release is config/startup/CLI plus docs and the version bump only - no new dependencies, no proto changes, no verdict-path, firewall, handshake-session or signing-key handling changes"
+    ],
+    gateVerdict: "Wright verification pending",
+    tests: "Wright verification pending",
+    status: "Release candidate"
+  },
+  {
     version: "0.22.0",
     date: "2026-11-10",
     summary: "WO-30: threat model of record (SG-1) - specs/THREAT_MODEL.md names the system's adversaries, assets and trust boundaries, and maps 25 threats (TM-01..TM-25) to their countermeasures by requirement ID with honest shipped/partial/target status and residual risk.",

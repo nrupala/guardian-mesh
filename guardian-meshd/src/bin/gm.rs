@@ -12,6 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use guardian_meshd::config::Config;
 use guardian_meshd::proto::guardian_mesh_client::GuardianMeshClient;
 use guardian_meshd::proto::{
     ActionDescriptor, EvaluateRequest, FirewalledRequest, HandshakeRequest, HealthRequest,
@@ -112,6 +113,7 @@ async fn run(args: Vec<String>) -> Result<i32, CliError> {
         "evaluate" => cmd_evaluate(rest, pre_endpoint).await,
         "verify" => cmd_verify(rest, pre_endpoint).await,
         "audit" => cmd_audit(rest, pre_endpoint).await,
+        "doctor" => cmd_doctor(rest, pre_endpoint),
         other => Err(CliError::usage(format!("unknown subcommand: {other}"))),
     }
 }
@@ -331,6 +333,55 @@ fn parse_audit_args(args: &[String], pre_endpoint: Option<String>) -> Result<Aud
         session_file,
         endpoint,
     })
+}
+
+fn parse_doctor_args(
+    args: &[String],
+    _pre_endpoint: Option<String>,
+) -> Result<(), CliError> {
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--endpoint" => {
+                next_value(args, &mut i, "--endpoint")?;
+            }
+            "--help" | "-h" => return Err(CliError::help(doctor_help())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(())
+}
+
+fn cmd_doctor(args: &[String], pre_endpoint: Option<String>) -> Result<i32, CliError> {
+    parse_doctor_args(args, pre_endpoint)?;
+
+    let config = Config::default();
+    let findings = config.posture_findings();
+    println!("posture: {}", config.posture.as_str());
+
+    let mut blocking = 0usize;
+    for finding in &findings {
+        let severity = if finding.blocking {
+            blocking += 1;
+            "BLOCKING"
+        } else {
+            "warning"
+        };
+        println!("{} {}: {}", severity, finding.setting, finding.message);
+    }
+
+    let warnings = findings.len() - blocking;
+    if blocking > 0 {
+        println!("doctor: FAIL — {} blocking finding(s)", blocking);
+        Ok(2)
+    } else {
+        println!(
+            "doctor: OK — no blocking findings ({} warning(s))",
+            warnings
+        );
+        Ok(0)
+    }
 }
 
 async fn cmd_health(args: &[String], pre_endpoint: Option<String>) -> Result<i32, CliError> {
@@ -891,15 +942,16 @@ SUBCOMMANDS:
   evaluate    Evaluate or simulate an action
   verify      Verify a saved proof envelope
   audit       Read and verify the audit log
+  doctor      Scan the local configuration environment for insecure settings
 
 GLOBAL OPTIONS:
   --endpoint <url>   Daemon gRPC endpoint (default http://127.0.0.1:50051;
                      GM_ENDPOINT is used when the flag is absent)
   --help             Show help for a subcommand
 
-All subcommands print JSON on stdout. Errors go to stderr.
-Exit codes: 0 success/verdict, 1 invalid proof or unhealthy daemon,
-2 usage/transport/session error."#
+All daemon subcommands print JSON on stdout; doctor prints plain lines.
+Errors go to stderr. Exit codes: 0 success/verdict, 1 invalid proof or
+unhealthy daemon, 2 usage/transport/session error or doctor blocking findings."#
         .to_string()
 }
 
@@ -1012,6 +1064,33 @@ OPTIONS:
   --endpoint <url>     Daemon gRPC endpoint (default from session file, then
                        http://127.0.0.1:50051; GM_ENDPOINT when the flag is absent)
   --help               Show this help"#
+        .to_string()
+}
+
+fn doctor_help() -> String {
+    r#"gm doctor: scan the local configuration environment
+
+USAGE:
+  gm doctor [--endpoint <url>]
+
+Reads the local environment only and contacts no daemon. Builds the same
+configuration the daemon reads at startup and prints:
+  posture: production|demo
+  BLOCKING <setting>: <message>   (blocks daemon startup)
+  warning <setting>: <message>    (insecure or notable, does not block)
+  doctor: FAIL — N blocking finding(s)
+  doctor: OK — no blocking findings (M warning(s))
+
+In production posture (the default) the built-in default handshake secret is
+a blocking finding: the daemon refuses to start with it. Demo posture permits
+the default secret for local demonstration only, and the doctor still names it.
+
+Exit codes: 0 when there are no blocking findings, 2 when any blocking finding
+is present (a normal result, not a usage error).
+
+OPTIONS:
+  --endpoint <url>   Accepted and ignored; doctor contacts no daemon
+  --help             Show this help"#
         .to_string()
 }
 
