@@ -952,5 +952,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-12T01:02:05-06:00",
     "message": "Merge pull request #109 from nrupala/wright/wo22-secure-by-default"
+  },
+  {
+    "release": 111,
+    "tag": "release/v111",
+    "previous_tag": "release/v110",
+    "sha": "98892d03706506159d12438b7026fbfd701d07f0",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-12T01:21:30-06:00",
+    "message": "Merge pull request #110 from nrupala/wright/pack-ledger-2026-11-11-nightly"
   }
 ]
