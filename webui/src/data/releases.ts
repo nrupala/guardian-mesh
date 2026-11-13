@@ -25,8 +25,8 @@ export const RELEASES: Release[] = [
       "docs/MEDIATION.md (new) documents the token format and semantics, checker API, both sides of escrow mode, a resource-integration sketch, and an explicit not-claimed list",
       "HONESTY BOUNDARY: this release adds token issuance, escrow-mode refusal and the resource-side checker plus docs/spec/version surfaces - no new dependencies, no new RPCs, no CLI commands, and no changes to verdict logic, policy, firewall, handshake, certificate, revocation, tenant or degraded behaviour beyond the CM-1 escrow BLOCK"
     ],
-    gateVerdict: "Wright verification pending",
-    tests: "Wright verification pending",
+    gateVerdict: "PASS WITH FINDINGS - release gate 2026-11-12 (WO-20): scanner PASS 0 secrets / 0 vulns / 0 must-gate failures; cargo audit clean (174 deps); F1 lane code needed one Wright compile fix (E0502, bf07acd); F2 token-id RNG failure ignored, fail-closed, noted; GMSI-150 filed (self-contained lane tasks)",
+    tests: "Wright independent verification: cargo test 286/286 (178 lib + 91 bin + 11 gm-mcp + 6 gm; baseline 268, +18 new WO-20 tests); WebUI ci/build/lint + check:releases green (27 versions); Wright behaviour proof 8/8 (exact-action + escrow release, replay, action mismatch, tampers, expiry boundary, wrong-target escrow)",
     status: "Current release"
   },
   {

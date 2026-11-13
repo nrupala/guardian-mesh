@@ -26,7 +26,7 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **NOT in this release**: no network/mTLS lockdown or forced routing (CM-4), no daemon-side credential vault (remainder of CM-1), no receipts or reconciliation (CM-5, WO-21), no direct-access/non-catalogued-invocation conformance probes (CM-8, WO-27), and no shared one-time token state across processes (the used-token set is in-memory per checker instance).
 
 ### Tests and Gate Verdict
-Wright verification pending.
+Wright verification (fresh checkout of PR #113 head bf07acd, never the lane's own run): cargo test 286/286 (178 lib + 91 bin + 11 gm-mcp + 6 gm; v0.23.0 baseline 268, +18 = exactly the new WO-20 tests); WebUI ci + build + lint clean, check:releases green (27 versions); Wright's own behaviour proof 8/8 legs (exact-action validation + escrow release, replay refused, metadata-change action-mismatch refused, trailing-bytes and length-prefix tampers refused, expiry boundary, wrong-target escrow returns none). Gate: PASS WITH FINDINGS (scanner PASS 0/0/0; cargo audit clean, 174 deps; F1 = the lane's code needed one Wright compile fix, E0502, commit bf07acd; F2 = token-id RNG failure ignored, fail-closed direction, noted). One Wright proof vector was corrected mid-proof (a low-byte length mutation is refused as signature-invalid rather than malformed — the refusal held in both forms). Release gate pack: guardian-mesh-wo20-2026-11-12. GMSI-150 filed by this run (self-contained lane tasks).
 
 ## [0.23.0] - 2026-11-11
 
