@@ -13,6 +13,22 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.26.0",
+    date: "2026-11-13",
+    summary: "WO-20: complete-mediation core (CM-2 + CM-1 escrow mode + CM-3 checker hook) - every real ALLOW now issues a one-time, ML-DSA-signed execution token bound to the sealed action hash, a resource-side ExecutionChecker refuses execution without a matching token, and escrow mode refuses agent-presented credentials daemon-side.",
+    highlights: [
+      "guardian-meshd/src/execution_token.rs (new): the CM-2 token format (GMET1 payload, canonical length-prefixed action hash, 120 s TTL, u32-BE length-prefixed wire form signed with the daemon ML-DSA-65 key), issue_token(), TokenClaims, and the resource-side ExecutionChecker with check() and check_and_release() plus an in-memory escrow store that never prints credential bytes",
+      "guardian-meshd/src/config.rs adds escrow_mode parsed from GUARDIAN_MESH_ESCROW_MODE (1/true, case-insensitive) and is_credential_metadata_key() matching credential-named metadata keys case-insensitively, with unit tests",
+      "guardian-meshd/src/main.rs issues the execution token only on a real (non-simulation) ALLOW in EvaluateResponse field 5; all other responses keep the field empty. With escrow mode on, an action carrying a credential-named metadata key is blocked with rule CM-1 before the Sentinel pipeline, naming the key only, never its value",
+      "guardian-meshd/proto/guardian_mesh.proto: field 5 comment now documents the CM-2 execution token; name, type and number unchanged",
+      "specs/GUARDIAN_MESH_REVISED_SPEC.md: CM-2 [TARGET] -> [SHIPPED] for the v0.26.0 scope, CM-1 -> [PARTIAL] (escrow mode + checker release; daemon-side vault injection remains), CM-3 -> [PARTIAL] (checker as resource-side identity hook; mTLS/network lockdown remains deployment-side). specs/THREAT_MODEL.md: TM-04 countermeasure names CM-2 [SHIPPED] v0.26.0, TM-05 stays open with CM-3 [PARTIAL]",
+      "docs/MEDIATION.md (new) documents the token format and semantics, checker API, both sides of escrow mode, a resource-integration sketch, and an explicit not-claimed list",
+      "HONESTY BOUNDARY: this release adds token issuance, escrow-mode refusal and the resource-side checker plus docs/spec/version surfaces - no new dependencies, no new RPCs, no CLI commands, and no changes to verdict logic, policy, firewall, handshake, certificate, revocation, tenant or degraded behaviour beyond the CM-1 escrow BLOCK"
+    ],
+    gateVerdict: "PASS WITH FINDINGS - release gate 2026-11-12 (WO-20, rebase addendum 2026-11-13): scanner PASS 0 secrets / 0 vulns / 0 must-gate failures; cargo audit clean (174 deps); F1 lane code needed one Wright compile fix (E0502); F2 token-id RNG failure ignored, fail-closed, noted; GMSI-152 filed (self-contained lane tasks)",
+    tests: "Wright independent verification on the rebased tree (over WO-DCR v0.25.0): cargo test 298/298 (188 lib + 93 bin + 11 gm-mcp + 6 gm = 280 v0.25.0 suite + 18 new WO-20 tests); WebUI ci/build/lint + check:releases green (28 versions); Wright behaviour proof re-run 8/8 (exact-action + escrow release, replay, action mismatch, tampers, expiry boundary, wrong-target escrow)",
+    status: "Current release"
+  },  {
     version: "0.25.0",
     date: "2026-11-12",
     summary: "WO-DCR (Gap 5 behaviour-proof build): the DCR-REDIRECT-FRAGMENT content rule - an evaluation whose payload is an OAuth client-registration request carrying a redirect URI with a fragment component is BLOCKED at evaluation time, and the sealed proof records the rule that blocked it (gate case 2026-10-15, Conduit DCR).",
