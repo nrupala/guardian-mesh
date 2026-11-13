@@ -1395,7 +1395,12 @@ do, and none becomes a gate MUST until behaviour-proven here.
   gate F3, 2026-11-07: the verifying sandbox's nested userns
   delegates no memory/pids controllers — crun refuses every
   limit flag — while the daemon's measured peak was 10.6 MB
-  against the shipped 256M ceiling.)
+  against the shipped 256M ceiling.) **CLOSED 2026-11-12** by
+  the first bench-backed gate run (guardian-mesh-bench-2026-11-12,
+  Leg 4): enforcement proven on the production box at the shipped
+  256M cap (cgroup memory.max read back exactly; twin hog unit
+  OOM-killed at the same cap; daemon peak ~9.1 MB under 97,090
+  requests) — the venue rule above stands for future claims.
 
 - **GMSI-123 — Counter-only auth-outcome metrics.** Where a
   surface deliberately logs nothing about authentication
@@ -1629,6 +1634,49 @@ MUST until behaviour-proven here.
   service), not only of correct responses from a running server:
   a gate that only tests running servers can never evidence the
   one behaviour a startup gate exists to produce.
+
+- **GMSI-146 — Bench-image tool completeness.** (Bench-backed
+  gate, 2026-11-12.) The Kali golden image lacks testssl.sh on
+  PATH (only a /usr/share/doc remnant), so the deep TLS leg fell
+  back to nmap ssl-enum-ciphers + openssl. A bench image's tool
+  inventory is part of the gate's evidence surface: GM should be
+  able to prove a bench venue carries the tools its legs claim
+  before a leg is scheduled against it, and a missing tool must
+  surface as a named NOT RUN, never a silent substitution.
+  Folded note: the grand-machine IAM key can launch and
+  terminate bench instances but cannot start/stop the standing
+  ones — bench lifecycle is launch+terminate only.
+- **GMSI-147 — Edge TLS floor proof.** (Bench-backed gate,
+  2026-11-12.) The Cloudflare zone edge for the production
+  surface still offers TLS 1.0/1.1 including
+  TLS_RSA_WITH_3DES_EDE_CBC_SHA (grade C) while the daemon
+  itself negotiates TLS 1.3. GM should be able to prove the
+  *served* TLS floor of a deployment's public edge — minimum
+  version and weakest cipher actually offered — not only the
+  daemon's own stack, so an edge downgrade path surfaces as a
+  finding. Recommendation of record: raise the zone minimum
+  TLS version to 1.2 (dashboard setting; the daemon is
+  unaffected — it terminates nothing publicly).
+- **GMSI-148 — Operator tooling installed, not staged.**
+  (Bench-backed gate, 2026-11-12.) The gm CLI is not installed
+  on the production box; gate and nightly runs upload the
+  current release's gm to /tmp per run and remove it after,
+  and stale operator binaries from prior runs accumulate in
+  /tmp. A deployment should install its operator CLI at deploy
+  time from the same attested build as the daemon, and GM
+  should be able to prove the installed CLI's build matches
+  the daemon it operates (version + commit + binary hash)
+  instead of trusting a staged copy.
+- **GMSI-149 — Dependency-audit scope pinning.** (Bench-backed
+  gate, 2026-11-12.) The repo commits no Cargo.lock, so a
+  cargo audit resolves fresh from the manifests — the audited
+  tree can differ from the attested build's tree. GM should be
+  able to prove a dependency audit ran against the exact lock
+  of the build it gates: commit Cargo.lock, or pin gate audits
+  to the attested build's lock and file that lock in the
+  evidence pack. (cargo-audit 0.23.0 is now installed on the
+  verifying VM; the reliable route through the sandbox proxy
+  is --no-fetch against the cached advisory DB.)
 
 ## Development home and engine routing
 
