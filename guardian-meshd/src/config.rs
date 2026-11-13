@@ -54,6 +54,7 @@ pub struct Config {
     pub posture: Posture,
     pub posture_env_invalid: Option<String>,
     pub handshake_secret_is_default: bool,
+    pub escrow_mode: bool,
 }
 
 impl Config {
@@ -222,6 +223,32 @@ fn parse_posture(value: Option<&str>) -> (Posture, Option<String>) {
     }
 }
 
+fn parse_bool_env(value: Option<&str>) -> bool {
+    match value {
+        Some(raw) => raw == "1" || raw.eq_ignore_ascii_case("true"),
+        None => false,
+    }
+}
+
+/// True when an action metadata key names a credential. Matching is
+/// case-insensitive and exact: `token_id` and `monkey` are not credential
+/// keys.
+pub fn is_credential_metadata_key(key: &str) -> bool {
+    matches!(
+        key.to_lowercase().as_str(),
+        "credential"
+            | "credentials"
+            | "password"
+            | "passwd"
+            | "api_key"
+            | "apikey"
+            | "secret"
+            | "token"
+            | "access_key"
+            | "private_key"
+    )
+}
+
 fn resolve_handshake_secret(value: Option<&str>) -> (Vec<u8>, bool) {
     match value {
         None => (DEFAULT_HANDSHAKE_SECRET.to_vec(), true),
@@ -275,6 +302,12 @@ impl Default for Config {
             .unwrap_or(false);
         
         let pgp_admin_keys_dir = std::env::var("GUARDIAN_MESH_PGP_ADMIN_KEYS_DIR").ok();
+
+        let escrow_mode = parse_bool_env(
+            std::env::var("GUARDIAN_MESH_ESCROW_MODE")
+                .ok()
+                .as_deref(),
+        );
         
         let tenants = std::env::var("GUARDIAN_MESH_TENANTS")
             .ok()
@@ -335,6 +368,7 @@ impl Default for Config {
             degraded_safe_actions,
             posture,
             posture_env_invalid,
+            escrow_mode,
         }
     }
 }
@@ -474,5 +508,47 @@ mod tests {
         assert!(!short.blocking);
         assert!(short.message.contains("5 bytes"));
         assert!(!short.message.contains("short"));
+    }
+
+    #[test]
+    fn escrow_mode_env_parse_accepts_one_and_true_case_insensitively() {
+        assert!(!parse_bool_env(None));
+        assert!(parse_bool_env(Some("1")));
+        assert!(parse_bool_env(Some("true")));
+        assert!(parse_bool_env(Some("TRUE")));
+        assert!(parse_bool_env(Some("True")));
+        assert!(!parse_bool_env(Some("0")));
+        assert!(!parse_bool_env(Some("false")));
+        assert!(!parse_bool_env(Some("yes")));
+        assert!(!parse_bool_env(Some("")));
+    }
+
+    #[test]
+    fn credential_metadata_keys_match_case_insensitively() {
+        for key in [
+            "credential",
+            "CREDENTIALS",
+            "Password",
+            "passwd",
+            "api_key",
+            "APIKEY",
+            "secret",
+            "Token",
+            "access_key",
+            "private_key",
+        ] {
+            assert!(is_credential_metadata_key(key), "{key} must match");
+        }
+
+        for key in [
+            "token_id",
+            "monkey",
+            "apikeys",
+            "authorization",
+            "user",
+            "target",
+        ] {
+            assert!(!is_credential_metadata_key(key), "{key} must not match");
+        }
     }
 }

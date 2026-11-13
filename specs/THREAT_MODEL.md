@@ -99,8 +99,9 @@ tenant → tenant, BM-4 node → node, BM-5 guardian → external verifier,
 BM-6 administrator → policy, BM-7 edge → core, BM-8 build →
 deployment). Two boundaries exist in shipped form today (BM-1, BM-3,
 BM-5, BM-6, BM-8 in the slices named in the register); BM-4 does not
-exist (no cluster — DC-1 [TARGET]); BM-2 is mediated by verdict only,
-not by execution control (CM-2/CM-3 [TARGET], TM-04/TM-05); BM-7 ships
+exist (no cluster — DC-1 [TARGET]); BM-2 is mediated by verdict, with
+execution-token control available to resources that embed the checker
+(CM-2 [SHIPPED] v0.24.0, CM-3 [PARTIAL], TM-04/TM-05); BM-7 ships
 as the edge *deployment form* (DP-6, v0.18.0) with no edge → core
 sync (BM-7 sync is design, recorded in `docs/EDGE.md`).
 
@@ -158,21 +159,28 @@ for a crash, a hang, or a lenient parse.
 The agent obtains ALLOW for a benign action, then executes a
 different one at the resource.
 - **Countermeasures:** the sealed proof binds the exact action
-  descriptor (EV-1) [SHIPPED] — a verifier can prove the executed
+  descriptor (EV-1) [SHIPPED] - a verifier can prove the executed
   action was never judged, after the fact. Execution tokens bound to
-  the sealed action hash with a tool-side checker (CM-2) **[TARGET]**.
-- **Residual risk — OPEN, high:** today nothing at the resource
-  *prevents* the swap; detection is forensic (proof vs. what the
+  the sealed action hash with a tool-side checker (CM-2)
+  **[SHIPPED] v0.24.0** - a real ALLOW carries a one-time,
+  ML-DSA-signed token in EvaluateResponse field 5, and the
+  resource-side checker refuses a mismatched action.
+- **Residual risk - reduced, not closed:** a resource that does not
+  embed the checker still cannot be *prevented* from executing the
+  swap; detection there remains forensic (proof vs. what the
   resource did), and only where someone compares. **Closed by:**
-  WO-20 (complete-mediation core).
+  WO-20 (complete-mediation core) where the resource enforces the
+  checker; deployment conformance is WO-27.
 
 #### TM-05 — Guardian bypass (direct resource access)
 The agent simply never calls the guardian and talks to the tool,
 API, or model directly.
 - **Countermeasures:** none in the shipped daemon — Guardian Mesh is
   a verdict service a caller must actually call. Resource-side
-  lockdown (CM-3), forced routing (CM-4), receipt reconciliation
-  (CM-5), and coverage inventory with bypass alarms (CM-6) are all
+  lockdown (CM-3) is **[PARTIAL] v0.24.0** — the resource-side
+  ExecutionChecker accepts only guardian-issued work where a resource
+  enforces it; forced routing (CM-4), receipt reconciliation (CM-5),
+  and coverage inventory with bypass alarms (CM-6) are all
   **[TARGET]** (WO-20, WO-21); the non-catalogued-invocation probe
   suite (CM-8) is **[TARGET]** (WO-27, extends WO-17).
 - **Residual risk — OPEN, high, and structural:** a deployment that
@@ -518,8 +526,8 @@ until its closing work order ships.
 
 | Threat | Open because | Closed by |
 |--------|--------------|-----------|
-| TM-04 say-one-do-another | CM-2 execution tokens not built | WO-20 |
-| TM-05 guardian bypass | CM-3/CM-4/CM-5/CM-6 not built | WO-20, WO-21, WO-27 |
+| TM-04 say-one-do-another | CM-2 shipped v0.24.0; enforcement requires the resource to embed the checker | WO-27 (deployment conformance) |
+| TM-05 guardian bypass | CM-3 partial (v0.24.0); CM-4/CM-5/CM-6 not built | WO-20, WO-21, WO-27 |
 | TM-07 payload exfiltration | PC-1 not built | WO-24 |
 | TM-13 insider evidence suppression | SG-7, PC-6 not built | WO-26 |
 | TM-14 history rewrite (pre-head) | SG-5 external witnessing not built | WO-23 |
