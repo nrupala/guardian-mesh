@@ -961,5 +961,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-12T01:21:30-06:00",
     "message": "Merge pull request #110 from nrupala/wright/pack-ledger-2026-11-11-nightly"
+  },
+  {
+    "release": 112,
+    "tag": "release/v112",
+    "previous_tag": "release/v111",
+    "sha": "1e9cc7f52c6810c036fc0b53db5f2662750c86e8",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-13T00:26:09-06:00",
+    "message": "Merge pull request #111 from nrupala/wright/pack-refresh-2026-11-12"
   }
 ]
