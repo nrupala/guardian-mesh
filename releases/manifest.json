@@ -970,5 +970,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-13T00:26:09-06:00",
     "message": "Merge pull request #111 from nrupala/wright/pack-refresh-2026-11-12"
+  },
+  {
+    "release": 113,
+    "tag": "release/v113",
+    "previous_tag": "release/v112",
+    "sha": "c8dd6ab05980a8a018294656c99a8c2939e46841",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-13T01:04:26-06:00",
+    "message": "Merge pull request #112 from nrupala/wright/wo-dcr-fragment-rule"
   }
 ]
