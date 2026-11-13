@@ -997,5 +997,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-13T02:08:04-06:00",
     "message": "Merge pull request #115 from nrupala/wright/wo20-complete-mediation"
+  },
+  {
+    "release": 116,
+    "tag": "release/v116",
+    "previous_tag": "release/v115",
+    "sha": "358f44df21df7b215e646eaad764a0d0047ac00c",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-13T02:30:44-06:00",
+    "message": "Merge pull request #116 from nrupala/wright/wo20-ledger"
   }
 ]
