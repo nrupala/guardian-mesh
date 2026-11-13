@@ -1702,6 +1702,19 @@ MUST until behaviour-proven here.
   shipped under the gate's case-file spec input
   (2026-10-15-conduit-dcr) without one.
 
+- **GMSI-152 — Self-contained lane tasks.** (WO-20 gate,
+  2026-11-12.) Two OpenCode sessions died on WO-20
+  researching an ML-DSA signature length in the cargo
+  registry: reads outside the project directory are
+  permission-auto-rejected, and the rejection ends the
+  session with zero files written. GM should be able to
+  prove a build task is self-contained — every API fact
+  the lane needs is inside the repo or the task file —
+  before dispatch, so a lane never has to leave the
+  project surface to finish. (Fix of record on WO-20: a
+  self-delimiting token wire format plus the needed
+  facts written into the task file itself.)
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
@@ -3548,4 +3561,141 @@ in Part B above.
 
 Guardian Mesh Spec Inputs filed by this run: GMSI-150 and
 GMSI-151 (WO-DCR gate scope boundaries), recorded in
+Part B above.
+
+- 2026-11-13 (nightly) — **WO-20 SHIPPED as v0.26.0**
+  (PR #115, merged 7510e30f; merge tree 6a10c109 == PR
+  head tree): complete-mediation core. Every real
+  (non-simulation) ALLOW now issues a one-time,
+  ML-DSA-65-signed execution token in the pre-existing
+  EvaluateResponse field 5 (handshake_token; name, type
+  and number unchanged): GMET1 payload (token id, action
+  hash = SHA-256 over the canonical length-prefixed
+  action encoding, session, tenant, issued-at,
+  expires-at), TTL 120 s, wire form u32-BE payload
+  length || payload || signature. The resource-side
+  ExecutionChecker refuses missing / malformed /
+  bad-signature / action-mismatch / expired / replayed
+  tokens with named errors and consumes the token id
+  only on a fully successful check; its escrow store
+  releases a credential for the action target only
+  after a valid check (check_and_release); credential
+  bytes never print (manual Debug = counts only).
+  Escrow mode (GUARDIAN_MESH_ESCROW_MODE, default off;
+  production does not enable it): an action presenting
+  a credential-named metadata key is BLOCKed
+  daemon-side with rule CM-1 before the Sentinel
+  pipeline, the reason naming the key, never the value.
+  Spec: CM-2 [SHIPPED] (v0.26.0 scope); CM-1 [PARTIAL]
+  (remainder: daemon-side credential vault injection);
+  CM-3 [PARTIAL] (remainder: mTLS / network-policy
+  lockdown, deployment-side; conformance in WO-27).
+  Threat model: TM-04's countermeasure names CM-2
+  shipped, residual reduced not closed where a resource
+  does not embed the checker; TM-05 stays open with
+  CM-3 partial. docs/MEDIATION.md (new) carries the
+  format, the checker API and an explicit not-claimed
+  list. No new dependencies, no new RPCs, no CLI
+  commands, no verdict-logic change beyond the CM-1
+  escrow BLOCK.
+  Lane + sequencing DISCLOSURE: built by OpenCode
+  (big-pickle) on the owner's laptop in a fresh clone
+  at refreshed main 1e9cc7f5 (lane commit 4a121f6; the
+  lane's push failed on the clone's missing GitHub
+  credentials and Wright carried it via bundle +
+  git-data API, tree-identical). Two lane sessions died
+  researching the ML-DSA signature length (registry
+  reads are permission-auto-rejected and end the
+  session with zero files written); Wright amended the
+  task with the self-delimiting wire format and the
+  third session completed — filed as GMSI-152. The
+  lane's delivered code did not compile (4 × E0502:
+  token issuance used the ctx-borrowed session_id after
+  the enclave mutations); Wright's fix (an owned copy
+  taken before the pipeline) rides the release,
+  disclosed in PR #115 and gate finding F1. While WO-20
+  was in verification, WO-DCR shipped as v0.25.0
+  (PR #112) and its ledger PR #114 merged; WO-20's
+  first PR (#113, as v0.24.0) went stale, was closed
+  unmerged, and the WO was rebased onto the new main
+  and renumbered v0.26.0 (main.rs three-way merge
+  clean; the #114 releases.ts fold-in preserved).
+  Wright verification (fresh checkouts, never the
+  lane's own run): pre-rebase branch cargo 286/286
+  (268 baseline + exactly the 18 WO-20 tests); rebased
+  tree cargo 298/298 (188 lib + 93 bin + 11 gm-mcp
+  + 6 gm = the 280-test v0.25.0 suite + the 18), WebUI
+  ci/build/lint clean, check:releases green
+  (28 versions); Wright's own behaviour proof (own
+  keypair and vectors) 8/8 legs on both trees
+  (exact-action validation + escrow release, replay
+  refused, metadata-change action-mismatch,
+  trailing-bytes and length-prefix tampers refused,
+  expiry boundary valid-at / expired-after,
+  wrong-target escrow returns none). Gate (pack
+  guardian-mesh-wo20-2026-11-12, verdict + 2026-11-13
+  rebase addendum): scanner PASS (0/0/0); cargo audit
+  --no-fetch clean (174 deps); verdict PASS WITH
+  FINDINGS — F1 the lane compile fix above; F2 (Low)
+  issue_token ignores a SysRng failure minting the
+  token id, fail-closed direction, noted for a future
+  hardening pass; F3 standing GMSI-143 lag outside
+  this WO.
+  Production v0.26.0 live 2026-11-13: binary sha256
+  9c392c78f0423e63360b27b917318a30e419ac954ac41df8d8
+  fd0ef2a43bddcc (cross-built from merged main
+  7510e30f, cargo-zigbuild 0.23.4 + zig 0.14.1,
+  GUARDIAN_MESH_GIT_COMMIT=7510e30f); backup
+  .bak-v0250 taken, both services active; box E2E
+  15/16 (sole miss the standing stale Health-fields
+  harness check, 18th occurrence) — gm-deploy stopped
+  at NOT certified on that bar and certification
+  proceeded on direct production proof, per standing
+  practice. Direct proof (Wright's own box client):
+  Health SERVING, 0.26.0@7510e30f, binary sha == built
+  == installed, degraded=false, fingerprint == pin
+  dd2cf1a3...; self-cert cert-20261113-000055 ACTIVE,
+  PASS WITH FINDINGS, evidence = gate verdict sha256
+  4a44fffdcb3b4b4030b6e4ebbc6a267af4d0a107bd4a49f7a107
+  dd89a828b6a0, its sealed pf_outcomes == the
+  production Health counters exactly (9 rules; totals
+  1061/1083), payload fingerprint recomputes,
+  VerifyProof VALID — superseding cert-20261113-000054.
+  Attestation: statement built against the merged
+  clone (cross-build Cargo.lock f96da63b...), signed
+  on the box with the production key (the key never
+  left the box); installed
+  /opt/guardian-mesh/guardian-meshd-0.26.0.attestation.json,
+  gm-attest verify VALID, signer == pin, package
+  fingerprint 21acdd55.... Pages parity: box dist
+  asset == merged build == GitHub Pages asset
+  (index-CxLoUcEp.js); public unauthenticated 302.
+  Main-push CI note: the PR Gate workflow fails on
+  push events (identically on c8dd6ab0 and 43804982 —
+  it requires a PR context); PR-event checks on the
+  merged head were all green, and Rust CI / WebUI CI /
+  CodeQL on the merge commit are green. NOT RUN:
+  authenticated panel click-through (GMSI-134);
+  Kali/Arch for this delta (no new network surface;
+  bench lineage proven 2026-11-12); live token
+  observation on the production daemon (the shipped gm
+  CLI does not surface field 5; issuance is proven
+  against the byte-identical binary by the suite +
+  Wright's proof harness); cross-process one-time
+  enforcement (by design in-memory per checker, stated
+  on the face of the docs). v0.26.0 is a RELEASE
+  CANDIDATE (one-week soak; graduates 2026-11-20).
+  **WO-20 is CLOSED; CM-2 is satisfied, CM-1/CM-3
+  stand PARTIAL with named remainders.** Next: WO-32
+  (P1, AI risk register + process, docs-only — Wright
+  lane acceptable) as the highest-priority unfinished
+  work order; WO-27 (P2, mediation conformance)
+  follows in pack order; WO-17 stays open for the
+  cluster chaos + CM-8 extensions (WO-27); WO-16
+  stays open for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-146
+to GMSI-149 (pre-build pack refresh, from the
+2026-11-12 bench-backed gate run) and GMSI-152
+(WO-20 gate, self-contained lane tasks), recorded in
 Part B above.
