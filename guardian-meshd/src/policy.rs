@@ -5,6 +5,14 @@ use std::collections::HashMap;
 use std::path::Path;
 use sha2::{Sha256, Digest};
 
+use crate::enclave::ReasonDetail;
+use crate::proto::ActionDescriptor;
+
+/// Rule id recorded in the verdict reason and the sealed proof when an
+/// OAuth client-registration payload carries a redirect URI with a
+/// fragment component (DCR behaviour-proof case, 2026-10-15 gate input).
+pub const DCR_REDIRECT_FRAGMENT_RULE: &str = "DCR-REDIRECT-FRAGMENT";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyRule {
     pub action_type: String,
@@ -209,6 +217,52 @@ impl PolicyEngine {
 
     pub fn requires_escalation(&self, action_type: &str) -> bool {
         self.bundle.escalate_actions.iter().any(|a| a == action_type)
+    }
+
+    /// Content rules: payload-shaped policy that a type-only decision
+    /// cannot express. Returns the blocking reason for the first rule
+    /// the payload violates, or None when no content rule fires.
+    ///
+    /// DCR-REDIRECT-FRAGMENT: an evaluation whose context payload is an
+    /// OAuth client-registration request (RFC 7591) — it carries
+    /// registration redirect URIs as `redirect_uris` (array) and/or a
+    /// single `redirect_uri` — is blocked when any of those URIs
+    /// contains a fragment component ('#'). Redirect URIs must not
+    /// include a fragment (RFC 6749 §3.1.2; RFC 7591 §2). Payloads that
+    /// are not registration-shaped (no redirect URI fields, or the
+    /// context is not a JSON object) never fire this rule, and a '#'
+    /// elsewhere in the payload is not a violation.
+    pub fn check_content_rules(&self, action: &ActionDescriptor) -> Option<ReasonDetail> {
+        let value: serde_json::Value = serde_json::from_str(action.context.trim()).ok()?;
+        let object = value.as_object()?;
+
+        let mut candidates: Vec<(String, &str)> = Vec::new();
+        if let Some(array) = object.get("redirect_uris").and_then(|v| v.as_array()) {
+            for (index, entry) in array.iter().enumerate() {
+                if let Some(uri) = entry.as_str() {
+                    candidates.push((format!("redirect_uris[{index}]"), uri));
+                }
+            }
+        }
+        if let Some(uri) = object.get("redirect_uri").and_then(|v| v.as_str()) {
+            candidates.push(("redirect_uri".to_string(), uri));
+        }
+
+        let (field, _) = candidates
+            .into_iter()
+            .find(|(_, uri)| uri.contains('#'))?;
+
+        Some(ReasonDetail {
+            rule_id: DCR_REDIRECT_FRAGMENT_RULE.to_string(),
+            detail: format!(
+                "OAuth client registration blocked by {DCR_REDIRECT_FRAGMENT_RULE}: \
+                 {field} contains a fragment component ('#'). Redirect URIs must not \
+                 include a fragment (RFC 6749 §3.1.2; RFC 7591 §2)."
+            ),
+            remediation:
+                "Remove the fragment component from every redirect URI in the registration request and resubmit."
+                    .to_string(),
+        })
     }
 
     pub fn decide(&self, action_type: &str) -> bool {
@@ -552,5 +606,76 @@ mod tests {
         assert!(!engine.decide("CODE_EXECUTE")); // Unknown action returns false
         assert!(!engine.decide("TOOL_CALL")); // New rule applies
         assert_eq!(engine.policy_version(), 2);
+    }
+
+    // Content-rule tests (DCR-REDIRECT-FRAGMENT)
+
+    fn action_with_context(context: &str) -> ActionDescriptor {
+        ActionDescriptor {
+            action_type: "NETWORK_REQUEST".to_string(),
+            context: context.to_string(),
+            target: "https://conduit.example/oauth/register".to_string(),
+            metadata: Default::default(),
+        }
+    }
+
+    #[test]
+    fn content_rule_blocks_fragment_in_redirect_uris() {
+        let engine = PolicyEngine::new();
+        let action = action_with_context(
+            r#"{"client_name":"Proof Client","redirect_uris":["https://client.example/callback#frag"]}"#,
+        );
+        let block = engine.check_content_rules(&action).expect("fragment must block");
+        assert_eq!(block.rule_id, DCR_REDIRECT_FRAGMENT_RULE);
+        assert!(block.detail.contains("redirect_uris[0]"));
+    }
+
+    #[test]
+    fn content_rule_blocks_fragment_in_single_redirect_uri() {
+        let engine = PolicyEngine::new();
+        let action = action_with_context(
+            r#"{"redirect_uri":"https://client.example/callback#frag"}"#,
+        );
+        let block = engine.check_content_rules(&action).expect("fragment must block");
+        assert_eq!(block.rule_id, DCR_REDIRECT_FRAGMENT_RULE);
+        assert!(block.detail.contains("redirect_uri"));
+    }
+
+    #[test]
+    fn content_rule_blocks_fragment_in_any_of_several_uris() {
+        let engine = PolicyEngine::new();
+        let action = action_with_context(
+            r#"{"redirect_uris":["https://client.example/ok","https://client.example/cb#x"]}"#,
+        );
+        let block = engine.check_content_rules(&action).expect("second URI fragment must block");
+        assert!(block.detail.contains("redirect_uris[1]"));
+    }
+
+    #[test]
+    fn content_rule_allows_clean_registration() {
+        let engine = PolicyEngine::new();
+        let action = action_with_context(
+            r#"{"client_name":"Proof Client","redirect_uris":["https://client.example/callback"],"grant_types":["authorization_code"]}"#,
+        );
+        assert!(engine.check_content_rules(&action).is_none());
+    }
+
+    #[test]
+    fn content_rule_ignores_fragment_outside_redirect_fields() {
+        let engine = PolicyEngine::new();
+        // A '#' in an unrelated field is not a redirect-URI fragment.
+        let action = action_with_context(
+            r#"{"client_name":"App #1","redirect_uris":["https://client.example/callback"]}"#,
+        );
+        assert!(engine.check_content_rules(&action).is_none());
+    }
+
+    #[test]
+    fn content_rule_ignores_non_json_and_non_registration_payloads() {
+        let engine = PolicyEngine::new();
+        assert!(engine.check_content_rules(&action_with_context("plain context #frag")).is_none());
+        assert!(engine.check_content_rules(&action_with_context(r#"{"unrelated":"value#x"}"#)).is_none());
+        assert!(engine.check_content_rules(&action_with_context(r#"{"redirect_uris":[]}"#)).is_none());
+        assert!(engine.check_content_rules(&action_with_context("")).is_none());
     }
 }

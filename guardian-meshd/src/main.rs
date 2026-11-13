@@ -5491,6 +5491,82 @@ mod tests {
         );
     }
 
+    async fn dcr_wire_request(
+        service: &GuardianMeshService,
+        session_id: &str,
+        sk: &SigningKey<MlDsa65>,
+        action: ActionDescriptor,
+    ) -> EvaluateRequest {
+        // The signed payload mirrors the descriptor, as the shipped
+        // clients build it (camelCase fields, the PF-12 field set).
+        let payload = serde_json::json!({
+            "actionType": action.action_type,
+            "context": action.context,
+            "target": action.target,
+            "metadata": action.metadata,
+        })
+        .to_string()
+        .into_bytes();
+        let sealed = SealedEnvelope::new(payload, b"test".to_vec(), sk);
+        let envelope = conformance_envelope(&sealed);
+        let hmac_tag = {
+            let bus = service.bus.read().await;
+            bus.compute_hmac(session_id, &envelope.payload).unwrap()
+        };
+        EvaluateRequest {
+            firewalled: Some(FirewalledRequest {
+                envelope: Some(envelope),
+                source_enclave: "webui".into(),
+                handshake_session: session_id.to_string(),
+                hmac_tag,
+            }),
+            action: Some(action),
+        }
+    }
+
+    #[tokio::test]
+    async fn dcr_fragment_registration_blocks_with_rule_in_sealed_proof() {
+        // The DCR behaviour-proof case (gate input, 2026-10-15): a
+        // registration request carrying a fragment redirect_uri is
+        // BLOCKED at evaluation time, and the sealed proof records
+        // the rule that blocked it.
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let action = ActionDescriptor {
+            action_type: "NETWORK_REQUEST".into(),
+            context: r#"{"client_name":"Proof Client","redirect_uris":["https://client.example/callback#frag"]}"#.into(),
+            target: "https://conduit.example/oauth/register".into(),
+            metadata: Default::default(),
+        };
+        let req = dcr_wire_request(&service, &session.session_id, &sk, action).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        conformance_assert_block_rule(&resp, "DCR-REDIRECT-FRAGMENT");
+        // The proof carrying the rule name verifies under the seal.
+        let envelope = resp.proof_envelope.clone().expect("BLOCK must carry a proof envelope");
+        assert!(conformance_verify(&service, envelope).await);
+    }
+
+    #[tokio::test]
+    async fn dcr_clean_registration_evaluates_allow_with_valid_proof() {
+        // Control case: the same registration shape without a
+        // fragment follows the policy-normal path for its type.
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let action = ActionDescriptor {
+            action_type: "NETWORK_REQUEST".into(),
+            context: r#"{"client_name":"Proof Client","redirect_uris":["https://client.example/callback"]}"#.into(),
+            target: "https://conduit.example/oauth/register".into(),
+            metadata: Default::default(),
+        };
+        let req = dcr_wire_request(&service, &session.session_id, &sk, action).await;
+        let resp = service.evaluate(Request::new(req)).await.unwrap().into_inner();
+        assert_eq!(resp.verdict, "ALLOW");
+        let envelope = resp.proof_envelope.clone().expect("ALLOW must carry a proof envelope");
+        assert!(conformance_verify(&service, envelope).await);
+    }
+
     async fn conformance_verify(
         service: &GuardianMeshService,
         envelope: ProtoSealedEnvelope,
