@@ -13,6 +13,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.25.0",
+    date: "2026-11-12",
+    summary: "WO-DCR (Gap 5 behaviour-proof build): the DCR-REDIRECT-FRAGMENT content rule - an evaluation whose payload is an OAuth client-registration request carrying a redirect URI with a fragment component is BLOCKED at evaluation time, and the sealed proof records the rule that blocked it (gate case 2026-10-15, Conduit DCR).",
+    highlights: [
+      "guardian-meshd/src/policy.rs adds PolicyEngine::check_content_rules and the DCR_REDIRECT_FRAGMENT_RULE constant: registration-shaped context payloads (redirect_uris and/or redirect_uri fields) with a fragment ('#') in any redirect URI return a blocking reason citing RFC 6749 \u00a73.1.2 and RFC 7591 \u00a72; the reason names the field (e.g. redirect_uris[0]), never the URI value",
+      "guardian-meshd/src/enclave/arbiter.rs applies the content rule with WO-5 precedence - below a type-level policy BLOCK, above ESCALATE/ALLOW - and the rule rides the existing structured-reasons path into EvaluateResponse.reasons and the sealed AuditProof.rule_ids",
+      "guardian-meshd/src/main.rs adds full-path integration tests: fragment registration BLOCKs with the rule inside the sealed proof (VerifyProof VALID); a clean registration ALLOWs with a valid proof",
+      "HONESTY BOUNDARY: no proto changes, no new dependencies, and no verdict-path change for any existing payload class; content rules inspect the context payload only (metadata-carried registration payloads are a follow-up), and sibling DCR validations (http downgrade, embedded credentials in redirect URIs) are follow-up spec inputs, not in this release"
+    ],
+    gateVerdict: "PASS WITH FINDINGS \u2014 Release Gate 2026-11-12 (guardian-mesh-dcr-behaviour-proof-2026-11-12): machine scanner PASS (0 must-gate failures, 0 secrets, 0 known vulns); cargo audit clean (174 dependencies, 1490 advisories); F1 content rules inspect the context payload only; F2 sibling DCR validations are follow-up spec inputs",
+    tests: "Wright, independent, fresh checkout of PR #112 head: cargo test 280/280 (268 baseline + exactly the 12 new tests: 6 policy unit, 4 arbiter unit, 2 full-path); WebUI ci+build+lint clean, check:releases green; live wire rehearsal on this tree 4/4 legs (fragment BLOCK with rule named + proof VALID, tampered proof NOT VALID, clean ALLOW + valid proof, dead endpoint fails closed). Production behaviour proof on the shipped build against live Conduit is filed in the gate pack and this entry's ledger update.",
+    status: "Release candidate"
+  },
+  {
     version: "0.23.0",
     date: "2026-11-11",
     summary: "WO-22: secure by default (SG-4) - production posture (the default) refuses to start with the built-in default handshake secret, and the new gm doctor scans the configuration environment and names every insecure setting.",

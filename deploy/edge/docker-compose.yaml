@@ -10,7 +10,7 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
-    image: guardian-mesh:0.23.0
+    image: guardian-mesh:0.25.0
 
     # DP-6 resource ceilings (container form): the same starting ceilings as
     # the systemd unit, in ONE place. The container runtime enforces them; the
