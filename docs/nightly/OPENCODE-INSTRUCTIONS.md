@@ -1677,6 +1677,30 @@ MUST until behaviour-proven here.
   evidence pack. (cargo-audit 0.23.0 is now installed on the
   verifying VM; the reliable route through the sandbox proxy
   is --no-fetch against the cached advisory DB.)
+- **GMSI-150 — Content-rule payload coverage.** (WO-DCR gate,
+  2026-11-12.) The v0.25.0 policy content rules inspect the
+  evaluate action's context JSON — the surface the shipped gm
+  client populates (context = request payload, metadata =
+  {}). A caller placing a registration payload in
+  EvaluateRequest.metadata, or a future MCP arguments
+  envelope, sits outside the rule's view. Extend content-rule
+  inspection to the request's other payload-carrying surfaces
+  (or prove at the protocol layer that context is the only
+  payload surface a mediated call can take), with control
+  tests for each surface covered.
+- **GMSI-151 — Sibling DCR validations + a spec row for the
+  rule family.** (WO-DCR gate, 2026-11-12.) v0.25.0 ships the
+  fragment rule only (DCR-REDIRECT-FRAGMENT). Unbuilt from the
+  same case family: non-loopback http redirect_uris (scheme
+  downgrade), redirect URIs with embedded credentials
+  (userinfo), and unparseable URI values — each wants a named
+  rule, a blocked verdict with the rule sealed in the proof's
+  reasons, and control tests, specified the same way
+  (RFC 6749 §3.1.2, RFC 7591 §2, OAuth Security BCP). Also to
+  specify: a row in the revised Guardian Mesh specification
+  for the content-rule family itself — the fragment rule
+  shipped under the gate's case-file spec input
+  (2026-10-15-conduit-dcr) without one.
 
 ## Development home and engine routing
 
@@ -3435,3 +3459,93 @@ Guardian Mesh Spec Inputs filed by this run: GMSI-144
 (pack refresh, from the 2026-11-11 Conduit Router v1.5.0
 gate round) and GMSI-145 (negative-start proof), recorded
 in Part B above.
+- 2026-11-12 (daytime, Director-pulled) — **WO-DCR SHIPPED
+  as v0.25.0** (PR #112, merged c8dd6ab0; merge tree
+  0e43610e == the stamped PR head tree): Guardian Mesh's
+  first behaviour-proof (gap-closure directive W2 / Gap 5).
+  Policy content rule DCR-REDIRECT-FRAGMENT: an evaluation
+  whose context JSON describes an OAuth client registration
+  (redirect_uris array and/or redirect_uri string, RFC 7591)
+  is BLOCKED when any redirect URI carries a fragment ('#'),
+  per RFC 6749 §3.1.2 (a redirection endpoint URI MUST NOT
+  include a fragment component). The verdict reason names
+  the rule, the field, and the RFC basis — never the URI
+  value — and the rule id rides the structured reasons into
+  the sealed AuditProof.rule_ids. Arbiter precedence: below
+  a type-level policy BLOCK, above ESCALATE/ALLOW; the rule
+  is posture-independent (it refuses in demo and production
+  alike). policy.rs gains check_content_rules (context-JSON
+  inspection; unparseable context and non-registration
+  payloads are untouched; no payload-shape denial exists in
+  the protocol firewall to reuse — PF-21 was verified a
+  queue name only, no rule). No proto change, no new
+  dependencies, no signing / handshake / firewall change.
+  Lane DISCLOSURE: built on Wright's VM, not the laptop
+  lane — the WO-20 nightly held the laptop (a bounded lane
+  probe timed out); the Director's 2026-11-03 infra-fallback
+  grant covers it, and the WO-20 lane keeps the laptop.
+  Sequencing: WO-20's task file claimed 0.24.0; the dated
+  behaviour-proof shipped first as 0.25.0 (readiness-early:
+  due 2026-11-13, landed 2026-11-12) and WO-20 re-stamps
+  upward. Wright verification (fresh checkout of the pushed
+  branch): cargo 280/280 (baseline 268 + exactly 12 new:
+  6 policy content-rule, 4 arbiter, 2 integration incl.
+  rule-inside-the-sealed-proof + VerifyProof VALID), WebUI
+  ci/build/lint + check:releases green (27 versions); local
+  wire rehearsal 4/4 legs PASS on the built binaries. Gate
+  (pack guardian-mesh-dcr-behaviour-proof-2026-11-12):
+  scanner PASS (0/0/0); cargo audit --no-fetch clean
+  (174 deps, 1490 advisories); verdict PASS WITH FINDINGS —
+  both findings are scope boundaries, filed as GMSI-150
+  (content rules inspect context only) and GMSI-151
+  (sibling DCR validations + a revised-spec row for the
+  rule family). Production v0.25.0 live 2026-11-12: binary
+  sha256 a5b3d22174d65e0dc6c9d162cbae4461bcadcab00bb2ea
+  ec09d1ca29839b06f3 (cross-built from merged main
+  c8dd6ab0, cargo-zigbuild 0.23.4 + zig 0.14.1); backup
+  .bak-v0230 taken, both services active; box E2E 15/16
+  (PF-18 PASS 100/15/0; sole miss the standing stale
+  Health-fields harness check, 17th occurrence) —
+  gm-deploy stopped at NOT certified on that bar and
+  certification proceeded on direct production proof, per
+  standing practice. Direct proof (Wright's own box
+  client): Health SERVING, 0.25.0@c8dd6ab0, binary sha ==
+  built == installed, degraded=false, fingerprint == pin
+  dd2cf1a3...; self-cert cert-20261113-000054 ACTIVE, PASS
+  WITH FINDINGS, evidence = gate verdict sha256
+  15205c50..., its sealed pf_outcomes == the production
+  Health counters exactly (9 rules; totals 1061/1083),
+  payload fingerprint recomputes, VerifyProof VALID —
+  superseding cert-20261112-000053. Attestation: statement
+  built against the merged clone (cross-build Cargo.lock
+  a117c6aa...), signed on the box with the production key
+  (the key never left the box); installed
+  /opt/guardian-mesh/guardian-meshd-0.25.0.attestation.json,
+  gm-attest verify VALID, signer == pin, package
+  fingerprint 3c26c379.... Pages parity: box dist asset ==
+  merged build == GitHub Pages asset (index-BN0DNU4x.js);
+  public unauthenticated 302. **THE BEHAVIOUR PROOF**
+  (production, against the shipped build; driver + shipped
+  gm CLI on the box): (A) fragment registration — Conduit
+  POST https://mcp.pipavia.com/oauth/register answered 400
+  invalid_redirect_uri; GM verdict BLOCK naming
+  DCR-REDIRECT-FRAGMENT; the sealed proof contains the
+  rule id; VerifyProof VALID. (B) tampered sealed payload
+  (the first BLOCK verdict bytes replaced) — VerifyProof
+  NOT VALID. (C) clean registration — Conduit 201 (client
+  cndc_59ea109f27d0343f11eb2e08ae90312d, recorded per the
+  October precedent); GM ALLOW; proof VALID. (D)
+  no-answer (dead endpoint) — driver decision BLOCK,
+  nothing sent. 4/4 legs PASS; evidence in the gate pack's
+  production/ directory. GAPS.md Gap 5 + the directive's
+  W2 row move to PROVEN-PENDING-GATE-JUDGMENT (the gate
+  thread judges closure; this run does not self-close).
+  v0.25.0 is a RELEASE CANDIDATE (one-week soak; graduates
+  2026-11-19). Next: WO-20 (P1, complete-mediation core)
+  in pack order — unchanged by this run; WO-17 stays open
+  for the cluster chaos + CM-8 extensions (WO-27); WO-16
+  stays open for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-150 and
+GMSI-151 (WO-DCR gate scope boundaries), recorded in
+Part B above.
