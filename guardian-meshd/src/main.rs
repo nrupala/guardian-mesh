@@ -353,6 +353,10 @@ impl GuardianMeshService {
         let session_id = ctx.request.firewalled.as_ref()
             .map(|f| f.handshake_session.as_str())
             .unwrap_or("");
+        // WO-20 (Wright fix): owned copy for token issuance at the end of
+        // run_evaluation - using the borrowed session_id there extends the
+        // immutable borrow of ctx across the enclave mutations (E0502).
+        let session_id_owned = session_id.to_string();
         
         let tenant_id = {
             let bus = self.bus.read().await;
@@ -956,7 +960,7 @@ impl GuardianMeshService {
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_secs();
-                    issue_token(&self.signing_key, action, session_id, &tenant_id, now_secs)
+                    issue_token(&self.signing_key, action, &session_id_owned, &tenant_id, now_secs)
                 }
                 None => Vec::new(),
             }
