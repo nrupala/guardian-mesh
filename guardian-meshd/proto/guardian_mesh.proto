@@ -113,7 +113,7 @@ message EvaluateResponse {
   string reason = 2;
   string containment_stage = 3; // NORMAL..TERMINATE
   AuditProof proof = 4;
-  bytes handshake_token = 5; // Next session token
+  bytes  handshake_token = 5; // The CM-2 execution token - present only on a real (non-simulation) ALLOW; one-time, short-lived, bound to the sealed action hash; verified by the resource-side ExecutionChecker.
   // The AuditProof above, sealed with the daemon's signing key
   // (payload is the encoded AuditProof). Present it to VerifyProof
   // to re-check the proof independently of this response.

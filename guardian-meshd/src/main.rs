@@ -6,7 +6,8 @@ use tokio::sync::RwLock;
 
 use tonic::{transport::Server, Request, Response, Status};
 
-use guardian_meshd::config::Config;
+use guardian_meshd::config::{Config, is_credential_metadata_key};
+use guardian_meshd::execution_token::issue_token;
 use guardian_meshd::enclave::{EnclaveContext, Verdict};
 use guardian_meshd::enclave::sentinel::SentinelEnclave;
 use guardian_meshd::enclave::gatekeeper::GatekeeperEnclave;
@@ -352,6 +353,10 @@ impl GuardianMeshService {
         let session_id = ctx.request.firewalled.as_ref()
             .map(|f| f.handshake_session.as_str())
             .unwrap_or("");
+        // WO-20 (Wright fix): owned copy for token issuance at the end of
+        // run_evaluation - using the borrowed session_id there extends the
+        // immutable borrow of ctx across the enclave mutations (E0502).
+        let session_id_owned = session_id.to_string();
         
         let tenant_id = {
             let bus = self.bus.read().await;
@@ -497,6 +502,83 @@ impl GuardianMeshService {
                 reasons: vec![structured_reason],
                 simulation,
             }));
+        }
+
+        // WO-20 CM-1: in escrow mode the agent must not present real
+        // credentials; they are held by the guardian and released only to
+        // the resource-side checker after ALLOW. Name the offending key,
+        // never its value.
+        if self.config.escrow_mode {
+            if let Some(action) = ctx.request.action.as_ref() {
+                if let Some(offending_key) = action
+                    .metadata
+                    .keys()
+                    .find(|key| is_credential_metadata_key(key))
+                {
+                    let reason = format!(
+                        "escrow mode is active: action metadata key '{}' carries a credential, which the agent must not present (CM-1)",
+                        offending_key
+                    );
+                    let structured_reason = StructuredReason {
+                        rule_id: "CM-1".to_string(),
+                        detail: reason.clone(),
+                        remediation: "remove credentials from the action; in escrow mode credentials are held by the guardian and released only to the resource-side checker after ALLOW (CM-1)".to_string(),
+                    };
+
+                    let policy_version = {
+                        let policy = self.policy.read().await;
+                        policy.policy_version()
+                    };
+
+                    let proof = AuditProof {
+                        action_id: action_type.clone(),
+                        verdict: "BLOCK".into(),
+                        enclave_chain: "NORMAL".into(),
+                        signature: Vec::new(),
+                        timestamp: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
+                        simulation,
+                        rule_ids: vec!["CM-1".to_string()],
+                        policy_version,
+                        issuing_node: self.node_id.clone(),
+                        merkle_root: Vec::new(),
+                    };
+
+                    let proof_envelope = {
+                        let sealed = SealedEnvelope::new(
+                            proof.encode_to_vec(),
+                            b"guardian_mesh.AuditProof".to_vec(),
+                            &self.signing_key,
+                        );
+                        ProtoSealedEnvelope {
+                            payload: sealed.payload,
+                            payload_type: sealed.payload_type,
+                            crc32c: sealed.crc32c_digest,
+                            ml_dsa_65_signature: sealed.ml_dsa_65_signature,
+                            timestamp: sealed.timestamp,
+                            nonce: sealed.nonce.to_vec(),
+                        }
+                    };
+
+                    if !simulation {
+                        let mut tenants = self.tenants.lock().unwrap();
+                        let _ = tenants.append_audit(&tenant_id, &action_type, "BLOCK");
+                    }
+
+                    return Ok(Response::new(EvaluateResponse {
+                        verdict: "BLOCK".into(),
+                        reason,
+                        containment_stage: "NORMAL".into(),
+                        proof: Some(proof),
+                        handshake_token: Vec::new(),
+                        proof_envelope: Some(proof_envelope),
+                        reasons: vec![structured_reason],
+                        simulation,
+                    }));
+                }
+            }
         }
 
         let policy_version = {
@@ -868,12 +950,30 @@ impl GuardianMeshService {
             }
         };
 
+        // WO-20 CM-2: a real ALLOW issues a one-time execution token bound
+        // to the exact sealed action. Simulations and every other verdict
+        // carry an empty field.
+        let handshake_token = if final_verdict == Verdict::Allow && !simulation {
+            match ctx.request.action.as_ref() {
+                Some(action) => {
+                    let now_secs = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    issue_token(&self.signing_key, action, &session_id_owned, &tenant_id, now_secs)
+                }
+                None => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
+
         let response = EvaluateResponse {
             verdict: final_verdict.as_str().into(),
             reason: final_reason,
             containment_stage: ctx.stage.as_str().into(),
             proof: Some(proof),
-            handshake_token: Vec::new(),
+            handshake_token,
             proof_envelope: Some(proof_envelope),
             reasons,
             simulation,
@@ -2192,6 +2292,7 @@ fn main() {
 mod tests {
     use super::*;
     use guardian_meshd::proto::{ActionDescriptor, FirewalledRequest};
+    use guardian_meshd::execution_token::{action_hash, ExecutionChecker};
     use ml_dsa::SignatureEncoding;
     use sha2::Digest;
 
@@ -2293,6 +2394,144 @@ mod tests {
             .into_inner();
         assert_eq!(resp.verdict, "ALLOW");
         assert!(resp.proof_envelope.is_some());
+    }
+
+    async fn evaluate_request_for(
+        service: &GuardianMeshService,
+        session_id: &str,
+        sealed: &SealedEnvelope,
+        action: ActionDescriptor,
+    ) -> EvaluateRequest {
+        let mut req = evaluate_request(service, session_id, sealed).await;
+        req.action = Some(action);
+        req
+    }
+
+    fn token_action(
+        action_type: &str,
+        target: &str,
+        metadata: std::collections::HashMap<String, String>,
+    ) -> ActionDescriptor {
+        ActionDescriptor {
+            action_type: action_type.to_string(),
+            context: "test".to_string(),
+            target: target.to_string(),
+            metadata,
+        }
+    }
+
+    #[tokio::test]
+    async fn cm2_real_allow_issues_a_token_the_checker_accepts() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        let resp = service
+            .evaluate(Request::new(req))
+            .await
+            .unwrap()
+            .into_inner();
+
+        assert_eq!(resp.verdict, "ALLOW");
+        assert!(!resp.handshake_token.is_empty());
+
+        let encoded = service.verifying_key.encode();
+        let checker_vk = verifying_key_from_bytes(encoded.as_ref()).unwrap();
+        let mut checker = ExecutionChecker::new(checker_vk);
+        let action = token_action("TOOL_CALL", "panel", Default::default());
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let claims = checker
+            .check(&resp.handshake_token, &action, now)
+            .unwrap();
+        assert_eq!(claims.action_hash, action_hash(&action));
+    }
+
+    #[tokio::test]
+    async fn cm2_simulate_allow_issues_no_token() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let req = evaluate_request(&service, &session.session_id, &sealed).await;
+        let resp = service
+            .simulate(Request::new(req))
+            .await
+            .unwrap()
+            .into_inner();
+
+        assert_eq!(resp.verdict, "ALLOW");
+        assert!(resp.simulation);
+        assert!(resp.handshake_token.is_empty());
+    }
+
+    #[tokio::test]
+    async fn cm2_real_block_issues_no_token() {
+        let (service, _dir) = test_service();
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let payload = b"{\"actionType\":\"CODE_EXECUTE\",\"context\":\"test\",\"target\":\"panel\",\"metadata\":{}}";
+        let sealed = SealedEnvelope::new(payload.to_vec(), b"test".to_vec(), &sk);
+        let action = token_action("CODE_EXECUTE", "panel", Default::default());
+        let req = evaluate_request_for(&service, &session.session_id, &sealed, action).await;
+        let resp = service
+            .evaluate(Request::new(req))
+            .await
+            .unwrap()
+            .into_inner();
+
+        assert_eq!(resp.verdict, "BLOCK");
+        assert!(resp.handshake_token.is_empty());
+    }
+
+    #[tokio::test]
+    async fn cm1_escrow_mode_blocks_agent_presented_credentials() {
+        let mut config = Config::default();
+        config.escrow_mode = true;
+        let service = test_service_with_config(config);
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("api_key".to_string(), "test-escrow-value".to_string());
+        let action = token_action("TOOL_CALL", "panel", metadata);
+        let req = evaluate_request_for(&service, &session.session_id, &sealed, action).await;
+        let resp = service
+            .evaluate(Request::new(req))
+            .await
+            .unwrap()
+            .into_inner();
+
+        assert_eq!(resp.verdict, "BLOCK");
+        assert!(resp.reasons.iter().any(|r| r.rule_id == "CM-1"));
+        assert!(resp.reason.contains("api_key"));
+        assert!(!resp.reason.contains("test-escrow-value"));
+        assert!(resp.handshake_token.is_empty());
+    }
+
+    #[tokio::test]
+    async fn cm1_escrow_off_allows_the_same_request_normally() {
+        let mut config = Config::default();
+        config.escrow_mode = false;
+        let service = test_service_with_config(config);
+        let (sk, vk) = generate_keypair();
+        let session = open_session(&service, &vk).await;
+        let sealed = SealedEnvelope::new(PAYLOAD.to_vec(), b"test".to_vec(), &sk);
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("api_key".to_string(), "test-escrow-value".to_string());
+        let action = token_action("TOOL_CALL", "panel", metadata);
+        let req = evaluate_request_for(&service, &session.session_id, &sealed, action).await;
+        let resp = service
+            .evaluate(Request::new(req))
+            .await
+            .unwrap()
+            .into_inner();
+
+        assert_eq!(resp.verdict, "ALLOW");
+        assert!(!resp.reasons.iter().any(|r| r.rule_id == "CM-1"));
     }
 
     #[tokio::test]
