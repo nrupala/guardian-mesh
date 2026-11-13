@@ -988,5 +988,14 @@
     "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
     "date": "2026-11-13T01:40:37-06:00",
     "message": "Merge pull request #114 from nrupala/wright/wo-dcr-ledger"
+  },
+  {
+    "release": 115,
+    "tag": "release/v115",
+    "previous_tag": "release/v114",
+    "sha": "7510e30f0fd873fa4f512f0ebb087d13385ffc85",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-13T02:08:04-06:00",
+    "message": "Merge pull request #115 from nrupala/wright/wo20-complete-mediation"
   }
 ]
