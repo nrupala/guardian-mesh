@@ -979,5 +979,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-13T01:04:26-06:00",
     "message": "Merge pull request #112 from nrupala/wright/wo-dcr-fragment-rule"
+  },
+  {
+    "release": 114,
+    "tag": "release/v114",
+    "previous_tag": "release/v113",
+    "sha": "43804982d9e64fb4240ef0310ea9cdec4d08b91d",
+    "author": "nrupala <51525601+nrupala@users.noreply.github.com>",
+    "date": "2026-11-13T01:40:37-06:00",
+    "message": "Merge pull request #114 from nrupala/wright/wo-dcr-ledger"
   }
 ]
