@@ -1006,5 +1006,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-13T02:30:44-06:00",
     "message": "Merge pull request #116 from nrupala/wright/wo20-ledger"
+  },
+  {
+    "release": 117,
+    "tag": "release/v117",
+    "previous_tag": "release/v116",
+    "sha": "51f71f240f5781db15099d9c06b2a14a04372cf8",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-14T00:36:53-06:00",
+    "message": "Merge pull request #117 from nrupala/wright/wo32-risk-register"
   }
 ]
