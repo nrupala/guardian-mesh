@@ -1715,6 +1715,19 @@ MUST until behaviour-proven here.
   self-delimiting token wire format plus the needed
   facts written into the task file itself.)
 
+- **GMSI-153 — Reconciliation covers the register.**
+  (WO-32 gate, 2026-11-13.) GMSI-143 asks for a
+  per-release spec<->release reconciliation proof.
+  Since v0.27.0 the risk register's residual scores
+  are computed from countermeasure statuses, so a
+  status that ships without a register re-score is
+  the same defect class in a second document.
+  Guardian Mesh should be able to prove, per
+  release, that every shipped status change has a
+  matching threat-model review line and a register
+  re-score (or an explicit no-change record) — the
+  reconciliation proof covers all three documents
+  or it covers none of them honestly.
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
@@ -3699,3 +3712,114 @@ to GMSI-149 (pre-build pack refresh, from the
 2026-11-12 bench-backed gate run) and GMSI-152
 (WO-20 gate, self-contained lane tasks), recorded in
 Part B above.
+- 2026-11-14 (nightly) — **WO-32 SHIPPED as v0.27.0**
+  (PR #117, merged 51f71f24; stamped head tree
+  cd08c6f5 == the locally verified tree): AI risk
+  register + process per ISO/IEC 23894 (compliance
+  plan item 1.3). NEW specs/RISK_REGISTER.md: the
+  23894-shaped process (context from the threat
+  model; identification via the threat model, gate
+  GMSI opening a threat entry first; 5x5 anchored
+  likelihood x impact; bands Low 1-4 / Medium 5-9 /
+  High 10-16 / Critical 17-25; acceptance rule —
+  Critical residual blocks unless the product owner
+  consciously accepts it in the gate verdict, High
+  named in every verdict, acceptance per cycle
+  never perpetual; treatments mitigate / accept /
+  avoid / transfer-never-claimed) and the register
+  itself: RR-01..RR-25, exactly one per TM-01..
+  TM-25, scored inherent + residual, owned by one
+  accountable role each, tied to the shipped
+  mitigations with their honest statuses and the
+  closing WO. Residual headline: RR-05 guardian
+  bypass 20 Critical (sole Critical); RR-07 / RR-17
+  16 High; RR-21 signing-key compromise 15 High
+  (the threat model's highest carried risk). Docs-
+  only, authored on the Wright lane per the pack
+  (laptop online; availability was not the reason);
+  no daemon code, no proto, no verdict behaviour.
+  specs/THREAT_MODEL.md header + review log updated
+  (v0.27.0 row: reviewed, no status changes);
+  specs/STANDARDS_COMPLIANCE_REVIEW.md ISO/IEC
+  23894 row PARTIAL -> ALIGNED (guidance alignment,
+  never certification). Verification (Wright,
+  independent, fresh checkout of the pushed branch):
+  cargo test 298/298 (188 lib + 93 bin + 11 gm-mcp
+  + 6 gm — the v0.26.0 baseline, as a docs-only
+  change must produce); WebUI ci + build + lint
+  clean, check:releases green (29 versions);
+  mechanical acceptance — RR-01..RR-25 each once,
+  every TM link valid, all scores arithmetically
+  correct, the at-a-glance table consistent on all
+  11 High/Critical entries, licence wording exact.
+  Gate: PASS WITH FINDINGS (pack guardian-mesh-
+  wo32-2026-11-13) — scanner PASS 0/0/0; cargo
+  audit clean (174 deps); F1 = standing GMSI-143
+  spec-label lag outside this WO. Register review
+  recorded in the verdict: RR-04 recorded
+  MITIGATED in the v0.26.0 cycle (CM-2 shipped,
+  residual 15 High; closes WO-27); RR-05 (20
+  Critical) and RR-21 (15 High) CONSCIOUSLY
+  ACCEPTED for this cycle by the product owner via
+  the verdict, treatments named (WO-21/WO-27;
+  WO-23/WO-35), re-acceptance due next cycle —
+  the item-1.3 acceptance evidence. SG-1 threat-
+  model review performed: no status changes. No
+  pack refresh was needed before the build: main
+  unchanged since the WO-20 ledger, 0 open PRs /
+  issues; the codetopo v0.9.1 soak-watch filed
+  2026-11-13 reported no new failure at any level
+  and no new GMSI (its GMSI-1..5 were absorbed as
+  GMSI-136..139). Production v0.27.0 live
+  2026-11-14: binary sha256 fc4534dd11cd9806540f
+  ec9c290d495cc8b08cadb4d993157f19cbe21be065ca
+  (cross-built from merged main 51f71f24,
+  cargo-zigbuild 0.23.4 + zig 0.14.1,
+  GUARDIAN_MESH_GIT_COMMIT=51f71f24); backup
+  .bak-v0260 taken, both services active; box E2E
+  15/16 (sole miss the standing stale Health-fields
+  harness check, 19th occurrence) — gm-deploy
+  stopped at NOT certified on that bar and
+  certification proceeded on direct production
+  proof, per standing practice. Direct proof
+  (Wright's own box client): Health SERVING,
+  0.27.0@51f71f24, binary sha == built ==
+  installed, degraded=false, fingerprint == pin
+  dd2cf1a3...; self-cert cert-20261114-000056
+  ACTIVE, PASS WITH FINDINGS, evidence = gate
+  verdict sha256 7b831f18d4bd2e5fb66bc593de3d8120
+  fcb08cc5084050b920a5504c69ee4422, its sealed
+  pf_outcomes == the production Health counters
+  exactly, payload fingerprint recomputes,
+  VerifyProof VALID — superseding
+  cert-20261113-000055. Attestation: statement
+  built against the merged clone (cross-build
+  Cargo.lock 20b98366...), signed on the box with
+  the production key (the key never left the box;
+  signer asserted == pin before install); installed
+  /opt/guardian-mesh/guardian-meshd-0.27.0.attestation.json,
+  gm-attest verify VALID, signer == pin, package
+  fingerprint d85a1dd5.... Pages parity: box dist
+  asset == merged build == GitHub Pages asset
+  (index-DT_25PVA.js); public unauthenticated 302.
+  NOT RUN: authenticated panel click-through
+  (GMSI-134); Kali/Arch for this delta (no code or
+  network surface changed; bench lineage proven
+  2026-11-12); local wire proof against a locally
+  built daemon (docs-only; production proof
+  exercised the live wire on the shipped binary).
+  v0.27.0 is a RELEASE CANDIDATE (one-week soak;
+  graduates 2026-11-21). **WO-32 is CLOSED;
+  compliance plan item 1.3 is satisfied.** Next:
+  WO-37 (P1, touchpoint wiring program — one
+  touchpoint per run in map order, T1 first) as
+  the highest-priority unfinished work order;
+  WO-33 (P2, NIST AI RMF profile, after WO-32) and
+  WO-27 (P2, mediation conformance) follow in pack
+  order; WO-17 stays open for the cluster chaos +
+  CM-8 extensions (WO-27); WO-16 stays open for
+  DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-153
+(WO-32 gate — the GMSI-143 reconciliation proof also
+covers register accuracy), recorded in Part B above.
