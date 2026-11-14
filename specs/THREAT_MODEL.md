@@ -9,8 +9,9 @@
 the review (changed / unchanged, and why) is recorded in that release's
 gate verdict. A release whose behaviour changes a threat, an asset, or
 a countermeasure status and does not update this file is non-conforming
-with SG-1. The AI risk register (WO-32, `specs/RISK_REGISTER.md`, per
-ISO/IEC 23894) builds on this file and may not contradict it.
+with SG-1. The AI risk register (`specs/RISK_REGISTER.md`, per
+ISO/IEC 23894, issued v0.27.0, WO-32) builds on this file and may
+not contradict it.
 
 **Honesty rule (applies to every row below):** a countermeasure is
 marked **[SHIPPED]** only when the behaviour exists in the shipped
@@ -560,4 +561,5 @@ until its closing work order ships.
 
 | Date | Release | Review |
 |------|---------|--------|
+| 2026-11-14 | v0.27.0 | Reviewed at the WO-32 gate run: no threat, asset, adversary, or countermeasure status changes since the v0.26.0 updates (TM-04/TM-05). The AI risk register was issued against this model in this release (RR-01…RR-25, 1:1). |
 | 2026-11-10 | v0.22.0 | First issue (WO-30). Register TM-01…TM-25 against the shipped system at v0.21.0 + this release's SG-1 status change. Several of the revised specification's status labels lag shipped releases (among them DP-3, CC-4, CC-5, DC-4/DC-5, DC-9, DC-14, DC-18/DC-19); this model follows the release record and notes the lag where a row depends on it (e.g. TM-22). Spec-label reconciliation is a documentation follow-up, not a behaviour gap. |
