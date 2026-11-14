@@ -13,6 +13,21 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.27.0",
+    date: "2026-11-14",
+    summary: "WO-32: AI risk register + process (ISO/IEC 23894) - specs/RISK_REGISTER.md scores and owns RR-01..RR-25, tied 1:1 to the threat model of record and its mitigations, and is reviewed at every release gate run with the review recorded in the gate verdict.",
+    highlights: [
+      "specs/RISK_REGISTER.md (new): the 23894-shaped process (context, identification from the threat model, 5x5 analysis, evaluation bands and acceptance rule, treatment, per-gate monitoring and review, communication and recording), owner roles, and the register itself - RR-01..RR-25, each with inherent and residual scores, the shipped mitigations with their honest statuses, the closing work order, an accountable owner role, and a review trigger",
+      "Residual risk at a glance: RR-05 guardian bypass remains the sole Critical residual (20) until forced routing and reconciliation ship (WO-21/WO-27); RR-21 signing-key compromise (15 High) is the threat model's highest carried risk, treated by WO-23 external witnessing and WO-35 HSM custody",
+      "This gate cycle's review (recorded in the register change log): RR-04 recorded MITIGATED in the v0.26.0 cycle (CM-2 shipped, residual 15 High, closes on WO-27); RR-05 and RR-21 CONSCIOUSLY ACCEPTED for this cycle by the product owner via the gate verdict, re-acceptance due next cycle - the acceptance evidence named by compliance plan item 1.3",
+      "specs/THREAT_MODEL.md: header notes the register is issued; review log gains the v0.27.0 row (reviewed, no threat or status changes). specs/STANDARDS_COMPLIANCE_REVIEW.md: the ISO/IEC 23894 row moves PARTIAL -> ALIGNED on the shipped register (guidance alignment, never certification)",
+      "HONESTY BOUNDARY: this release is documentation plus the version bump - no daemon code, no proto, no verdict behaviour changes; no score in the register is lowered by anything but a shipped countermeasure or a recorded acceptance, and no TARGET countermeasure contributes to a residual score"
+    ],
+    gateVerdict: "PASS WITH FINDINGS - release gate 2026-11-13 (WO-32): scanner PASS 0 secrets / 0 vulns / 0 must-gate failures; cargo audit clean (174 deps); F1 standing GMSI-143 spec-label lag outside this WO; GMSI-153 filed (reconciliation proof also covers register accuracy). Register review: RR-04 mitigated (v0.26.0 cycle), RR-05 (20 Critical) + RR-21 (15 High) consciously accepted for this cycle with treatments named",
+    tests: "Wright independent verification, fresh checkout of PR #117 head (tree == authored tree): cargo test 298/298 (188 lib + 93 bin + 11 gm-mcp + 6 gm, identical to the v0.26.0 baseline as a docs-only change must produce); WebUI ci/build/lint + check:releases green (29 versions); mechanical acceptance - RR-01..RR-25 each once, TM links valid, all scores arithmetically correct, at-a-glance table consistent, licence wording exact",
+    status: "Current release"
+  },
+  {
     version: "0.26.0",
     date: "2026-11-13",
     summary: "WO-20: complete-mediation core (CM-2 + CM-1 escrow mode + CM-3 checker hook) - every real ALLOW now issues a one-time, ML-DSA-signed execution token bound to the sealed action hash, a resource-side ExecutionChecker refuses execution without a matching token, and escrow mode refuses agent-presented credentials daemon-side.",
@@ -27,7 +42,7 @@ export const RELEASES: Release[] = [
     ],
     gateVerdict: "PASS WITH FINDINGS - release gate 2026-11-12 (WO-20, rebase addendum 2026-11-13): scanner PASS 0 secrets / 0 vulns / 0 must-gate failures; cargo audit clean (174 deps); F1 lane code needed one Wright compile fix (E0502); F2 token-id RNG failure ignored, fail-closed, noted; GMSI-152 filed (self-contained lane tasks)",
     tests: "Wright independent verification on the rebased tree (over WO-DCR v0.25.0): cargo test 298/298 (188 lib + 93 bin + 11 gm-mcp + 6 gm = 280 v0.25.0 suite + 18 new WO-20 tests); WebUI ci/build/lint + check:releases green (28 versions); Wright behaviour proof re-run 8/8 (exact-action + escrow release, replay, action mismatch, tampers, expiry boundary, wrong-target escrow)",
-    status: "Current release"
+    status: "Release candidate"
   },  {
     version: "0.25.0",
     date: "2026-11-12",

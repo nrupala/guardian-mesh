@@ -63,7 +63,7 @@ our key terms are used consistently yet defined only by our own specs.
 
 | Standard | What it is | Status | Evidence / gap |
 |---|---|---|---|
-| ISO/IEC 23894:2023 | AI risk management guidance | **PARTIAL** | Risk thinking exists (revised spec §12, gate practice); no formal risk register or risk process per the standard. WO-30 (threat model of record) is the first artifact; a risk register follows it. |
+| ISO/IEC 23894:2023 | AI risk management guidance | **ALIGNED** | Formal AI risk register + process shipped v0.27.0 (WO-32): `specs/RISK_REGISTER.md` scores and owns RR-01…RR-25, tied 1:1 to the threat model of record (WO-30) and its mitigations, reviewed at every release gate run with the review recorded in the gate verdict. 23894 is guidance, not a certification — ALIGNED here means the process substance is in place and evidenced in the repo. |
 | ISO/IEC 42001:2023 | AI management systems (organizational, certifiable) | **N/A as certification; product supports deployers** | AIMLDS operates no AIMS today. Guardian Mesh is positioned as a control a deployer's AIMS can cite (monitoring, record-keeping, human oversight). |
 | ISO/IEC 24028:2020 | Trustworthiness in AI — overview | **ALIGNED (approach)** | GM's trustworthiness characteristics (transparency of verdicts, accountability via sealed proofs, controllability via policy + escalation) follow its framing. |
 | ISO/IEC 23053:2022 | Framework for AI systems using ML | **ALIGNED (positioning)** | GM is deliberately model-agnostic: it guards the action boundary of an AI system whatever its ML framework — consistent with the standard's component view. |
@@ -95,8 +95,7 @@ our key terms are used consistently yet defined only by our own specs.
    production, behaviour-verified) and zero-trust architecture
    (800-207-aligned by construction at the single-node layer).
 3. **Honest gaps, by name:** FIPS 140-3 validated modules (not claimed),
-   SLSA provenance (target), formal AI risk register per ISO/IEC 23894
-   (starts with WO-30), any organizational certification — ISO/IEC
+   SLSA provenance (target), any organizational certification — ISO/IEC
    27001, 42001, SOC 2 — **none held, none claimed**.
 4. **The pattern:** Guardian Mesh is strongest exactly where it can
    issue proof, and the compliance story inherits the product doctrine —
@@ -107,4 +106,5 @@ our key terms are used consistently yet defined only by our own specs.
 
 This review is refreshed at each release alongside the gate record
 (RG-3) and re-issued when a status changes. Terminology upkeep rides
-WO-31; risk-register upkeep rides WO-30.
+WO-31; risk-register upkeep rides the register's own gate-review
+process (WO-32).
