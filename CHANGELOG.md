@@ -24,7 +24,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - **NOT in this release**: no NIST AI RMF profile (WO-33, after WO-32), no mediation conformance probes (WO-27), no coverage/reconciliation machinery (WO-21), and no change to any open risk's treatment - the register records the risks; the closing work orders retire them.
 
 ### Tests and Gate Verdict
-Wright verification pending.
+Tests: Wright, independent, fresh checkout of the PR #117 head tree (2bc7277c; tree 08312a8c, byte-identical to the authored tree), 2026-11-13: cargo test 298/298 (188 lib + 93 daemon bin + 11 gm-mcp + 6 gm) — identical to the v0.26.0 baseline, as a docs-only change must produce; WebUI npm ci + build + lint clean, check:releases green (29 versions). Mechanical acceptance: RR-01..RR-25 each exactly once; every entry cites an existing TM id; every score arithmetically correct (L x I = score, band matches); the at-a-glance table agrees with the register on all 11 High/Critical entries; every cited WO exists in the pack or threat model; licence wording exact.
+Gate verdict: PASS WITH FINDINGS — Release Gate 2026-11-13 (guardian-mesh-wo32-2026-11-13): scanner PASS (0 must-gate / 0 secrets / 0 vulns); cargo audit clean (174 deps, 1490 advisories). F1 = standing GMSI-143 spec-label lag outside this WO; filed by this run: GMSI-153 (the reconciliation proof now also covers register accuracy). Register review recorded in the verdict: RR-04 MITIGATED (v0.26.0 cycle, CM-2), RR-05 (20 Critical) and RR-21 (15 High) CONSCIOUSLY ACCEPTED for this cycle with treatments named — compliance plan item 1.3 acceptance evidence. SG-1 threat-model maintenance review performed: no status changes. Judgment differential N/A (no verdict path changed). Standing NOT RUN: authenticated panel click-through (GMSI-134); Kali/Arch for this delta (no code or network surface changed).
 
 ## [0.26.0] - 2026-11-13
 

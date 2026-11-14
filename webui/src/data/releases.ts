@@ -23,8 +23,8 @@ export const RELEASES: Release[] = [
       "specs/THREAT_MODEL.md: header notes the register is issued; review log gains the v0.27.0 row (reviewed, no threat or status changes). specs/STANDARDS_COMPLIANCE_REVIEW.md: the ISO/IEC 23894 row moves PARTIAL -> ALIGNED on the shipped register (guidance alignment, never certification)",
       "HONESTY BOUNDARY: this release is documentation plus the version bump - no daemon code, no proto, no verdict behaviour changes; no score in the register is lowered by anything but a shipped countermeasure or a recorded acceptance, and no TARGET countermeasure contributes to a residual score"
     ],
-    gateVerdict: "Wright verification pending",
-    tests: "Wright verification pending",
+    gateVerdict: "PASS WITH FINDINGS - release gate 2026-11-13 (WO-32): scanner PASS 0 secrets / 0 vulns / 0 must-gate failures; cargo audit clean (174 deps); F1 standing GMSI-143 spec-label lag outside this WO; GMSI-153 filed (reconciliation proof also covers register accuracy). Register review: RR-04 mitigated (v0.26.0 cycle), RR-05 (20 Critical) + RR-21 (15 High) consciously accepted for this cycle with treatments named",
+    tests: "Wright independent verification, fresh checkout of PR #117 head (tree == authored tree): cargo test 298/298 (188 lib + 93 bin + 11 gm-mcp + 6 gm, identical to the v0.26.0 baseline as a docs-only change must produce); WebUI ci/build/lint + check:releases green (29 versions); mechanical acceptance - RR-01..RR-25 each once, TM links valid, all scores arithmetically correct, at-a-glance table consistent, licence wording exact",
     status: "Current release"
   },
   {
