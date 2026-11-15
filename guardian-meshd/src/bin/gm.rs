@@ -15,8 +15,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use guardian_meshd::config::Config;
 use guardian_meshd::proto::guardian_mesh_client::GuardianMeshClient;
 use guardian_meshd::proto::{
-    ActionDescriptor, EvaluateRequest, FirewalledRequest, HandshakeRequest, HealthRequest,
-    ReadAuditLogRequest, SealedEnvelope as ProtoSealedEnvelope, VerifyProofRequest,
+    ActionDescriptor, CertificateStatusRequest, EvaluateRequest, FirewalledRequest,
+    HandshakeRequest, HealthRequest, IssueCertificateRequest, ReadAuditLogRequest,
+    RevokeCertificateRequest, SealedEnvelope as ProtoSealedEnvelope, TestCounts,
+    VerifyProofRequest,
 };
 use guardian_meshd::sealed_envelope::SealedEnvelope;
 use hmac::{Hmac, KeyInit, Mac};
@@ -25,7 +27,7 @@ use rand::rngs::SysRng;
 use rand::TryRng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 use tonic::Request;
 
 const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:50051";
@@ -114,6 +116,7 @@ async fn run(args: Vec<String>) -> Result<i32, CliError> {
         "verify" => cmd_verify(rest, pre_endpoint).await,
         "audit" => cmd_audit(rest, pre_endpoint).await,
         "doctor" => cmd_doctor(rest, pre_endpoint),
+        "certificate" => cmd_certificate(rest, pre_endpoint).await,
         other => Err(CliError::usage(format!("unknown subcommand: {other}"))),
     }
 }
@@ -353,6 +356,226 @@ fn parse_doctor_args(
     Ok(())
 }
 
+#[derive(Debug)]
+enum CertificateAction {
+    Issue(CertificateIssueArgs),
+    Status(CertificateStatusArgs),
+    Verify(CertificateVerifyArgs),
+    Revoke(CertificateRevokeArgs),
+}
+
+#[derive(Debug)]
+struct CertificateIssueArgs {
+    product: String,
+    version: String,
+    verdict: String,
+    evidence_file: PathBuf,
+    evidence_scope: String,
+    tests_passed: u32,
+    tests_failed: u32,
+    policy: String,
+    cert_out: PathBuf,
+    endpoint: Option<String>,
+}
+
+#[derive(Debug)]
+struct CertificateStatusArgs {
+    serial: String,
+    endpoint: Option<String>,
+}
+
+#[derive(Debug)]
+struct CertificateVerifyArgs {
+    cert_file: PathBuf,
+    endpoint: Option<String>,
+}
+
+#[derive(Debug)]
+struct CertificateRevokeArgs {
+    serial: String,
+    reason: String,
+    endpoint: Option<String>,
+}
+
+fn parse_certificate_action(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<CertificateAction, CliError> {
+    let action = match args.first() {
+        Some(action) => action.as_str(),
+        None => {
+            return Err(CliError::usage(
+                "certificate requires an action: issue, status, verify or revoke",
+            ))
+        }
+    };
+    let rest = &args[1..];
+    match action {
+        "issue" => Ok(CertificateAction::Issue(parse_certificate_issue_args(
+            rest,
+            pre_endpoint,
+        )?)),
+        "status" => Ok(CertificateAction::Status(parse_certificate_status_args(
+            rest,
+            pre_endpoint,
+        )?)),
+        "verify" => Ok(CertificateAction::Verify(parse_certificate_verify_args(
+            rest,
+            pre_endpoint,
+        )?)),
+        "revoke" => Ok(CertificateAction::Revoke(parse_certificate_revoke_args(
+            rest,
+            pre_endpoint,
+        )?)),
+        "--help" | "-h" => Err(CliError::help(print_certificate_usage())),
+        other => Err(CliError::usage(format!(
+            "unknown certificate action: {other} (expected issue, status, verify or revoke)"
+        ))),
+    }
+}
+
+fn parse_certificate_issue_args(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<CertificateIssueArgs, CliError> {
+    let mut product = None;
+    let mut version = None;
+    let mut verdict = None;
+    let mut evidence_file = None;
+    let mut evidence_scope = None;
+    let mut tests_passed = None;
+    let mut tests_failed = None;
+    let mut policy = None;
+    let mut cert_out = PathBuf::from("gm-certificate.json");
+    let mut endpoint = pre_endpoint;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--product" => product = Some(next_value(args, &mut i, "--product")?),
+            "--version" => version = Some(next_value(args, &mut i, "--version")?),
+            "--verdict" => verdict = Some(next_value(args, &mut i, "--verdict")?),
+            "--evidence-file" => {
+                evidence_file = Some(PathBuf::from(next_value(args, &mut i, "--evidence-file")?))
+            }
+            "--evidence-scope" => {
+                evidence_scope = Some(next_value(args, &mut i, "--evidence-scope")?)
+            }
+            "--tests-passed" => {
+                let raw = next_value(args, &mut i, "--tests-passed")?;
+                tests_passed = Some(raw.parse::<u32>().map_err(|_| {
+                    CliError::usage(format!(
+                        "--tests-passed must be a non-negative integer, got '{raw}'"
+                    ))
+                })?);
+            }
+            "--tests-failed" => {
+                let raw = next_value(args, &mut i, "--tests-failed")?;
+                tests_failed = Some(raw.parse::<u32>().map_err(|_| {
+                    CliError::usage(format!(
+                        "--tests-failed must be a non-negative integer, got '{raw}'"
+                    ))
+                })?);
+            }
+            "--policy" => policy = Some(next_value(args, &mut i, "--policy")?),
+            "--cert-out" => {
+                cert_out = PathBuf::from(next_value(args, &mut i, "--cert-out")?)
+            }
+            "--endpoint" => endpoint = Some(next_value(args, &mut i, "--endpoint")?),
+            "--help" | "-h" => return Err(CliError::help(print_certificate_usage())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+
+    Ok(CertificateIssueArgs {
+        product: product.ok_or_else(|| CliError::usage("--product is required"))?,
+        version: version.ok_or_else(|| CliError::usage("--version is required"))?,
+        verdict: verdict.ok_or_else(|| CliError::usage("--verdict is required"))?,
+        evidence_file: evidence_file
+            .ok_or_else(|| CliError::usage("--evidence-file is required"))?,
+        evidence_scope: evidence_scope
+            .ok_or_else(|| CliError::usage("--evidence-scope is required"))?,
+        tests_passed: tests_passed
+            .ok_or_else(|| CliError::usage("--tests-passed is required"))?,
+        tests_failed: tests_failed
+            .ok_or_else(|| CliError::usage("--tests-failed is required"))?,
+        policy: policy.ok_or_else(|| CliError::usage("--policy is required"))?,
+        cert_out,
+        endpoint,
+    })
+}
+
+fn parse_certificate_status_args(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<CertificateStatusArgs, CliError> {
+    let mut serial = None;
+    let mut endpoint = pre_endpoint;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--serial" => serial = Some(next_value(args, &mut i, "--serial")?),
+            "--endpoint" => endpoint = Some(next_value(args, &mut i, "--endpoint")?),
+            "--help" | "-h" => return Err(CliError::help(print_certificate_usage())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(CertificateStatusArgs {
+        serial: serial.ok_or_else(|| CliError::usage("--serial is required"))?,
+        endpoint,
+    })
+}
+
+fn parse_certificate_verify_args(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<CertificateVerifyArgs, CliError> {
+    let mut cert_file = PathBuf::from("gm-certificate.json");
+    let mut endpoint = pre_endpoint;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--cert-file" => {
+                cert_file = PathBuf::from(next_value(args, &mut i, "--cert-file")?)
+            }
+            "--endpoint" => endpoint = Some(next_value(args, &mut i, "--endpoint")?),
+            "--help" | "-h" => return Err(CliError::help(print_certificate_usage())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(CertificateVerifyArgs {
+        cert_file,
+        endpoint,
+    })
+}
+
+fn parse_certificate_revoke_args(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<CertificateRevokeArgs, CliError> {
+    let mut serial = None;
+    let mut reason = None;
+    let mut endpoint = pre_endpoint;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--serial" => serial = Some(next_value(args, &mut i, "--serial")?),
+            "--reason" => reason = Some(next_value(args, &mut i, "--reason")?),
+            "--endpoint" => endpoint = Some(next_value(args, &mut i, "--endpoint")?),
+            "--help" | "-h" => return Err(CliError::help(print_certificate_usage())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(CertificateRevokeArgs {
+        serial: serial.ok_or_else(|| CliError::usage("--serial is required"))?,
+        reason: reason.ok_or_else(|| CliError::usage("--reason is required"))?,
+        endpoint,
+    })
+}
+
 fn cmd_doctor(args: &[String], pre_endpoint: Option<String>) -> Result<i32, CliError> {
     parse_doctor_args(args, pre_endpoint)?;
 
@@ -382,6 +605,190 @@ fn cmd_doctor(args: &[String], pre_endpoint: Option<String>) -> Result<i32, CliE
         );
         Ok(0)
     }
+}
+
+async fn cmd_certificate(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<i32, CliError> {
+    let action = match parse_certificate_action(args, pre_endpoint) {
+        Ok(action) => action,
+        Err(CliError::Usage(message)) => {
+            return Err(CliError::usage(format!(
+                "{message}\n\n{}",
+                print_certificate_usage()
+            )))
+        }
+        Err(error) => return Err(error),
+    };
+    match action {
+        CertificateAction::Issue(parsed) => cmd_certificate_issue(parsed).await,
+        CertificateAction::Status(parsed) => cmd_certificate_status(parsed).await,
+        CertificateAction::Verify(parsed) => cmd_certificate_verify(parsed).await,
+        CertificateAction::Revoke(parsed) => cmd_certificate_revoke(parsed).await,
+    }
+}
+
+async fn cmd_certificate_issue(parsed: CertificateIssueArgs) -> Result<i32, CliError> {
+    let evidence = fs::read(&parsed.evidence_file).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            CliError::runtime(format!(
+                "evidence file not found: {}",
+                parsed.evidence_file.display()
+            ))
+        } else {
+            CliError::runtime(format!(
+                "cannot read evidence file {}: {e}",
+                parsed.evidence_file.display()
+            ))
+        }
+    })?;
+    let evidence_hash = sha256_hex(&evidence);
+    let total = parsed
+        .tests_passed
+        .checked_add(parsed.tests_failed)
+        .ok_or_else(|| CliError::runtime("test counts overflow u32"))?;
+    let endpoint = resolve_endpoint(parsed.endpoint.clone(), None);
+    let mut client = connect(&endpoint).await?;
+
+    let response = client
+        .issue_certificate(Request::new(IssueCertificateRequest {
+            product: parsed.product.clone(),
+            version: parsed.version.clone(),
+            verdict: parsed.verdict.clone(),
+            evidence,
+            evidence_hash: evidence_hash.clone(),
+            evidence_scope: parsed.evidence_scope.clone(),
+            tests: Some(TestCounts {
+                passed: parsed.tests_passed,
+                failed: parsed.tests_failed,
+                total,
+            }),
+            policy: parsed.policy.clone(),
+        }))
+        .await
+        .map_err(|e| CliError::runtime(format!("issue certificate RPC failed: {e}")))?
+        .into_inner();
+
+    if response.issued {
+        let certificate = response.certificate.as_ref().ok_or_else(|| {
+            CliError::runtime("issue certificate response did not include a certificate envelope")
+        })?;
+        save_proof(&parsed.cert_out, certificate)?;
+        let out = json!({
+            "issued": true,
+            "serial": response.serial.clone(),
+            "fingerprint": response.fingerprint.clone(),
+            "product": parsed.product.clone(),
+            "version": parsed.version.clone(),
+            "verdict": parsed.verdict.clone(),
+            "evidence_hash": evidence_hash,
+            "cert_file": parsed.cert_out.display().to_string(),
+        });
+        print_json(&out);
+        Ok(0)
+    } else {
+        let out = json!({
+            "issued": false,
+            "reason": response.refusal_reason.clone(),
+        });
+        print_json(&out);
+        Ok(1)
+    }
+}
+
+async fn cmd_certificate_status(parsed: CertificateStatusArgs) -> Result<i32, CliError> {
+    let endpoint = resolve_endpoint(parsed.endpoint.clone(), None);
+    let mut client = connect(&endpoint).await?;
+    let response = client
+        .certificate_status(Request::new(CertificateStatusRequest {
+            serial: parsed.serial.clone(),
+        }))
+        .await
+        .map_err(|e| CliError::runtime(format!("certificate status RPC failed: {e}")))?
+        .into_inner();
+
+    let status = certificate_status_name(response.status);
+    let body = match response.body.as_ref() {
+        Some(body) => {
+            let tests = match body.tests.as_ref() {
+                Some(tests) => json!({
+                    "passed": tests.passed,
+                    "failed": tests.failed,
+                    "total": tests.total,
+                }),
+                None => Value::Null,
+            };
+            json!({
+                "schema": body.schema.clone(),
+                "schema_version": body.schema_version,
+                "serial": body.serial.clone(),
+                "issuer": body.issuer.clone(),
+                "product": body.product.clone(),
+                "version": body.version.clone(),
+                "verdict": body.verdict.clone(),
+                "evidence_hash": body.evidence_hash.clone(),
+                "evidence_scope": body.evidence_scope.clone(),
+                "tests": tests,
+                "policy": body.policy.clone(),
+                "pf_outcomes": non_empty_string(&body.pf_outcomes),
+                "issued_at": body.issued_at,
+                "supersedes": non_empty_string(&body.supersedes),
+                "fingerprint": body.fingerprint.clone(),
+            })
+        }
+        None => Value::Null,
+    };
+
+    let out = json!({
+        "serial": parsed.serial.clone(),
+        "status": status,
+        "body": body,
+    });
+    print_json(&out);
+    Ok(0)
+}
+
+async fn cmd_certificate_verify(parsed: CertificateVerifyArgs) -> Result<i32, CliError> {
+    let proof_file = load_proof(&parsed.cert_file)?;
+    let envelope = proto_from_proof_file(&proof_file)?;
+    let endpoint = resolve_endpoint(parsed.endpoint.clone(), None);
+    let mut client = connect(&endpoint).await?;
+    let response = client
+        .verify_proof(Request::new(VerifyProofRequest {
+            proof_envelope: Some(envelope),
+        }))
+        .await
+        .map_err(|e| CliError::runtime(format!("verify proof RPC failed: {e}")))?
+        .into_inner();
+
+    let out = json!({
+        "valid": response.valid,
+        "reason": response.reason.clone(),
+    });
+    print_json(&out);
+    Ok(if response.valid { 0 } else { 1 })
+}
+
+async fn cmd_certificate_revoke(parsed: CertificateRevokeArgs) -> Result<i32, CliError> {
+    let endpoint = resolve_endpoint(parsed.endpoint.clone(), None);
+    let mut client = connect(&endpoint).await?;
+    let response = client
+        .revoke_certificate(Request::new(RevokeCertificateRequest {
+            serial: parsed.serial.clone(),
+            reason: parsed.reason.clone(),
+        }))
+        .await
+        .map_err(|e| CliError::runtime(format!("revoke certificate RPC failed: {e}")))?
+        .into_inner();
+
+    let out = json!({
+        "revoked": response.revoked,
+        "message": response.message.clone(),
+        "serial": parsed.serial.clone(),
+    });
+    print_json(&out);
+    Ok(if response.revoked { 0 } else { 1 })
 }
 
 async fn cmd_health(args: &[String], pre_endpoint: Option<String>) -> Result<i32, CliError> {
@@ -740,6 +1147,28 @@ fn print_json(value: &Value) {
     );
 }
 
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+fn certificate_status_name(status: i32) -> &'static str {
+    match status {
+        0 => "UNKNOWN",
+        1 => "ACTIVE",
+        2 => "SUPERSEDED",
+        3 => "REVOKED",
+        _ => "UNKNOWN",
+    }
+}
+
+fn non_empty_string(value: &str) -> Value {
+    if value.is_empty() {
+        Value::Null
+    } else {
+        Value::String(value.to_string())
+    }
+}
+
 fn now_unix() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -943,6 +1372,7 @@ SUBCOMMANDS:
   verify      Verify a saved proof envelope
   audit       Read and verify the audit log
   doctor      Scan the local configuration environment for insecure settings
+  certificate Issue, inspect, verify or revoke a release certificate
 
 GLOBAL OPTIONS:
   --endpoint <url>   Daemon gRPC endpoint (default http://127.0.0.1:50051;
@@ -1094,6 +1524,70 @@ OPTIONS:
         .to_string()
 }
 
+fn print_certificate_usage() -> String {
+    r#"gm certificate: release-evidence certificates (WO-37 / v0.28.0)
+
+USAGE:
+  gm certificate issue  --product <p> --version <v> --verdict "<verdict>"
+                        --evidence-file <path>
+                        --evidence-scope <working-tree|full-history>
+                        --tests-passed <n> --tests-failed <n>
+                        --policy <policy> [--cert-out <path>]
+                        [--endpoint <url>]
+  gm certificate status --serial <serial> [--endpoint <url>]
+  gm certificate verify [--cert-file <path>] [--endpoint <url>]
+  gm certificate revoke --serial <serial> --reason "<reason>"
+                        [--endpoint <url>]
+
+ACTIONS:
+  issue    Present a gate evidence pack. The CLI reads the evidence file and
+           computes its SHA-256 itself; the operator never types a hash. Calls
+           IssueCertificate and writes the sealed certificate to --cert-out
+           (default gm-certificate.json in the current directory).
+  status   Call CertificateStatus and print the lifecycle state and body.
+  verify   Load a certificate file and call VerifyProof.
+  revoke   Call RevokeCertificate with a reason.
+
+Certificate RPCs need no session and no handshake.
+
+OUTPUT:
+  issue   {"issued": true, "serial": ..., "fingerprint": ..., "product": ...,
+           "version": ..., "verdict": ..., "evidence_hash": ...,
+           "cert_file": ...}; on refusal {"issued": false, "reason": ...}.
+  status  {"serial": ..., "status": "UNKNOWN|ACTIVE|SUPERSEDED|REVOKED",
+           "body": ...}
+  verify  {"valid": <bool>, "reason": ...}
+  revoke  {"revoked": <bool>, "message": ..., "serial": ...}
+
+EXIT CODES:
+  0  issue: certificate issued; status: the daemon answered (UNKNOWN
+     included); verify: proof valid; revoke: revoked.
+  1  issue: refused (for example a BLOCKED verdict); verify: proof invalid;
+     revoke: the daemon answered revoked=false.
+  2  usage, evidence-file, certificate-file, transport or gRPC error.
+
+The certificate certifies the binding of the presenter's declarations to the
+evidence hash under the daemon's signature, not the truth of the declarations.
+
+OPTIONS:
+  --product <p>           Product name
+  --version <v>           Product version
+  --verdict <v>           Gate verdict (PASS, PASS WITH FINDINGS, BLOCKED)
+  --evidence-file <path>  Gate evidence pack; its hash is computed from the file
+  --evidence-scope <s>    working-tree | full-history
+  --tests-passed <n>      Tests that passed (u32)
+  --tests-failed <n>      Tests that failed (u32)
+  --policy <p>            Gate version/policy string
+  --cert-out <path>       Certificate file to write (default gm-certificate.json)
+  --cert-file <path>      Certificate file to verify (default gm-certificate.json)
+  --serial <s>            Certificate serial
+  --reason <r>            Revocation reason
+  --endpoint <url>        Daemon gRPC endpoint (default http://127.0.0.1:50051;
+                          GM_ENDPOINT is used when the flag is absent)
+  --help                  Show this help"#
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1174,7 +1668,7 @@ mod tests {
         let args = vec!["--action-type".to_string(), "TOOL_CALL".to_string()];
         let error = parse_evaluate_args(&args, None).unwrap_err();
         assert_eq!(error.code(), 2);
-        assert!(matches!(error, CliError::Usage(_)));
+        assert!(matches!(&error, CliError::Usage(_)));
     }
 
     #[test]
@@ -1195,7 +1689,7 @@ mod tests {
 
         let error = parse_evaluate_args(&args, None).unwrap_err();
         assert_eq!(error.code(), 2);
-        assert!(matches!(error, CliError::Usage(_)));
+        assert!(matches!(&error, CliError::Usage(_)));
     }
 
     #[test]
@@ -1203,6 +1697,227 @@ mod tests {
         let args = ["--nope".to_string()];
         let error = parse_evaluate_args(&args, None).unwrap_err();
         assert_eq!(error.code(), 2);
-        assert!(matches!(error, CliError::Usage(_)));
+        assert!(matches!(&error, CliError::Usage(_)));
+    }
+
+    fn certificate_issue_args() -> Vec<String> {
+        [
+            "--product",
+            "guardian-mesh",
+            "--version",
+            "0.28.0",
+            "--verdict",
+            "PASS WITH FINDINGS",
+            "--evidence-file",
+            "gate-pack.json",
+            "--evidence-scope",
+            "full-history",
+            "--tests-passed",
+            "85",
+            "--tests-failed",
+            "0",
+            "--policy",
+            "gate-v1.0.0",
+        ]
+        .iter()
+        .map(|value| value.to_string())
+        .collect()
+    }
+
+    fn certificate_issue_args_without(flag: &str) -> Vec<String> {
+        let args = certificate_issue_args();
+        let mut filtered = Vec::new();
+        let mut i = 0;
+        while i < args.len() {
+            if args[i] == flag {
+                i += 2;
+                continue;
+            }
+            filtered.push(args[i].clone());
+            i += 1;
+        }
+        filtered
+    }
+
+    fn unique_temp_file(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "gm-test-{name}-{}-{nanos}.json",
+            std::process::id()
+        ));
+        path
+    }
+
+    #[test]
+    fn certificate_issue_parses_all_required_flags() {
+        let args = certificate_issue_args();
+        let parsed = parse_certificate_issue_args(&args, None).unwrap();
+        assert_eq!(parsed.product, "guardian-mesh");
+        assert_eq!(parsed.version, "0.28.0");
+        assert_eq!(parsed.verdict, "PASS WITH FINDINGS");
+        assert_eq!(parsed.evidence_file, PathBuf::from("gate-pack.json"));
+        assert_eq!(parsed.evidence_scope, "full-history");
+        assert_eq!(parsed.tests_passed, 85);
+        assert_eq!(parsed.tests_failed, 0);
+        assert_eq!(parsed.policy, "gate-v1.0.0");
+        assert_eq!(parsed.cert_out, PathBuf::from("gm-certificate.json"));
+        assert_eq!(parsed.endpoint, None);
+    }
+
+    #[test]
+    fn certificate_issue_requires_each_flag() {
+        for flag in [
+            "--product",
+            "--version",
+            "--verdict",
+            "--evidence-file",
+            "--evidence-scope",
+            "--tests-passed",
+            "--tests-failed",
+            "--policy",
+        ] {
+            let args = certificate_issue_args_without(flag);
+            let error = parse_certificate_issue_args(&args, None).unwrap_err();
+            assert_eq!(error.code(), 2, "missing {flag} should exit 2");
+            assert!(
+                matches!(&error, CliError::Usage(_)),
+                "missing {flag} should be a usage error"
+            );
+            assert!(
+                error.message().contains(flag),
+                "error should name {flag}: {}",
+                error.message()
+            );
+        }
+    }
+
+    #[test]
+    fn certificate_issue_rejects_bad_test_count() {
+        let mut args = certificate_issue_args();
+        let position = args
+            .iter()
+            .position(|value| value == "--tests-passed")
+            .unwrap();
+        args[position + 1] = "many".to_string();
+        let error = parse_certificate_issue_args(&args, None).unwrap_err();
+        assert_eq!(error.code(), 2);
+        assert!(matches!(&error, CliError::Usage(_)));
+        assert!(error.message().contains("--tests-passed"));
+    }
+
+    #[test]
+    fn certificate_status_requires_serial() {
+        let args = ["--serial".to_string(), "cert-1".to_string()];
+        let parsed = parse_certificate_status_args(&args, None).unwrap();
+        assert_eq!(parsed.serial, "cert-1");
+
+        let error = parse_certificate_status_args(&[], None).unwrap_err();
+        assert_eq!(error.code(), 2);
+        assert!(matches!(&error, CliError::Usage(_)));
+        assert!(error.message().contains("--serial"));
+    }
+
+    #[test]
+    fn certificate_verify_defaults_and_parses_cert_file() {
+        let parsed = parse_certificate_verify_args(&[], None).unwrap();
+        assert_eq!(parsed.cert_file, PathBuf::from("gm-certificate.json"));
+
+        let args = [
+            "--cert-file".to_string(),
+            "ops/gm-certificate.json".to_string(),
+        ];
+        let parsed = parse_certificate_verify_args(&args, None).unwrap();
+        assert_eq!(parsed.cert_file, PathBuf::from("ops/gm-certificate.json"));
+    }
+
+    #[test]
+    fn certificate_revoke_requires_serial_and_reason() {
+        let args = [
+            "--serial".to_string(),
+            "cert-1".to_string(),
+            "--reason".to_string(),
+            "verdict withdrawn".to_string(),
+        ];
+        let parsed = parse_certificate_revoke_args(&args, None).unwrap();
+        assert_eq!(parsed.serial, "cert-1");
+        assert_eq!(parsed.reason, "verdict withdrawn");
+
+        for flag in ["--serial", "--reason"] {
+            let mut filtered = Vec::new();
+            let mut i = 0;
+            while i < args.len() {
+                if args[i] == flag {
+                    i += 2;
+                    continue;
+                }
+                filtered.push(args[i].clone());
+                i += 1;
+            }
+            let error = parse_certificate_revoke_args(&filtered, None).unwrap_err();
+            assert_eq!(error.code(), 2);
+            assert!(matches!(&error, CliError::Usage(_)));
+            assert!(error.message().contains(flag));
+        }
+    }
+
+    #[test]
+    fn certificate_unknown_action_is_usage_error() {
+        let error =
+            parse_certificate_action(&["frobnicate".to_string()], None).unwrap_err();
+        assert_eq!(error.code(), 2);
+        assert!(matches!(&error, CliError::Usage(_)));
+        assert!(error.message().contains("issue"));
+        assert!(error.message().contains("status"));
+        assert!(error.message().contains("verify"));
+        assert!(error.message().contains("revoke"));
+
+        let error = parse_certificate_action(&[], None).unwrap_err();
+        assert_eq!(error.code(), 2);
+        assert!(matches!(&error, CliError::Usage(_)));
+    }
+
+    #[test]
+    fn sha256_hex_known_vectors() {
+        assert_eq!(
+            sha256_hex(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn certificate_file_save_load_round_trip() {
+        let path = unique_temp_file("certificate");
+        let envelope = ProtoSealedEnvelope {
+            payload: b"certificate body bytes".to_vec(),
+            payload_type: b"guardian_mesh.Certificate".to_vec(),
+            crc32c: 0x1234_abcd,
+            ml_dsa_65_signature: vec![9, 8, 7, 6, 5, 4],
+            timestamp: 0x00ff_00ff_00ff_00ff,
+            nonce: (0u8..32).rev().collect(),
+        };
+
+        save_proof(&path, &envelope).unwrap();
+        let loaded = load_proof(&path).unwrap();
+        let rebuilt = proto_from_proof_file(&loaded).unwrap();
+        assert_eq!(rebuilt, envelope);
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn certificate_status_name_mapping() {
+        assert_eq!(certificate_status_name(0), "UNKNOWN");
+        assert_eq!(certificate_status_name(1), "ACTIVE");
+        assert_eq!(certificate_status_name(2), "SUPERSEDED");
+        assert_eq!(certificate_status_name(3), "REVOKED");
+        assert_eq!(certificate_status_name(99), "UNKNOWN");
     }
 }
