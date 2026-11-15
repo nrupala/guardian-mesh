@@ -7,14 +7,18 @@ the handshake, evaluate, verify and audit operations named by CC-4.
 This document covers WO-18 profile 3 (CC-4), shipped in v0.19.0. The MCP surface
 (CC-5) shipped in v0.20.0 as the separate `gm-mcp` binary; see
 [MCP](MCP.md). v0.23.0 adds `gm doctor` (WO-22, SG-4), a local configuration
-scan that names insecure settings and contacts no daemon.
+scan that names insecure settings and contacts no daemon. v0.28.0 adds
+`gm certificate` (WO-37, T1): issue, inspect, verify and revoke
+release-evidence certificates through the daemon's certificate RPCs.
 
 ## What the CLI is
 
 `gm` is an ordinary client of a running `guardian-meshd`. It opens a handshake
 session, seals an `ActionDescriptor`, calls `Evaluate` or `Simulate`, checks
-saved proofs with `VerifyProof`, and reads the audit trail with `ReadAuditLog`.
-It adds no new verdict capability, no daemon behaviour, and no clustering.
+saved proofs with `VerifyProof`, reads the audit trail with `ReadAuditLog`, and
+issues, inspects, verifies or revokes release-evidence certificates with the
+certificate RPCs. It adds no new verdict capability, no daemon behaviour, and no
+clustering.
 
 The CLI holds no policy authority. It asks the daemon like any other client;
 the daemon decides, seals the proof and owns the audit chain. Nothing in the
@@ -50,7 +54,8 @@ Every subcommand accepts `--endpoint <url>`. The resolution order is:
 4. `http://127.0.0.1:50051`.
 
 `handshake` has no session file yet, so it uses the flag, `GM_ENDPOINT`, then
-the default.
+the default. The `certificate` actions need no session and no handshake; they
+use the flag, `GM_ENDPOINT`, then the default.
 
 ## `gm health`
 
@@ -258,6 +263,141 @@ An invalid posture value is a blocking finding in every posture.
 Exit 0 when there are no blocking findings, 2 when any blocking finding is
 present (a normal result, not a usage error).
 
+## `gm certificate`
+
+Issues and manages release-evidence certificates (WO-37, v0.28.0). The four
+actions call `IssueCertificate`, `CertificateStatus`, `VerifyProof` and
+`RevokeCertificate`; none needs a session or a handshake. The schema and
+lifecycle are in
+[CERTIFICATE_SCHEMA](../specs/CERTIFICATE_SCHEMA.md); the release-gate operator
+protocol is in
+[RELEASE_GATE_TOUCHPOINT](RELEASE_GATE_TOUCHPOINT.md).
+
+Endpoint resolution for all four actions is `--endpoint`, then `GM_ENDPOINT`,
+then `http://127.0.0.1:50051`; no session file is read.
+
+```bash
+gm certificate issue --product guardian-mesh --version 0.28.0 \
+  --verdict "PASS WITH FINDINGS" --evidence-file ./gate-pack.json \
+  --evidence-scope full-history --tests-passed 85 --tests-failed 0 \
+  --policy gate-v1.0.0 --cert-out ./ops/gm-certificate.json
+
+gm certificate status --serial cert-20261115-000001
+gm certificate verify --cert-file ./ops/gm-certificate.json --endpoint <second-daemon>
+gm certificate revoke --serial cert-20261115-000001 --reason "verdict withdrawn"
+```
+
+### `gm certificate issue`
+
+Required: `--product`, `--version`, `--verdict`, `--evidence-file`,
+`--evidence-scope` (`working-tree` or `full-history`), `--tests-passed`,
+`--tests-failed`, `--policy`. Optional: `--cert-out` (default
+`gm-certificate.json` in the current directory) and `--endpoint`.
+
+The CLI reads the evidence file and computes its SHA-256 itself; the operator
+never types a hash. The test total sent to the daemon is `passed + failed`.
+
+On issuance it writes the returned sealed envelope to the cert file and prints:
+
+```json
+{
+  "issued": true,
+  "serial": "cert-20261115-000001",
+  "fingerprint": "...",
+  "product": "guardian-mesh",
+  "version": "0.28.0",
+  "verdict": "PASS WITH FINDINGS",
+  "evidence_hash": "...",
+  "cert_file": "./ops/gm-certificate.json"
+}
+```
+
+Exit 0. On refusal it prints `{"issued": false, "reason": "<refusal reason>"}`
+to stdout, does not write or overwrite the cert file, and exits 1. A BLOCKED
+verdict is refused this way, and the daemon also revokes any ACTIVE certificate
+for that product+version. A missing or unreadable evidence file, a missing
+certificate envelope in an `issued` response, and any gRPC/transport error are
+runtime errors: exit 2.
+
+### `gm certificate status`
+
+Required: `--serial`. Prints the queried serial, the lifecycle status enum name
+and the stored body:
+
+```json
+{
+  "serial": "cert-20261115-000001",
+  "status": "ACTIVE",
+  "body": {
+    "schema": "guardian-mesh/certificate",
+    "schema_version": 1,
+    "serial": "cert-20261115-000001",
+    "issuer": "...",
+    "product": "guardian-mesh",
+    "version": "0.28.0",
+    "verdict": "PASS WITH FINDINGS",
+    "evidence_hash": "...",
+    "evidence_scope": "full-history",
+    "tests": { "passed": 85, "failed": 0, "total": 85 },
+    "policy": "gate-v1.0.0",
+    "pf_outcomes": null,
+    "issued_at": 1790000000,
+    "supersedes": null,
+    "fingerprint": "..."
+  }
+}
+```
+
+`status` is `UNKNOWN`, `ACTIVE`, `SUPERSEDED` or `REVOKED`; an out-of-range
+enum value prints `UNKNOWN`. `body` is `null` when the daemon has no stored body
+and `tests` is `null` when absent. Exit 0 whenever the daemon answered —
+`UNKNOWN` is an answer. Exit 2 on usage/transport errors.
+
+### `gm certificate verify`
+
+Optional: `--cert-file` (default `gm-certificate.json` in the current
+directory), `--endpoint`. Loads the file as a proof file, rebuilds the envelope
+and calls `VerifyProof`; no client-side signature check is performed.
+
+```json
+{ "valid": true, "reason": "ML-DSA-65 signature verified" }
+```
+
+Exit 0 iff the daemon reports the certificate valid, 1 iff it reports it
+invalid, 2 on usage, cert-file or transport errors. A malformed or tampered cert
+file is an invalid proof (exit 1), never a crash. Verify against a second daemon
+instance or a separate client — never only the issuer.
+
+### `gm certificate revoke`
+
+Required: `--serial`, `--reason`. Prints:
+
+```json
+{
+  "revoked": true,
+  "message": "...",
+  "serial": "cert-20261115-000001"
+}
+```
+
+Exit 0 iff `revoked` is true, 1 iff the daemon answered `revoked` false, 2 on
+usage/transport errors.
+
+### Certificate file and honesty note
+
+The certificate file has the same `ProofFile` JSON shape as `gm verify` reads:
+hex-encoded `payload`, `payload_type`, `crc32c`, `ml_dsa_65_signature`,
+`timestamp` and `nonce`. It is a sealed envelope, so
+`gm verify --proof-file <cert-out>` also verifies it. The default cert-file path
+is `gm-certificate.json` in the current directory.
+
+The certificate binds the presenter's declarations (product, version, verdict,
+test counts, policy and scope) to the evidence hash under the daemon's
+signature. It certifies the binding, not the truth of the declarations, and is
+not a warranty of quality or security. The hash is computed from the evidence
+file, and a BLOCKED verdict refuses issuance and revokes daemon-side; no
+certificate means no "certified" claim.
+
 ## Session file
 
 The default session file is `$HOME/.guardian-mesh/gm-session.json`.
@@ -321,7 +461,7 @@ must not be shared.
 | Code | Meaning |
 |---|---|
 | `0` | Successful operation, or any verdict returned in a response (including `BLOCK`, `THROTTLE` and `ESCALATE`). |
-| `1` | `verify`: the daemon reports the proof invalid. `health`: the daemon is reachable but not `SERVING`/`DEGRADED`. |
+| `1` | `verify` / `certificate verify`: the daemon reports the proof or certificate invalid. `health`: the daemon is reachable but not `SERVING`/`DEGRADED`. `certificate issue`: the daemon refused issuance. `certificate revoke`: the daemon answered `revoked` false. |
 | `2` | Usage, session, proof-file, transport, connection or gRPC error (error on stderr; no partial JSON on stdout), or `doctor`: one or more blocking findings (a normal result, printed on stdout). |
 
 The **BLOCK-is-success** rule is deliberate: a `BLOCK` verdict is a successful
@@ -362,5 +502,6 @@ as permission to act; read `verdict`.
 This document does not assert test or build results. The build lane ran no
 `cargo`, `npm`, `docker` or `podman` commands; Wright verifies the daemon
 behaviour independently. The unit tests in `gm.rs` need no daemon and cover only
-payload construction, session/proof file round-trips and argument errors;
+payload construction, session/proof/certificate file round-trips, argument
+errors, the evidence-hash helper and certificate status-name mapping;
 daemon-behaviour proof is Wright's leg.
