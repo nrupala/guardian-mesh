@@ -23,7 +23,7 @@ only its issuer can check.
 | Touchpoint | What flows there | Connection | Status |
 |---|---|---|---|
 | T1 Release gate | The gate's verdict and evidence pack; the proof is the sealed certificate issued after the action | `gm certificate issue` / `status` / `verify` / `revoke` over the certificate RPCs (IssueCertificate, CertificateStatus, RevokeCertificate, VerifyProof), against the production daemon | WIRED (v0.28.0) |
-| T2 Publishing pipeline | Release publication and its record: verdict and certificate citation travel with the published artifact | Manual publisher step; no wired call from the pipeline yet | NAMED, NOT WIRED (manual publisher step) |
+| T2 Publishing pipeline | Public content in the owner's name (AIMLDS blog/papers pipeline) | Manual publisher step; no wired call from the pipeline yet | NAMED, NOT WIRED (manual publisher step) |
 | T3 Conduit | Conduit fleet traffic and its verdicts | Flagship integration; rides after T1/T2 | NAMED, NOT WIRED (flagship integration, after T1/T2) |
 | T4 Fleet repos | Per-repository release evidence and certificates | Per-repo coverage statements are WO-21's remainder, not this WO | PARTIAL (certificates exist per WO-6; per-repo coverage statements are WO-21's remainder, not this WO) |
 | T5 Nightly lane | Nightly run verdicts and the proofs after each action | Process live and gated | PARTIAL (process live and gated; proof formalization is the remaining build) |

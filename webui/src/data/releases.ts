@@ -13,6 +13,21 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.28.0",
+    date: "2026-11-15",
+    summary: "WO-37 (T1): release-gate touchpoint wiring - the gm CLI gains the full certificate lifecycle (issue / status / verify / revoke) over the existing WO-6 certificate RPCs, specs/TOUCHPOINTS.md opens the touchpoint coverage register with T1 WIRED, and docs/RELEASE_GATE_TOUCHPOINT.md states the operator protocol. This release's own production certificate is the first issued through the shipped CLI path.",
+    highlights: [
+      "gm certificate issue: reads the evidence file and computes its SHA-256 itself (the operator never types a claimed hash), calls IssueCertificate, saves the sealed envelope in the same ProofFile shape gm verify reads; a daemon refusal (BLOCKED verdict, hash mismatch) prints issued:false, writes no file, and exits 1",
+      "gm certificate status / verify / revoke: lifecycle state with the full stored body; VerifyProof through the CLI (a tampered cert file is invalid, exit 1, never a crash); revocation through the CLI. No session needed, no daemon, proto, policy or dependency changes",
+      "specs/TOUCHPOINTS.md (new): T1..T8 coverage register in map order - T1 WIRED (v0.28.0), T4/T5/T8 PARTIAL, T2/T3/T6/T7 NAMED NOT WIRED; wired means a verdict recorded before the action, a proof after it, and the proof verifying offline",
+      "docs/RELEASE_GATE_TOUCHPOINT.md (new): the T1 operator protocol - gate verdict, issue against the production daemon with the gate pack as evidence, independent verify, serial + fingerprint cited in the release record; fail-closed at every step",
+      "HONESTY BOUNDARY: at T1 the verdict before the action is the release gate's own verdict, bound and enforced by issuance - this release adds no Evaluate call against the release action, no new RPC and no verdict-path change; a certificate certifies the binding of declarations to the evidence hash, not their truth"
+    ],
+    gateVerdict: "PASS WITH FINDINGS - Release Gate 2026-11-14 (guardian-mesh-wo37-2026-11-14): scanner PASS (0 must-gate failures, 0 secrets, 0 known vulns); cargo audit clean (174 deps). F1 = standing GMSI-143 spec-release lag outside this WO; F2 = the effective evidence-size bound is the gRPC transport 4 MB message limit, below the daemon's 10 MB cap (pre-existing, fail-closed; filed as GMSI-156). Register review: no score changes; RR-05 (20 Critical) + RR-21 (15 High) consciously re-accepted for this cycle, treatments unchanged",
+    tests: "Wright, independent, fresh checkout of the WO-37 branch (tree == lane tree): cargo test 308/308 (188 lib + 93 bin + 11 gm-mcp + 16 gm; baseline 298 + exactly the 10 new gm tests); WebUI ci+build+lint clean, check:releases green (30 versions). Wright behaviour proof on a locally built daemon (own key): 15/15 legs - issue with CLI-computed hash matching Wright's SHA-256, fingerprint recomputes offline, status ACTIVE bound to the evidence, verify VALID (also via gm verify --proof-file), tamper invalid, BLOCKED refused + prior ACTIVE revoked, unknown serial UNKNOWN, CLI revoke, oversize refused fail-closed, usage errors name the missing flag",
+    status: "Current release"
+  },
+  {
     version: "0.27.0",
     date: "2026-11-14",
     summary: "WO-32: AI risk register + process (ISO/IEC 23894) - specs/RISK_REGISTER.md scores and owns RR-01..RR-25, tied 1:1 to the threat model of record and its mitigations, and is reviewed at every release gate run with the review recorded in the gate verdict.",
@@ -25,7 +40,7 @@ export const RELEASES: Release[] = [
     ],
     gateVerdict: "PASS WITH FINDINGS - release gate 2026-11-13 (WO-32): scanner PASS 0 secrets / 0 vulns / 0 must-gate failures; cargo audit clean (174 deps); F1 standing GMSI-143 spec-label lag outside this WO; GMSI-153 filed (reconciliation proof also covers register accuracy). Register review: RR-04 mitigated (v0.26.0 cycle), RR-05 (20 Critical) + RR-21 (15 High) consciously accepted for this cycle with treatments named",
     tests: "Wright independent verification, fresh checkout of PR #117 head (tree == authored tree): cargo test 298/298 (188 lib + 93 bin + 11 gm-mcp + 6 gm, identical to the v0.26.0 baseline as a docs-only change must produce); WebUI ci/build/lint + check:releases green (29 versions); mechanical acceptance - RR-01..RR-25 each once, TM links valid, all scores arithmetically correct, at-a-glance table consistent, licence wording exact",
-    status: "Current release"
+    status: "Release candidate"
   },
   {
     version: "0.26.0",
