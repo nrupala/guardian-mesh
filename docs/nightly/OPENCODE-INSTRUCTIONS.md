@@ -1751,6 +1751,21 @@ MUST until behaviour-proven here.
   code or the contract alone. Filed as a probe
   candidate: it becomes a gate MUST only after it
   is behaviour-proven here, per the standing rule.
+
+- **GMSI-156 — Declared bound == enforced bound,
+  end-to-end.** (WO-37 gate, 2026-11-14.) The
+  daemon's certificate evidence cap is 10 MB
+  (certificate.rs), but the gRPC (tonic) transport
+  refuses messages above 4 MB, so evidence between
+  4 MB and 10 MB is refused at transport — with a
+  clear error, fail-closed — before the daemon cap
+  can apply, for every client. Guardian Mesh
+  should be able to prove, for any RPC carrying
+  evidence or proofs, that the bound declared at
+  the application layer equals the bound enforced
+  at every layer beneath it (transport, proxy,
+  envelope), or name the effective bound honestly
+  as the transport's.
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
@@ -3846,3 +3861,85 @@ Part B above.
 Guardian Mesh Spec Inputs filed by this run: GMSI-153
 (WO-32 gate — the GMSI-143 reconciliation proof also
 covers register accuracy), recorded in Part B above.
+
+- 2026-11-15 — **WO-37 touchpoint T1 (release
+  gate) WIRED as v0.28.0** (PR #120, merge
+  88ae3e6a; pack refreshed first by PR #119:
+  GMSI-154 + GMSI-155 from the Gate Agent v0.1.0
+  adjudication). The gm CLI gains the full
+  certificate lifecycle over the existing WO-6
+  RPCs — `gm certificate issue|status|verify|
+  revoke` (issue computes the evidence SHA-256
+  itself; refusal writes no file, exit 1; cert
+  files share the ProofFile shape `gm verify`
+  reads); specs/TOUCHPOINTS.md opens the coverage
+  register (T1 WIRED; T4/T5/T8 PARTIAL; T2/T3/
+  T6/T7 NAMED NOT WIRED); docs/
+  RELEASE_GATE_TOUCHPOINT.md states the operator
+  protocol. No daemon/proto/policy/dependency
+  changes; no Evaluate call added — the gate's
+  own verdict is what issuance binds and
+  enforces. Built on the laptop lane (OpenCode
+  1.19.5, fresh clone at refreshed main 8af88eaf;
+  lane commit tree fc8a44f4 carried by Wright via
+  bundle + git-data API after the lane push
+  failed on missing credentials — pushed tree ==
+  lane tree). Wright verified independently:
+  cargo 308/308 (baseline 298 + exactly the 10
+  new gm tests), WebUI clean, check:releases 30
+  versions; Wright behaviour proof on a locally
+  built daemon (own key) 15/15 legs. Gate PASS
+  WITH FINDINGS (verdict sha256 a7388343...):
+  F1 standing GMSI-143 lag; F2 the effective
+  evidence bound is the gRPC transport 4 MB
+  limit, below the daemon's 10 MB cap
+  (pre-existing, fail-closed) — filed as
+  GMSI-156. Register review: no score changes;
+  RR-05 (20 Critical) + RR-21 (15 High)
+  consciously re-accepted for this cycle,
+  treatments unchanged. Deployed: binary sha256
+  87449b78..., backup .bak-v0270, both services
+  active, box E2E 15/16 (sole miss the standing
+  stale Health-fields harness check, 20th
+  occurrence) — gm-deploy stopped at NOT
+  certified on that bar; certification proceeded
+  on direct production proof. Direct proof
+  (Wright's own box client): Health SERVING,
+  0.28.0@88ae3e6a, binary sha == built ==
+  installed, degraded=false, fingerprint == pin
+  dd2cf1a3.... Self-cert cert-20261115-000057
+  ACTIVE, PASS WITH FINDINGS, evidence = gate
+  verdict sha256 a7388343... — the FIRST
+  certificate issued through the shipped
+  `gm certificate issue` path (gm also installed
+  on the box at /usr/local/bin/gm); sealed
+  pf_outcomes == production Health counters
+  exactly; payload fingerprint recomputes;
+  VerifyProof VALID — superseding
+  cert-20261114-000056 (read back SUPERSEDED).
+  Attestation: statement against the merged
+  clone (cross-build Cargo.lock 9fdc1015...),
+  signed on the box with the production key
+  (signer asserted == pin before install);
+  installed /opt/guardian-mesh/
+  guardian-meshd-0.28.0.attestation.json,
+  gm-attest verify VALID, package fingerprint
+  1bcb1fbe.... Pages parity: box dist asset ==
+  merged build == GitHub Pages asset
+  (index-Bc9gf_U-.js); public unauthenticated
+  302. NOT RUN: authenticated panel
+  click-through (GMSI-134); Kali/Arch for this
+  delta (no daemon or network surface changed).
+  v0.28.0 is a RELEASE CANDIDATE (one-week soak;
+  graduates 2026-11-22). **WO-37 stays OPEN —
+  T1 is wired; the next touchpoint is T2
+  (publishing pipeline) in map order.**
+  WO-33 (P2, NIST AI RMF profile) and WO-27
+  (P2, mediation conformance) follow in pack
+  order; WO-17 stays open for the cluster chaos
+  + CM-8 extensions (WO-27); WO-16 stays open
+  for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-156
+(WO-37 gate — declared bound == enforced bound,
+end-to-end), recorded in Part B above.
