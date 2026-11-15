@@ -1033,5 +1033,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-15T00:29:10-06:00",
     "message": "Merge pull request #119 from nrupala/wright/pack-refresh-2026-11-14"
+  },
+  {
+    "release": 120,
+    "tag": "release/v120",
+    "previous_tag": "release/v119",
+    "sha": "88ae3e6aa98ee7d014acb49abc97fd11f3c66b7c",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-15T01:16:09-06:00",
+    "message": "Merge pull request #120 from nrupala/wright/wo37-gm-certificate"
   }
 ]
