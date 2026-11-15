@@ -1728,6 +1728,29 @@ MUST until behaviour-proven here.
   re-score (or an explicit no-change record) — the
   reconciliation proof covers all three documents
   or it covers none of them honestly.
+
+- **GMSI-154 — Leakage-canary probe.** (Gate Agent
+  v0.1.0 gate adjudication, 2026-11-14.) An
+  engagement-surface leakage canary as a standing
+  GM probe: submit a unique canary through a
+  product's engagement/intake surface, then search
+  every output surface the product exposes and
+  prove the canary appears only where the contract
+  allows it (e.g. the submitter's own receipt) and
+  nowhere else. Filed as a probe candidate: it
+  becomes a gate MUST only after it is
+  behaviour-proven here, per the standing rule.
+
+- **GMSI-155 — Rate-bound enforcement probe.**
+  (Gate Agent v0.1.0 gate adjudication,
+  2026-11-14.) A declared rate limit on any served
+  face must be proven enforced from an independent
+  vantage — requests up to the declared bound are
+  allowed, the next request is refused (429 or the
+  face's declared refusal) — never taken from the
+  code or the contract alone. Filed as a probe
+  candidate: it becomes a gate MUST only after it
+  is behaviour-proven here, per the standing rule.
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
