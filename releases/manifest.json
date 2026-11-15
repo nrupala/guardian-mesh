@@ -1024,5 +1024,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-14T00:53:03-06:00",
     "message": "Merge pull request #118 from nrupala/wright/wo32-ledger"
+  },
+  {
+    "release": 119,
+    "tag": "release/v119",
+    "previous_tag": "release/v118",
+    "sha": "8af88eaf020a68a5a2a81edacc62740b48627db6",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-15T00:29:10-06:00",
+    "message": "Merge pull request #119 from nrupala/wright/pack-refresh-2026-11-14"
   }
 ]
