@@ -1766,6 +1766,199 @@ MUST until behaviour-proven here.
   at every layer beneath it (transport, proxy,
   envelope), or name the effective bound honestly
   as the transport's.
+
+GMSI-157…181 were filed by the release gate's 2026-11-15 atoms
+runs (packs: release-gate-runs/atoms-per-atom-gate-2026-11-15,
+atoms-gateway-v1-2026-11-15, atoms-gateway-v110-prorated-
+2026-11-15, atoms-gateway-takedown-presentation-2026-11-15,
+atoms-gateway-batch14-2026-11-15; batch15 filed none new).
+In every one of those runs the Guardian Mesh disposition was
+NOT RUN — no GM machinery is behaviour-proven for an external
+product surface — and the records below state what GM must be
+able to prove before any atoms gate may mark the GM leg
+PROVEN. They queue behind the Part A work orders exactly as
+GMSI-6…156 do, and none becomes a gate MUST until
+behaviour-proven here.
+
+- **GMSI-157…169, GMSI-175, GMSI-176 — Per-atom verdict
+  certification (one record per cohort, the obligation per
+  atom).** (Per-atom R-18 gate run, 2026-11-15; canonical
+  record: atoms-per-atom-gate-2026-11-15/gmsi.md.) Until that
+  run, atoms carried no per-atom gate verdict at all — a
+  verdict could be edited after the fact and nothing
+  downstream could tell. GM must prove, per atom: evaluation
+  input = atom id (`org.aimlds/atom-<atom>`), gateway version
+  + deployment id, sha256 of the atom's recorded case corpus
+  (cases.json), the gate verdict, the per-check outcome
+  summary, sha256 of the atom's GATE-VERDICT record and of
+  the batch evidence pack. ALLOW only when the verdict in
+  the proof equals the verdict in the filed gate record AND
+  both hashes recompute; BLOCK on any mismatch, on a missing
+  corpus hash, or when the atom's kill switch
+  (`atom_enabled=0`) is set. Sealed-proof fields: atom id,
+  cohort, gateway deployment id, corpus hash, verdict,
+  checks summary hash, pack hash, issued-at, supersedes.
+  Tamper: any altered field verifies NOT VALID; a superseded
+  verdict's proof verifies SUPERSEDED, never VALID.
+  Lifecycle: issue at gate verdict; supersede on re-gate;
+  revoke on kill-switch activation or a BLOCKED re-gate;
+  expire with the RC soak if graduation is refused. Cohorts:
+  157 = release-readiness-verdict (atom #1); 158 = Batch 1
+  (agent-safety-guardrail-audit, append-only-ledger-design-
+  audit, dependency-governance-audit, encryption-claim-
+  audit, firewall-rules-audit, license-compliance-check);
+  159 = Batch 2 (agent-evaluation-scorecard, assumption-
+  audit, claim-verification-fact-check-stamp, codebase-
+  structural-query, condition-monitoring-triage, defined-
+  flow-auditor); 160 = Batch 3 (correctness-verification-
+  certificate, crypto-inventory-pq-migration-map, decision-
+  trap-sweep, distribution-equipment-rating-condition-check,
+  electrical-machinery-engineering-check, electrical-test-
+  record-preparation); 161 = Batch 4 (finance-content-
+  compliance-check, forecast-with-ranges-and-scorecard,
+  lean4-formal-proof, link-rot-scan-and-notarized-archive,
+  network-exposure-audit, portfolio-risk-analytics-report,
+  prediction-model-leakage-calibration-audit); 162 = Batch 5
+  (predictive-maintenance-failure-risk-assessment, pump-
+  conveyor-motor-suitability-check, rag-retrieval-
+  evaluation-tuning, reconciled-portfolio-performance-
+  report, semantic-code-taint-analysis-report); 163 =
+  Batch 6 (strategy-backtest-validation, tested-
+  authorization-policy-pack, vfd-application-engineering-
+  check, vulnerability-triage-verified-closure, zero-
+  knowledge-claim-audit, zero-trust-evaluation-verdict);
+  164 = Batch 7 (acp-protocol-integration-review, agent-
+  context-packaging, agent-interoperability-design,
+  agentic-coding-practice, algorithm-design-implementation,
+  applied-ml-validation, architecture-decision-record);
+  165 = Batch 8 (argument-analysis-review, audience-
+  contract-design, auth-design-review, backend-engineering-
+  advice, base-rate-card, behavioral-finance-bias-check,
+  behavioral-finance-debiasing); 166 = Batch 9 (bias-
+  controlled-quant-study-pack, brand-mention-monitoring-
+  triage-digest, browser-extension-engineering, budget-
+  design-review, buyer-test-card, c-engineering-review,
+  cash-flow-forecast); 167 = Batch 10 (cicd-pipeline-design,
+  claim-evaluation-review, code-review-service, codebase-
+  visualization, community-support-operations, confidential-
+  computing-design, cost-estimate-preparation); 168 =
+  Batch 11 (cpp-engineering-review, creative-ideation-
+  session, crm-pipeline-operations, data-analysis-
+  deliverable, data-ml-pipeline-engineering, data-
+  visualization-design, database-design-review); 169 =
+  Batch 12 (decision-process-design, decision-ready-
+  research-brief, delivery-plan-preparation, designed-test-
+  case-pack, difficult-conversation-coaching, document-
+  operations-service, domain-portfolio-audit); 175 =
+  Batch 13 (edge-platform-engineering, efficient-web-build-
+  standard, engineering-project-budget-pack, engineering-
+  work-package-structuring, fare-construction-savings-
+  strategy, finance-education-article, electrical-machines-
+  expert-advice — the last-named was disabled by owner
+  ruling under process line U-13 before its gate pass; no
+  verdict was issued for it, and under this record's own
+  rule its kill-switch state BLOCKs certification today;
+  the obligation attaches in full if the atom returns);
+  176 = Batch 14 (finance-tool-design-advisory, forecast-
+  confidence-scoreboard, framework-adoption-adr, frontend-
+  implementation, full-stack-app-build-pack, grpc-service-
+  design, home-shortlist-carrying-cost-comparison).
+
+- **GMSI-170 — A gate verdict must bind to a CI run that
+  actually ran.** (Per-atom gate run, 2026-11-15.) GM must
+  prove: evaluation input = (commit hash, CI run id, suite
+  result hash); ALLOW only when a CI run for that exact
+  commit exists and is green; BLOCK when the only evidence
+  is a local run. Tamper: an altered run id or result hash
+  verifies NOT VALID. Lifecycle: issue per gated commit;
+  supersede per new commit.
+
+- **GMSI-171 — Connection-protection posture must become
+  provable.** (Per-atom gate run, 2026-11-15.) The family
+  was NOT RUN in every atoms gate to date (no TLS bench in
+  the lane). GM must prove: evaluation input = (surface URL,
+  TLS probe result: protocol floor, cipher set, cert chain
+  + expiry, HSTS); ALLOW only at TLS ≥ 1.2 with a valid
+  chain and ≥ 30 days cert life; BLOCK otherwise. Tamper /
+  lifecycle as per the GMSI-170 pattern.
+
+- **GMSI-172 — Request-body size policy, if ever claimed,
+  must be proven.** (Per-atom gate run, 2026-11-15.) A
+  1.5 MB JSON body was accepted and processed; no cap is
+  claimed today, so this is a policy that does not exist
+  yet, not a finding. GM must prove (when a cap exists):
+  evaluation input = (endpoint, body size, observed
+  status); ALLOW only when bodies above the cap are
+  rejected before handler execution; BLOCK on acceptance.
+
+- **GMSI-173 — Security-header posture on HTML surfaces.**
+  (Per-atom gate run, 2026-11-15, from finding F-G3.) GM
+  must prove (the fix shipped at atoms Batch 14 and awaits
+  GM proof, not another build): evaluation input = (surface
+  URL, header snapshot); ALLOW only when HSTS, CSP,
+  X-Frame-Options (or CSP frame-ancestors),
+  X-Content-Type-Options and Referrer-Policy are all
+  present on HTML responses; BLOCK on any absence. Tamper:
+  altered snapshot verifies NOT VALID. Lifecycle: issue per
+  deployment; supersede per deploy.
+
+- **GMSI-174 — Judgment corpora must be sealed with the
+  verdict.** (Per-atom gate run, 2026-11-15.) GM must prove:
+  evaluation input = (atom id, corpus hash, corpus case
+  count); ALLOW only when the corpus that produced a
+  verdict recomputes to the sealed hash; BLOCK on drift.
+  Lifecycle: supersede when a case is appended (escape-
+  driven growth), never when one is removed — a shrinking
+  corpus is itself a BLOCK. (The corpus hash is a required
+  input to GMSI-157…169/175/176.)
+
+- **GMSI-177 — Documentation surface can never diverge
+  from availability state.** (Atoms-gateway Batch 14 deploy
+  pack, 2026-11-15. NUMBERING: that pack filed this input
+  as "GMSI-175", colliding with the per-atom pack's
+  GMSI-175 (Batch 13 cohort, above — filed first, in the
+  canonical gmsi.md, and keeping its number); this record
+  is renumbered GMSI-177 on intake here, and both source
+  packs record the collision.) GM must be able to prove,
+  for every atom, that (catalogue row present) ⇔ (feed
+  status live) ⇔ (feed documentation link present ⇒ doc
+  emitted and atom live) ⇔ (/docs/<atom> serves) holds as
+  one invariant over live kill-switch state.
+
+- **GMSI-178 — Kill-switch presentation invariance.**
+  (Atoms-gateway takedown-presentation pack, 2026-11-15;
+  filed unnumbered there.) GM must be able to prove, for
+  any atom whose D1 `atom_enabled:<atom>` is `0`, that the
+  atom is (a) absent from the catalogue HTML, (b) marked
+  `"status":"disabled"` in /api.json, (c) absent from
+  /health `atoms` and present in `disabled_atoms`,
+  (d) returning an empty tools array from MCP tools/list,
+  and (e) refusing MCP tools/call with a literal HTTP 503 —
+  presentation state can never diverge from kill-switch
+  state. (Sibling of GMSI-177.)
+
+- **GMSI-179 — Deterministic fence replay probe set.**
+  (Atoms-gateway v1 gate, 2026-11-15; filed unnumbered
+  there.) The gateway's deterministic fences (401/403/402/
+  429 ordering, idempotent money movement, uniform auth
+  responses) are a reusable probe set: GM should be able to
+  replay the attacker-view table + the rate-limit burst
+  against any future atoms-gateway deployment and grade
+  drift.
+
+- **GMSI-180 — Money-path refund invariant probe.**
+  (Atoms-gateway v1.1.0 prorated-refund gate, 2026-11-15;
+  filed unnumbered there.) For every grant, Σ reversals ≤
+  grant − Σ attributed draws, and every refund reversal's
+  amount equals a Stripe refund object's amount — a
+  standing GM probe over the money path.
+
+- **GMSI-181 — Webhook replay / ordering probe for refund
+  events.** (Atoms-gateway v1.1.0 gate, 2026-11-15; filed
+  unnumbered there.) Webhook handlers must be probed with
+  replayed and out-of-order refund events (partial, then
+  full) — idempotency per refund id, not per charge.
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
