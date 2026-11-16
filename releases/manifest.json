@@ -1051,5 +1051,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-15T01:43:21-06:00",
     "message": "Merge pull request #121 from nrupala/wright/wo37-ledger"
+  },
+  {
+    "release": 122,
+    "tag": "release/v122",
+    "previous_tag": "release/v121",
+    "sha": "1184231d548f64d9e0b1e1d3f2c567f273a4c63d",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-16T00:28:56-06:00",
+    "message": "Merge pull request #122 from nrupala/wright/gm-pack-refresh-2026-11-15"
   }
 ]
