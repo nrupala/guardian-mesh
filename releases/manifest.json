@@ -1060,5 +1060,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-16T00:28:56-06:00",
     "message": "Merge pull request #122 from nrupala/wright/gm-pack-refresh-2026-11-15"
+  },
+  {
+    "release": 123,
+    "tag": "release/v123",
+    "previous_tag": "release/v122",
+    "sha": "3784e68f7ab4e86086ecc8fb7b76bb07cc555065",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-16T01:29:27-06:00",
+    "message": "Merge pull request #123 from nrupala/wright/wo37t2-gm-publish"
   }
 ]
