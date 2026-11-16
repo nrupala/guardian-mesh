@@ -13,6 +13,21 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.29.0",
+    date: "2026-11-15",
+    summary: "WO-37 (T2): publishing-pipeline touchpoint wiring - the gm CLI gains gm publish check / verify (a real Evaluate verdict for a PUBLISH action before posting, with the CLI-computed content SHA-256 in the action metadata, plus a sealed proof and a receipt pairing the proof to the content hash, destination and channel), the daemon's default policy gains the PUBLISH rule, specs/TOUCHPOINTS.md marks T2 WIRED, and docs/PUBLISHING_TOUCHPOINT.md states the operator protocol. This release's own public release-log publish is the first checked through the shipped gm publish path.",
+    highlights: [
+      "gm publish check: reads the content file and computes its SHA-256 itself (the operator never types a claimed hash), calls a real Evaluate (never Simulate) for action_type PUBLISH, saves the sealed proof and writes the receipt; exit 0 iff ALLOW, exit 1 on a non-ALLOW verdict (receipt still written, naming the verdict), exit 2 on usage/session/transport/RPC refusal including pre-proof permission_denied - with nothing written",
+      "gm publish verify: loads the receipt and proof, calls VerifyProof, and with --content-file recomputes the artifact's SHA-256 against the receipt - a swapped artifact fails verification (exit 1); no session needed",
+      "policy.rs: PUBLISH joins the default rules (allow, priority 50); unknown action types still block, and operators can deny or escalate PUBLISH via a governed bundle or GUARDIAN_MESH_POLICY_ESCALATE_ACTIONS (both behaviour-proven this run: ESCALATE and BLOCK legs)",
+      "specs/TOUCHPOINTS.md: T2 WIRED (v0.29.0) with the wired/not-wired section; docs/PUBLISHING_TOUCHPOINT.md (new): handshake, check, post only on exit 0, verify, cite the receipt and proof in the publish record - fail-closed at every step",
+      "HONESTY BOUNDARY: the CLI does not post anything; the daemon's proof binds action type, verdict, timestamp and policy version - the proof-to-content-hash pairing is asserted by the receipt (presenter-declaration class, as with certificates) and checked by recomputation; sealing the hash inside the proof itself is filed as GMSI-182"
+    ],
+    gateVerdict: "PASS WITH FINDINGS - Release Gate 2026-11-15 (guardian-mesh-wo37t2-2026-11-15): scanner PASS (0 must-gate failures, 0 secrets, 0 known vulns); cargo audit clean (174 deps). F1 = standing GMSI-143 spec-release lag outside this WO; F2 (Low, FIXED by Wright carry) the genesis rule-count test asserted 11 default rules, updated to 12 for PUBLISH; F3 (Low, cosmetic, FIXED in the stamp) BOM and em-dash drift in the lane's docs. Register review: no score changes; RR-05 (20 Critical) + RR-21 (15 High) consciously re-accepted for this cycle, treatments unchanged",
+    tests: "Wright, independent, fresh checkout of the WO-37 T2 branch (lane tree == pushed tree; Wright carry for the genesis-count test): cargo test 315/315 (189 lib + 93 bin + 11 gm-mcp + 22 gm; baseline 308 + exactly the 7 new tests); WebUI ci+build+lint clean, check:releases green (31 versions). Wright behaviour proof on locally built daemons (own keys): 17/17 legs - check ALLOW with receipt hash == Wright's SHA-256, proof VALID via gm verify and gm publish verify, audit trail carries the PUBLISH/ALLOW entry, tampered content and tampered proof fail verify, usage errors name the flag, dead endpoint writes nothing, escalated PUBLISH returns ESCALATE, a denying bundle returns BLOCK",
+    status: "Current release"
+  },
+  {
     version: "0.28.0",
     date: "2026-11-15",
     summary: "WO-37 (T1): release-gate touchpoint wiring - the gm CLI gains the full certificate lifecycle (issue / status / verify / revoke) over the existing WO-6 certificate RPCs, specs/TOUCHPOINTS.md opens the touchpoint coverage register with T1 WIRED, and docs/RELEASE_GATE_TOUCHPOINT.md states the operator protocol. This release's own production certificate is the first issued through the shipped CLI path.",
@@ -25,7 +40,7 @@ export const RELEASES: Release[] = [
     ],
     gateVerdict: "PASS WITH FINDINGS - Release Gate 2026-11-14 (guardian-mesh-wo37-2026-11-14): scanner PASS (0 must-gate failures, 0 secrets, 0 known vulns); cargo audit clean (174 deps). F1 = standing GMSI-143 spec-release lag outside this WO; F2 = the effective evidence-size bound is the gRPC transport 4 MB message limit, below the daemon's 10 MB cap (pre-existing, fail-closed; filed as GMSI-156). Register review: no score changes; RR-05 (20 Critical) + RR-21 (15 High) consciously re-accepted for this cycle, treatments unchanged",
     tests: "Wright, independent, fresh checkout of the WO-37 branch (tree == lane tree): cargo test 308/308 (188 lib + 93 bin + 11 gm-mcp + 16 gm; baseline 298 + exactly the 10 new gm tests); WebUI ci+build+lint clean, check:releases green (30 versions). Wright behaviour proof on a locally built daemon (own key): 15/15 legs - issue with CLI-computed hash matching Wright's SHA-256, fingerprint recomputes offline, status ACTIVE bound to the evidence, verify VALID (also via gm verify --proof-file), tamper invalid, BLOCKED refused + prior ACTIVE revoked, unknown serial UNKNOWN, CLI revoke, oversize refused fail-closed, usage errors name the missing flag",
-    status: "Current release"
+    status: "Release candidate"
   },
   {
     version: "0.27.0",

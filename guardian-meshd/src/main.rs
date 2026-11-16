@@ -3355,7 +3355,7 @@ mod tests {
         assert_eq!(resp.approver, "");
         assert!(!resp.daemon_signature.is_empty());
         assert!(!resp.signer_fingerprint.is_empty());
-        assert_eq!(resp.rules.len(), 11); // Default rules
+        assert_eq!(resp.rules.len(), 12); // Default rules (11 + PUBLISH, WO-37 T2)
         
         // Verify daemon signature
         let canonical = service.policy.read().await.bundle().to_canonical_string();

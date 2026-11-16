@@ -117,6 +117,7 @@ async fn run(args: Vec<String>) -> Result<i32, CliError> {
         "audit" => cmd_audit(rest, pre_endpoint).await,
         "doctor" => cmd_doctor(rest, pre_endpoint),
         "certificate" => cmd_certificate(rest, pre_endpoint).await,
+        "publish" => cmd_publish(rest, pre_endpoint).await,
         other => Err(CliError::usage(format!("unknown subcommand: {other}"))),
     }
 }
@@ -1373,6 +1374,7 @@ SUBCOMMANDS:
   audit       Read and verify the audit log
   doctor      Scan the local configuration environment for insecure settings
   certificate Issue, inspect, verify or revoke a release certificate
+  publish     Check a publish action before posting and verify its receipt
 
 GLOBAL OPTIONS:
   --endpoint <url>   Daemon gRPC endpoint (default http://127.0.0.1:50051;
@@ -1587,6 +1589,500 @@ OPTIONS:
   --help                  Show this help"#
         .to_string()
 }
+
+#[derive(Debug)]
+enum PublishAction {
+    Check(PublishCheckArgs),
+    Verify(PublishVerifyArgs),
+}
+
+#[derive(Debug, Clone)]
+struct PublishCheckArgs {
+    content_file: PathBuf,
+    destination: String,
+    channel: String,
+    session_file: PathBuf,
+    proof_out: Option<PathBuf>,
+    receipt_out: Option<PathBuf>,
+    endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct PublishVerifyArgs {
+    receipt_file: PathBuf,
+    proof_file: Option<PathBuf>,
+    content_file: Option<PathBuf>,
+    endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct PublishReceipt {
+    receipt_version: u32,
+    kind: String,
+    content_sha256: String,
+    content_bytes: u64,
+    destination: String,
+    channel: String,
+    verdict: String,
+    reason: String,
+    simulation: bool,
+    proof: Value,
+    proof_file: String,
+}
+
+fn default_publish_proof_path(session_file: &Path) -> PathBuf {
+    match session_file.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent.join("gm-publish-proof.json"),
+        _ => PathBuf::from("gm-publish-proof.json"),
+    }
+}
+
+fn publish_check_exit(verdict: &str) -> i32 {
+    match verdict {
+        "ALLOW" => 0,
+        _ => 1,
+    }
+}
+
+fn parse_publish_action(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<PublishAction, CliError> {
+    let action = match args.first() {
+        Some(action) => action.as_str(),
+        None => {
+            return Err(CliError::usage(
+                "publish requires an action: check or verify",
+            ))
+        }
+    };
+    let rest = &args[1..];
+    match action {
+        "check" => Ok(PublishAction::Check(parse_publish_check_args(
+            rest,
+            pre_endpoint,
+        )?)),
+        "verify" => Ok(PublishAction::Verify(parse_publish_verify_args(
+            rest,
+            pre_endpoint,
+        )?)),
+        "--help" | "-h" => Err(CliError::help(publish_help())),
+        other => Err(CliError::usage(format!(
+            "unknown publish action: {other} (expected check or verify)"
+        ))),
+    }
+}
+
+fn parse_publish_check_args(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<PublishCheckArgs, CliError> {
+    let mut content_file = None;
+    let mut destination = None;
+    let mut channel = "blog".to_string();
+    let mut session_file = default_session_path();
+    let mut proof_out = None;
+    let mut receipt_out = None;
+    let mut endpoint = pre_endpoint;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--content-file" => {
+                content_file = Some(PathBuf::from(next_value(args, &mut i, "--content-file")?))
+            }
+            "--destination" => destination = Some(next_value(args, &mut i, "--destination")?),
+            "--channel" => channel = next_value(args, &mut i, "--channel")?,
+            "--session-file" => {
+                session_file = PathBuf::from(next_value(args, &mut i, "--session-file")?)
+            }
+            "--proof-out" => {
+                proof_out = Some(PathBuf::from(next_value(args, &mut i, "--proof-out")?))
+            }
+            "--receipt-out" => {
+                receipt_out = Some(PathBuf::from(next_value(args, &mut i, "--receipt-out")?))
+            }
+            "--endpoint" => endpoint = Some(next_value(args, &mut i, "--endpoint")?),
+            "--help" | "-h" => return Err(CliError::help(publish_check_help())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(PublishCheckArgs {
+        content_file: content_file.ok_or_else(|| CliError::usage("--content-file is required"))?,
+        destination: destination.ok_or_else(|| CliError::usage("--destination is required"))?,
+        channel,
+        session_file,
+        proof_out,
+        receipt_out,
+        endpoint,
+    })
+}
+
+fn parse_publish_verify_args(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<PublishVerifyArgs, CliError> {
+    let mut receipt_file = PathBuf::from("gm-publish-receipt.json");
+    let mut proof_file = None;
+    let mut content_file = None;
+    let mut endpoint = pre_endpoint;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--receipt-file" => {
+                receipt_file = PathBuf::from(next_value(args, &mut i, "--receipt-file")?)
+            }
+            "--proof-file" => {
+                proof_file = Some(PathBuf::from(next_value(args, &mut i, "--proof-file")?))
+            }
+            "--content-file" => {
+                content_file = Some(PathBuf::from(next_value(args, &mut i, "--content-file")?))
+            }
+            "--endpoint" => endpoint = Some(next_value(args, &mut i, "--endpoint")?),
+            "--help" | "-h" => return Err(CliError::help(publish_verify_help())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(PublishVerifyArgs {
+        receipt_file,
+        proof_file,
+        content_file,
+        endpoint,
+    })
+}
+
+async fn cmd_publish(args: &[String], pre_endpoint: Option<String>) -> Result<i32, CliError> {
+    let action = match parse_publish_action(args, pre_endpoint) {
+        Ok(action) => action,
+        Err(CliError::Usage(message)) => {
+            return Err(CliError::usage(format!(
+                "{message}\n\n{}",
+                publish_help()
+            )))
+        }
+        Err(error) => return Err(error),
+    };
+    match action {
+        PublishAction::Check(parsed) => cmd_publish_check(parsed).await,
+        PublishAction::Verify(parsed) => cmd_publish_verify(parsed).await,
+    }
+}
+
+async fn cmd_publish_check(parsed: PublishCheckArgs) -> Result<i32, CliError> {
+    let content = fs::read(&parsed.content_file).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            CliError::runtime(format!(
+                "content file not found: {}",
+                parsed.content_file.display()
+            ))
+        } else {
+            CliError::runtime(format!(
+                "cannot read content file {}: {e}",
+                parsed.content_file.display()
+            ))
+        }
+    })?;
+    let content_sha256 = sha256_hex(&content);
+    let content_bytes = content.len() as u64;
+
+    let session = load_required_session(&parsed.session_file)?;
+    ensure_session_fresh(&session)?;
+    let endpoint = resolve_endpoint(parsed.endpoint.clone(), Some(&session));
+
+    let seed_bytes = hex::decode(&session.signing_seed).map_err(|_| {
+        CliError::runtime(format!(
+            "session file {} has an invalid signing seed; run `gm handshake` again",
+            parsed.session_file.display()
+        ))
+    })?;
+    let seed = ml_dsa::Seed::try_from(seed_bytes.as_slice()).map_err(|_| {
+        CliError::runtime(format!(
+            "session file {} has a signing seed that is not 32 bytes; run `gm handshake` again",
+            parsed.session_file.display()
+        ))
+    })?;
+    let signing_key = SigningKey::<MlDsa65>::from_seed(&seed);
+
+    let mut metadata = BTreeMap::new();
+    metadata.insert("channel".to_string(), parsed.channel.clone());
+    metadata.insert("content_bytes".to_string(), content_bytes.to_string());
+    metadata.insert("content_sha256".to_string(), content_sha256.clone());
+    metadata.insert("kind".to_string(), "publish".to_string());
+
+    let payload = build_payload(
+        "PUBLISH",
+        &format!("publishing:{}", parsed.channel),
+        &parsed.destination,
+        &metadata,
+    );
+    let sealed = SealedEnvelope::new(
+        payload.clone(),
+        b"guardian_mesh.ActionDescriptor".to_vec(),
+        &signing_key,
+    );
+    let envelope = proto_from_sealed(&sealed);
+
+    let session_key = hex::decode(&session.session_key).map_err(|_| {
+        CliError::runtime(format!(
+            "session file {} has an invalid session key; run `gm handshake` again",
+            parsed.session_file.display()
+        ))
+    })?;
+    let mut mac = HmacSha256::new_from_slice(&session_key)
+        .map_err(|e| CliError::runtime(format!("failed to initialise HMAC: {e}")))?;
+    mac.update(&payload);
+    let hmac_tag = mac.finalize().into_bytes().to_vec();
+
+    let request = EvaluateRequest {
+        firewalled: Some(FirewalledRequest {
+            envelope: Some(envelope),
+            source_enclave: "gm-cli".to_string(),
+            handshake_session: session.session_id.clone(),
+            hmac_tag,
+        }),
+        action: Some(ActionDescriptor {
+            action_type: "PUBLISH".to_string(),
+            context: format!("publishing:{}", parsed.channel),
+            target: parsed.destination.clone(),
+            metadata: metadata.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        }),
+    };
+
+    let mut client = connect(&endpoint).await?;
+    let response = client
+        .evaluate(Request::new(request))
+        .await
+        .map_err(|e| CliError::runtime(format!("evaluate RPC failed: {e}")))?
+        .into_inner();
+
+    let proof_envelope = response.proof_envelope.as_ref().ok_or_else(|| {
+        CliError::runtime("evaluate response did not include a proof envelope")
+    })?;
+    let proof_path = parsed
+        .proof_out
+        .clone()
+        .unwrap_or_else(|| default_publish_proof_path(&parsed.session_file));
+    save_proof(&proof_path, proof_envelope)?;
+
+    let proof = match response.proof.as_ref() {
+        Some(proof) => json!({
+            "action_id": proof.action_id.clone(),
+            "verdict": proof.verdict.clone(),
+            "timestamp": proof.timestamp,
+            "policy_version": proof.policy_version,
+            "issuing_node": proof.issuing_node.clone(),
+        }),
+        None => Value::Null,
+    };
+    let receipt_path = parsed
+        .receipt_out
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("gm-publish-receipt.json"));
+    let receipt = PublishReceipt {
+        receipt_version: 1,
+        kind: "publish".to_string(),
+        content_sha256: content_sha256.clone(),
+        content_bytes,
+        destination: parsed.destination.clone(),
+        channel: parsed.channel.clone(),
+        verdict: response.verdict.clone(),
+        reason: response.reason.clone(),
+        simulation: false,
+        proof: proof.clone(),
+        proof_file: proof_path.display().to_string(),
+    };
+    write_json(&receipt_path, &receipt, false)?;
+
+    let mut out = serde_json::to_value(&receipt).map_err(|e| {
+        CliError::runtime(format!("failed to serialize publish receipt: {e}"))
+    })?;
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert(
+            "receipt_file".to_string(),
+            Value::String(receipt_path.display().to_string()),
+        );
+    }
+    print_json(&out);
+    Ok(publish_check_exit(&response.verdict))
+}
+
+async fn cmd_publish_verify(parsed: PublishVerifyArgs) -> Result<i32, CliError> {
+    let bytes = fs::read(&parsed.receipt_file).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            CliError::runtime(format!(
+                "receipt file not found: {}",
+                parsed.receipt_file.display()
+            ))
+        } else {
+            CliError::runtime(format!(
+                "cannot read receipt file {}: {e}",
+                parsed.receipt_file.display()
+            ))
+        }
+    })?;
+    let receipt_value: Value = serde_json::from_slice(&bytes).map_err(|e| {
+        CliError::runtime(format!(
+            "invalid receipt file {}: {e}",
+            parsed.receipt_file.display()
+        ))
+    })?;
+    let content_sha256 = receipt_value
+        .get("content_sha256")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            CliError::runtime(format!(
+                "receipt file {} missing content_sha256 field",
+                parsed.receipt_file.display()
+            ))
+        })?
+        .to_string();
+    let receipt_proof_file = receipt_value
+        .get("proof_file")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            CliError::runtime(format!(
+                "receipt file {} missing proof_file field",
+                parsed.receipt_file.display()
+            ))
+        })?
+        .to_string();
+    let verdict = receipt_value
+        .get("verdict")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let proof_path = parsed
+        .proof_file
+        .unwrap_or_else(|| PathBuf::from(receipt_proof_file));
+    let proof_file = load_proof(&proof_path)?;
+    let envelope = proto_from_proof_file(&proof_file)?;
+
+    let endpoint = resolve_endpoint(parsed.endpoint, None);
+    let mut client = connect(&endpoint).await?;
+    let response = client
+        .verify_proof(Request::new(VerifyProofRequest {
+            proof_envelope: Some(envelope),
+        }))
+        .await
+        .map_err(|e| CliError::runtime(format!("verify proof RPC failed: {e}")))?
+        .into_inner();
+
+    let content_hash_matches: Value = if let Some(path) = parsed.content_file.as_ref() {
+        let cbytes = fs::read(path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                CliError::runtime(format!("content file not found: {}", path.display()))
+            } else {
+                CliError::runtime(format!("cannot read content file {}: {e}", path.display()))
+            }
+        })?;
+        let recomputed = sha256_hex(&cbytes);
+        Value::Bool(recomputed == content_sha256)
+    } else {
+        Value::Null
+    };
+
+    let out = json!({
+        "valid": response.valid,
+        "reason": response.reason.clone(),
+        "verdict": verdict,
+        "content_hash_matches": content_hash_matches,
+        "content_sha256": content_sha256,
+    });
+    print_json(&out);
+    let hash_bad = matches!(content_hash_matches, Value::Bool(false));
+    Ok(if response.valid && !hash_bad { 0 } else { 1 })
+}
+
+fn publish_help() -> String {
+    r#"gm publish: publishing-pipeline touchpoint (WO-37 / v0.29.0)
+
+USAGE:
+  gm publish <action> [options]
+
+ACTIONS:
+  check    Check a publish action before posting and write a receipt
+  verify   Re-check a saved publish proof and receipt content hash
+
+Exit 0 is the only outcome under which the publisher may post; exit 1 and
+exit 2 both mean do not post.
+
+Run `gm publish check --help` or `gm publish verify --help` for details."#
+        .to_string()
+}
+
+fn publish_check_help() -> String {
+    r#"gm publish check: evaluate a publish action before posting
+
+USAGE:
+  gm publish check --content-file <path> --destination <dest>
+                   [--channel <name>] [--session-file <path>]
+                   [--proof-out <path>] [--receipt-out <path>]
+                   [--endpoint <url>]
+
+Reads the content file, computes its SHA-256 itself, and calls a real
+Evaluate (never Simulate) for action_type PUBLISH with
+context "publishing:<channel>", the destination as target, and metadata
+carrying channel, content_bytes, content_sha256 and kind="publish".
+Saves the sealed proof and a receipt pairing the proof with the content
+hash, destination and channel. This command does not post anything.
+
+Defaults: --channel blog, --proof-out gm-publish-proof.json beside the
+session file, --receipt-out gm-publish-receipt.json in the current
+directory.
+
+EXIT CODES:
+  0  verdict ALLOW: the receipt was written and the publisher may post.
+  1  a verdict response arrived and verdict is not ALLOW (BLOCK/THROTTLE/
+     ESCALATE): the receipt is still written naming the verdict; do not post.
+  2  usage, session, transport or RPC error (including a pre-proof block
+     delivered as a permission-denied RPC error): nothing is written; do not
+     post.
+
+Exit 0 is the only outcome under which the publisher may post; exit 1 and
+exit 2 both mean do not post.
+
+OPTIONS:
+  --content-file <p>   Content file to be posted (required)
+  --destination <d>    Publish destination (required)
+  --channel <name>     Channel name (default blog)
+  --session-file <p>   Session file path (default $HOME/.guardian-mesh/gm-session.json)
+  --proof-out <p>      Proof file path (default gm-publish-proof.json beside session)
+  --receipt-out <p>    Receipt file path (default gm-publish-receipt.json)
+  --endpoint <url>     Daemon gRPC endpoint (default from session file, then
+                       http://127.0.0.1:50051; GM_ENDPOINT when the flag is absent)
+  --help               Show this help"#
+        .to_string()
+}
+
+fn publish_verify_help() -> String {
+    r#"gm publish verify: verify a publish proof and receipt content hash
+
+USAGE:
+  gm publish verify [--receipt-file <path>] [--proof-file <path>]
+                    [--content-file <path>] [--endpoint <url>]
+
+Loads the receipt and proof, calls VerifyProof, and optionally recomputes
+the SHA-256 of --content-file and compares it to the receipt. This checks
+the proof with the daemon and the receipt's content-hash pairing by
+recomputation; it does not require a session.
+
+EXIT CODES:
+  0  proof valid and content_hash_matches is not false.
+  1  proof invalid or content hash mismatch.
+  2  usage, transport, missing/malformed receipt or proof.
+
+OPTIONS:
+  --receipt-file <p>   Receipt file (default gm-publish-receipt.json)
+  --proof-file <p>     Proof file (default: receipt's proof_file)
+  --content-file <p>   Artifact to hash-compare against the receipt
+  --endpoint <url>     Daemon gRPC endpoint (default http://127.0.0.1:50051;
+                       GM_ENDPOINT when the flag is absent)
+  --help               Show this help"#
+        .to_string()
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -1920,4 +2416,95 @@ mod tests {
         assert_eq!(certificate_status_name(3), "REVOKED");
         assert_eq!(certificate_status_name(99), "UNKNOWN");
     }
+
+    fn publish_check_args() -> Vec<String> {
+        [
+            "--content-file",
+            "post.md",
+            "--destination",
+            "https://example.test/post",
+        ]
+        .iter()
+        .map(|v| v.to_string())
+        .collect()
+    }
+
+    #[test]
+    fn publish_check_requires_content_file_and_destination() {
+        let no_content = vec!["--destination".to_string(), "https://x".to_string()];
+        let err = parse_publish_check_args(&no_content, None).unwrap_err();
+        assert_eq!(err.code(), 2);
+        assert!(err.message().contains("--content-file"));
+        let no_dest = vec!["--content-file".to_string(), "a.txt".to_string()];
+        let err = parse_publish_check_args(&no_dest, None).unwrap_err();
+        assert_eq!(err.code(), 2);
+        assert!(err.message().contains("--destination"));
+    }
+
+    #[test]
+    fn publish_check_rejects_unknown_flag_and_applies_defaults() {
+        let mut args = publish_check_args();
+        args.push("--nope".to_string());
+        let err = parse_publish_check_args(&args, None).unwrap_err();
+        assert_eq!(err.code(), 2);
+        assert!(matches!(&err, CliError::Usage(_)));
+        let parsed = parse_publish_check_args(&publish_check_args(), None).unwrap();
+        assert_eq!(parsed.channel, "blog");
+        assert_eq!(
+            parsed.receipt_out,
+            None
+        );
+        let p = parse_publish_action(&["check".to_string(), "--content-file".to_string(), "a".to_string(), "--destination".to_string(), "d".to_string()], None).unwrap();
+        match p { PublishAction::Check(c) => assert_eq!(c.channel, "blog"), _ => panic!("expected check") }
+    }
+
+    #[test]
+    fn publish_action_rejects_unknown() {
+        let err = parse_publish_action(&["frobnicate".to_string()], None).unwrap_err();
+        assert_eq!(err.code(), 2);
+        assert!(err.message().contains("check"));
+        assert!(err.message().contains("verify"));
+    }
+
+    #[test]
+    fn publish_check_exit_mapping() {
+        assert_eq!(publish_check_exit("ALLOW"), 0);
+        assert_eq!(publish_check_exit("BLOCK"), 1);
+        assert_eq!(publish_check_exit("THROTTLE"), 1);
+        assert_eq!(publish_check_exit("ESCALATE"), 1);
+        assert_eq!(publish_check_exit("WHATEVER"), 1);
+    }
+
+    #[test]
+    fn publish_receipt_round_trip_preserves_fields() {
+        let receipt = PublishReceipt {
+            receipt_version: 1,
+            kind: "publish".to_string(),
+            content_sha256: sha256_hex(b"hello"),
+            content_bytes: 5,
+            destination: "https://dest".to_string(),
+            channel: "blog".to_string(),
+            verdict: "ALLOW".to_string(),
+            reason: "ok".to_string(),
+            simulation: false,
+            proof: json!({"action_id":"PUBLISH","verdict":"ALLOW","timestamp":1,"policy_version":1,"issuing_node":"n"}),
+            proof_file: "gm-publish-proof.json".to_string(),
+        };
+        let path = unique_temp_file("publish-receipt");
+        write_json(&path, &receipt, false).unwrap();
+        let bytes = fs::read(&path).unwrap();
+        let loaded: PublishReceipt = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(loaded, receipt);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn content_hash_compare_detects_mismatch() {
+        let a = sha256_hex(b"same");
+        let b = sha256_hex(b"same");
+        let c = sha256_hex(b"sane");
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
 }

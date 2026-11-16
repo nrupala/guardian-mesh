@@ -9,7 +9,9 @@ This document covers WO-18 profile 3 (CC-4), shipped in v0.19.0. The MCP surface
 [MCP](MCP.md). v0.23.0 adds `gm doctor` (WO-22, SG-4), a local configuration
 scan that names insecure settings and contacts no daemon. v0.28.0 adds
 `gm certificate` (WO-37, T1): issue, inspect, verify and revoke
-release-evidence certificates through the daemon's certificate RPCs.
+release-evidence certificates through the daemon's certificate RPCs. v0.29.0 adds
+`gm publish` (WO-37, T2): check a publish action before posting and verify its
+receipt through real Evaluate and VerifyProof.
 
 ## What the CLI is
 
@@ -397,6 +399,108 @@ signature. It certifies the binding, not the truth of the declarations, and is
 not a warranty of quality or security. The hash is computed from the evidence
 file, and a BLOCKED verdict refuses issuance and revokes daemon-side; no
 certificate means no "certified" claim.
+
+## `gm publish`
+
+Publishing-pipeline touchpoint (WO-37, v0.29.0). Checks a publish action before
+posting and writes a sealed-proof receipt; verifies the proof and the receipt's
+content hash. `check` needs a handshake session and calls a real `Evaluate`
+(never `Simulate`); `verify` needs no session.
+
+### `gm publish check`
+
+```bash
+gm publish check --content-file <path> --destination <dest> \
+  [--channel <name>] [--session-file <path>] \
+  [--proof-out <path>] [--receipt-out <path>] [--endpoint <url>]
+```
+
+Required: `--content-file`, `--destination`. Optional: `--channel` (default
+`blog`), `--session-file` (default `$HOME/.guardian-mesh/gm-session.json`),
+`--proof-out` (default `gm-publish-proof.json` beside the session file),
+`--receipt-out` (default `gm-publish-receipt.json` in the current directory),
+`--endpoint`.
+
+The CLI reads the content file and computes its SHA-256 and byte length itself;
+the operator never types a hash. It calls a real `Evaluate` with `action_type`
+`PUBLISH`, `context` `publishing:<channel>`, `target` `<destination>`, and
+metadata `channel`, `content_bytes` (decimal string), `content_sha256`, and
+`kind` = `publish`.
+
+On a verdict response the sealed proof is saved and a receipt (not private) is
+written pairing the proof with the content hash, destination and channel. The
+printed JSON is the receipt with an added `receipt_file` field:
+
+```json
+{
+  "receipt_version": 1,
+  "kind": "publish",
+  "content_sha256": "...",
+  "content_bytes": 1234,
+  "destination": "https://example.test/post",
+  "channel": "blog",
+  "verdict": "ALLOW",
+  "reason": "...",
+  "simulation": false,
+  "proof": {
+    "action_id": "PUBLISH",
+    "verdict": "ALLOW",
+    "timestamp": 1790000000,
+    "policy_version": 1,
+    "issuing_node": "node-..."
+  },
+  "proof_file": ".../gm-publish-proof.json",
+  "receipt_file": "gm-publish-receipt.json"
+}
+```
+
+**Exit codes:** `0` iff the verdict is `ALLOW` (the publisher may post). `1` iff
+a verdict response arrived and the verdict is not `ALLOW` (`BLOCK`, `THROTTLE`,
+`ESCALATE`) - the receipt is still written naming the verdict, so a refused
+publish leaves its own record; do not post. `2` on usage, session, transport or
+RPC error, including a pre-proof block delivered as a gRPC `permission_denied`
+error - nothing is written (no proof, no receipt, existing files at those paths
+are not overwritten); do not post. **Exit 0 is the only outcome under which the
+publisher may post; exit 1 and exit 2 both mean do not post.**
+
+### `gm publish verify`
+
+```bash
+gm publish verify [--receipt-file <path>] [--proof-file <path>] \
+  [--content-file <path>] [--endpoint <url>]
+```
+
+Reads the receipt (default `gm-publish-receipt.json`) and proof (default: the
+receipt's `proof_file`, or `--proof-file`), calls `VerifyProof`, and, when
+`--content-file` is given, recomputes its SHA-256 and compares it to the
+receipt's `content_sha256` (`content_hash_matches`: `true`/`false`, or `null`
+when no file is given). Needs no session.
+
+```json
+{
+  "valid": true,
+  "reason": "ML-DSA-65 signature verified",
+  "verdict": "ALLOW",
+  "content_hash_matches": true,
+  "content_sha256": "..."
+}
+```
+
+**Exit codes:** `0` iff `valid` is true and `content_hash_matches` is not
+`false`. `1` iff the daemon reports the proof invalid or the content hash
+mismatches. `2` on usage, transport, or missing/malformed receipt or proof.
+
+### Honesty notes
+
+`check` is a real `Evaluate` only; simulation is never a publish check. A
+publish blocked before proof sealing (Sentinel/Gatekeeper/Witness) arrives as an
+RPC error, so `check` exits 2 and writes no receipt. The daemon's proof binds
+the action type, verdict, timestamp and policy version; the pairing of the proof
+to the content hash is asserted by the receipt (presenter-declaration class) and
+checked by recomputation - `verify --content-file` recomputes the hash of the
+presented artifact and compares it to the receipt. The receipt certifies that
+binding, not the truth of its other fields, and is not a warranty of quality or
+safety.
 
 ## Session file
 
