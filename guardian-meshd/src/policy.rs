@@ -191,6 +191,7 @@ impl PolicyEngine {
             ("AGENT_MESSAGE", true, 90),
             ("GENERATE", true, 100),
             ("MODEL_LOAD", true, 50),
+            ("PUBLISH", true, 50),
         ];
 
         let mut rules = Vec::new();
@@ -373,6 +374,12 @@ mod tests {
     fn defaults_allow_tool_call() {
         let engine = PolicyEngine::new();
         assert!(engine.decide("TOOL_CALL"));
+    }
+
+    #[test]
+    fn defaults_allow_publish() {
+        let engine = PolicyEngine::new();
+        assert!(engine.decide("PUBLISH"));
     }
 
     #[test]
