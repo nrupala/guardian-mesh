@@ -1069,5 +1069,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-16T01:29:27-06:00",
     "message": "Merge pull request #123 from nrupala/wright/wo37t2-gm-publish"
+  },
+  {
+    "release": 124,
+    "tag": "release/v124",
+    "previous_tag": "release/v123",
+    "sha": "3135da35ba9bd0cdb0bd1c5515834a5ed0ac32f3",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-16T02:03:56-06:00",
+    "message": "Merge pull request #124 from nrupala/wright/wo37t2-ledger"
   }
 ]
