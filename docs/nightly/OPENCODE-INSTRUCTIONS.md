@@ -1959,6 +1959,19 @@ behaviour-proven here.
   replayed and out-of-order refund events (partial, then
   full) — idempotency per refund id, not per charge.
 
+- **GMSI-182 — Content-binding proofs.** (WO-37 T2 gate,
+  2026-11-15.) An AuditProof binds action_id (the action
+  type), verdict, timestamp, policy_version and
+  issuing_node — not the evaluated action's target or
+  content hash. A publish receipt's proof<->hash pairing is
+  therefore receipt-asserted (presenter-declaration class)
+  and checked by recomputation. GM should be able to seal
+  the action's target + a hash of its descriptor inside
+  the proof itself, so content-bearing receipts (publish,
+  and any future content-addressed action) are
+  daemon-sealed end to end. Probe candidate only: it
+  becomes a gate MUST once behaviour-proven here.
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
@@ -4136,3 +4149,121 @@ covers register accuracy), recorded in Part B above.
 Guardian Mesh Spec Inputs filed by this run: GMSI-156
 (WO-37 gate — declared bound == enforced bound,
 end-to-end), recorded in Part B above.
+
+- 2026-11-15 — **WO-37 touchpoint T2 (publishing
+  pipeline) WIRED as v0.29.0** (PR #123, merge
+  3784e68f; pack refreshed first by PR #122:
+  GMSI-157..181 intake from the 2026-11-15 atoms
+  gate runs, with the duplicate "GMSI-175"
+  renumbered GMSI-177 on intake). The daemon's
+  default policy gains the PUBLISH rule (allow,
+  priority 50; unknown action types still block),
+  and the shipped gm CLI gains `publish check` /
+  `publish verify`: check reads the content file
+  and computes its SHA-256 itself, calls a REAL
+  Evaluate (never Simulate) for action type
+  PUBLISH with the hash in the action metadata,
+  saves the sealed proof and writes a receipt
+  pairing proof, content hash, destination and
+  channel; exit 0 iff ALLOW, exit 1 on a non-ALLOW
+  verdict (receipt still written, naming the
+  verdict), exit 2 on usage / session / transport
+  / RPC refusal including a pre-proof
+  permission_denied, with nothing written. Verify
+  re-checks the proof via VerifyProof and, with
+  --content-file, recomputes the artifact hash
+  against the receipt. specs/TOUCHPOINTS.md marks
+  T2 WIRED; docs/PUBLISHING_TOUCHPOINT.md (new)
+  states the operator protocol; docs/CLI.md
+  documents the subcommand. Verified independently
+  by Wright (fresh checkout; lane tree ==
+  pushed tree): cargo test 315/315 on the lane
+  tree and on the Wright-stamped head (308
+  baseline + exactly the lane's 7 new tests);
+  WebUI build + lint + check:releases green (31
+  versions). Wright carry (disclosed): the
+  genesis rule-count expectation in the daemon
+  bin tests asserted 11 default rules — the lane
+  missed it because the assertion lives in
+  main.rs, outside its file list, and its result
+  note wrongly reported no such assertion
+  existed; Wright fixed it to 12, suite green.
+  Wright behaviour proof (own harness, locally
+  built daemons, own keys): 17/17 legs — ALLOW
+  with the receipt hash == Wright's own SHA-256;
+  proof VALID via gm verify and gm publish
+  verify; the audit trail carries the
+  PUBLISH/ALLOW entry; tampered content and
+  tampered proof fail verify; usage errors name
+  the flag; dead endpoint writes nothing; an
+  escalated PUBLISH returns ESCALATE; a persisted
+  bundle denying PUBLISH returns BLOCK. Gate
+  verdict PASS WITH FINDINGS (scanner PASS;
+  cargo audit clean, 174 deps): F1 = standing
+  GMSI-143 lag outside this WO; F2 = the
+  genesis-count lane defect (fixed in-run); F3
+  = cosmetic BOM / em-dash drift (fixed in the
+  Wright stamp). Register review: no score
+  changes; RR-05 (20 Critical) + RR-21 (15 High)
+  CONSCIOUSLY RE-ACCEPTED for this cycle,
+  treatments unchanged; SG-1 review: no status
+  changes (no new RPC or network surface).
+  Judgment differential in scoped form (identical
+  content under ALLOW / ESCALATE / BLOCK through
+  the shipped CLI). Deployed: daemon sha256
+  96a65784..., backup .bak-v0280, both services
+  active; box E2E 15/16 (sole miss = the standing
+  stale Health-fields harness check, 21st
+  occurrence; certification proceeded on direct
+  production proof per standing practice).
+  Direct production proof: Health SERVING,
+  0.29.0 @ 3784e68f, binary sha == built ==
+  installed, degraded=false, fingerprint == pin
+  dd2cf1a3.... Self-certification via the shipped
+  gm certificate issue: cert-20261116-000059
+  ACTIVE (PASS WITH FINDINGS; evidence = the
+  WO-37 T2 gate verdict, sha256 311eb785...),
+  superseding cert-20261115-000057 (read back
+  SUPERSEDED); disclosed: the ceremony's first
+  pass issued cert-20261116-000058, superseded
+  minutes later by 000059 on the rerun after a
+  CLI flag fix — 000059 is the release
+  certificate. T2 first exercise: this release's
+  own release-log publish checked through the
+  shipped gm publish check against production —
+  ALLOW, receipt content hash 3bc1b714... (the
+  stamped CHANGELOG); gm publish verify valid
+  with content_hash_matches=true; Wright's wire
+  client independently VerifyProof'd the publish
+  proof VALID. One proof nuance recorded: the
+  cert's sealed pf_outcomes are the at-issuance
+  snapshot; live counters read one higher on the
+  action-driven families because the publish
+  exercise ran between issuance and the wire
+  proof. Attestation: statement against the
+  merged clone (cross-build Cargo.lock
+  2913a0d1...), signed on the box with the
+  production key (signer asserted == pin before
+  install); installed /opt/guardian-mesh/
+  guardian-meshd-0.29.0.attestation.json,
+  gm-attest verify VALID, package fingerprint
+  a8a82f26.... gm 0.29.0 installed on the box at
+  /usr/local/bin/gm. Pages parity: box dist asset
+  == merged build == GitHub Pages asset
+  (index-Bt2gqryy.js); public unauthenticated
+  302. NOT RUN: authenticated panel click-through
+  (GMSI-134); Kali/Arch for this delta (no daemon
+  network surface changed); universal assurance
+  checks (the repo carries no assurance: gate
+  block). v0.29.0 is a RELEASE CANDIDATE (one-week
+  soak; graduates 2026-11-22). **WO-37 stays
+  OPEN — T2 is wired; the next touchpoint is T3
+  (Conduit) in map order.** WO-33 (P2, NIST AI RMF
+  profile) and WO-27 (P2, mediation conformance)
+  follow in pack order; WO-17 stays open for the
+  cluster chaos + CM-8 extensions (WO-27); WO-16
+  stays open for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-182
+(WO-37 T2 gate — content-binding proofs), recorded
+in Part B above.
