@@ -1,7 +1,7 @@
 <!-- Copyright (c) 2026 Nrupal Akolkar -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Guardian Mesh - Touchpoint Coverage Register (WO-37)
+# Guardian Mesh — Touchpoint Coverage Register (WO-37)
 
 **Work order:** WO-37 (T1 wired v0.28.0; T2 wired v0.29.0).
 **Owner's directive:** 2026-10-16 — Guardian Mesh connected at every touchpoint.
@@ -43,7 +43,7 @@ This does NOT add an `Evaluate` call against the release action itself. The
 "verdict before the action" at T1 is the release gate's own verdict, which
 issuance binds and enforces.
 
-### T2 publishing pipeline - what is wired, and what this does not add
+### T2 publishing pipeline — what is wired, and what this does not add
 
 The verdict before the action is a real Evaluate of a PUBLISH action whose metadata carries the CLI-computed SHA-256 of the exact content file; the daemon seals the verdict into its hash-chained audit trail and returns a sealed proof; the receipt the CLI writes pairs that proof with the content hash, destination and channel. This does NOT post anything - the posting step stays the publisher's own, gated on exit 0. The daemon's proof binds the action type, verdict, timestamp and policy version; the pairing of the proof to this content hash is asserted by the receipt (the same presenter-declaration class as release certificates) and is checked by recomputation - `gm publish verify --content-file` recomputes the hash of the artifact presented and compares it to the receipt, so a swapped artifact fails verification. A publish blocked before proof sealing (Sentinel/Gatekeeper/Witness) returns no proof and the CLI writes no receipt: exit 2, nothing posted. Simulation is never a publish check.
 

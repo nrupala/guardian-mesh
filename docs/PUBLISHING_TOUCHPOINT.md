@@ -1,4 +1,4 @@
-﻿<!-- Copyright (c) 2026 Nrupal Akolkar -->
+<!-- Copyright (c) 2026 Nrupal Akolkar -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 # Publishing Touchpoint (WO-37 / T2) - Operator Protocol
