@@ -118,6 +118,7 @@ async fn run(args: Vec<String>) -> Result<i32, CliError> {
         "doctor" => cmd_doctor(rest, pre_endpoint),
         "certificate" => cmd_certificate(rest, pre_endpoint).await,
         "publish" => cmd_publish(rest, pre_endpoint).await,
+        "conduit" => cmd_conduit(rest, pre_endpoint).await,
         other => Err(CliError::usage(format!("unknown subcommand: {other}"))),
     }
 }
@@ -1375,6 +1376,7 @@ SUBCOMMANDS:
   doctor      Scan the local configuration environment for insecure settings
   certificate Issue, inspect, verify or revoke a release certificate
   publish     Check a publish action before posting and verify its receipt
+  conduit     Check a Conduit tool call before dispatch and verify its receipt
 
 GLOBAL OPTIONS:
   --endpoint <url>   Daemon gRPC endpoint (default http://127.0.0.1:50051;
@@ -2084,6 +2086,504 @@ OPTIONS:
 }
 
 
+#[derive(Debug)]
+enum ConduitAction {
+    Check(ConduitCheckArgs),
+    Verify(ConduitVerifyArgs),
+}
+
+#[derive(Debug, Clone)]
+struct ConduitCheckArgs {
+    tool: String,
+    tenant: String,
+    args_file: PathBuf,
+    provider: Option<String>,
+    session_file: PathBuf,
+    proof_out: Option<PathBuf>,
+    receipt_out: Option<PathBuf>,
+    endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct ConduitVerifyArgs {
+    receipt_file: PathBuf,
+    proof_file: Option<PathBuf>,
+    args_file: Option<PathBuf>,
+    endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct ConduitReceipt {
+    receipt_version: u32,
+    kind: String,
+    tenant: String,
+    tool: String,
+    provider: Option<String>,
+    args_sha256: String,
+    args_bytes: u64,
+    verdict: String,
+    reason: String,
+    simulation: bool,
+    proof: Value,
+    proof_file: String,
+}
+
+fn default_conduit_proof_path(session_file: &Path) -> PathBuf {
+    match session_file.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent.join("gm-conduit-proof.json"),
+        _ => PathBuf::from("gm-conduit-proof.json"),
+    }
+}
+
+fn conduit_check_exit(verdict: &str) -> i32 {
+    match verdict {
+        "ALLOW" => 0,
+        _ => 1,
+    }
+}
+
+fn parse_conduit_action(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<ConduitAction, CliError> {
+    let action = match args.first() {
+        Some(action) => action.as_str(),
+        None => {
+            return Err(CliError::usage(
+                "conduit requires an action: check or verify",
+            ))
+        }
+    };
+    let rest = &args[1..];
+    match action {
+        "check" => Ok(ConduitAction::Check(parse_conduit_check_args(
+            rest,
+            pre_endpoint,
+        )?)),
+        "verify" => Ok(ConduitAction::Verify(parse_conduit_verify_args(
+            rest,
+            pre_endpoint,
+        )?)),
+        "--help" | "-h" => Err(CliError::help(conduit_help())),
+        other => Err(CliError::usage(format!(
+            "unknown conduit action: {other} (expected check or verify)"
+        ))),
+    }
+}
+
+fn parse_conduit_check_args(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<ConduitCheckArgs, CliError> {
+    let mut tool = None;
+    let mut tenant = None;
+    let mut args_file = None;
+    let mut provider = None;
+    let mut session_file = default_session_path();
+    let mut proof_out = None;
+    let mut receipt_out = None;
+    let mut endpoint = pre_endpoint;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--tool" => tool = Some(next_value(args, &mut i, "--tool")?),
+            "--tenant" => tenant = Some(next_value(args, &mut i, "--tenant")?),
+            "--args-file" => {
+                args_file = Some(PathBuf::from(next_value(args, &mut i, "--args-file")?))
+            }
+            "--provider" => provider = Some(next_value(args, &mut i, "--provider")?),
+            "--session-file" => {
+                session_file = PathBuf::from(next_value(args, &mut i, "--session-file")?)
+            }
+            "--proof-out" => {
+                proof_out = Some(PathBuf::from(next_value(args, &mut i, "--proof-out")?))
+            }
+            "--receipt-out" => {
+                receipt_out = Some(PathBuf::from(next_value(args, &mut i, "--receipt-out")?))
+            }
+            "--endpoint" => endpoint = Some(next_value(args, &mut i, "--endpoint")?),
+            "--help" | "-h" => return Err(CliError::help(conduit_check_help())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(ConduitCheckArgs {
+        tool: tool.ok_or_else(|| CliError::usage("--tool is required"))?,
+        tenant: tenant.ok_or_else(|| CliError::usage("--tenant is required"))?,
+        args_file: args_file.ok_or_else(|| CliError::usage("--args-file is required"))?,
+        provider,
+        session_file,
+        proof_out,
+        receipt_out,
+        endpoint,
+    })
+}
+
+fn parse_conduit_verify_args(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<ConduitVerifyArgs, CliError> {
+    let mut receipt_file = PathBuf::from("gm-conduit-receipt.json");
+    let mut proof_file = None;
+    let mut args_file = None;
+    let mut endpoint = pre_endpoint;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--receipt-file" => {
+                receipt_file = PathBuf::from(next_value(args, &mut i, "--receipt-file")?)
+            }
+            "--proof-file" => {
+                proof_file = Some(PathBuf::from(next_value(args, &mut i, "--proof-file")?))
+            }
+            "--args-file" => {
+                args_file = Some(PathBuf::from(next_value(args, &mut i, "--args-file")?))
+            }
+            "--endpoint" => endpoint = Some(next_value(args, &mut i, "--endpoint")?),
+            "--help" | "-h" => return Err(CliError::help(conduit_verify_help())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(ConduitVerifyArgs {
+        receipt_file,
+        proof_file,
+        args_file,
+        endpoint,
+    })
+}
+
+async fn cmd_conduit(args: &[String], pre_endpoint: Option<String>) -> Result<i32, CliError> {
+    let action = match parse_conduit_action(args, pre_endpoint) {
+        Ok(action) => action,
+        Err(CliError::Usage(message)) => {
+            return Err(CliError::usage(format!(
+                "{message}\n\n{}",
+                conduit_help()
+            )))
+        }
+        Err(error) => return Err(error),
+    };
+    match action {
+        ConduitAction::Check(parsed) => cmd_conduit_check(parsed).await,
+        ConduitAction::Verify(parsed) => cmd_conduit_verify(parsed).await,
+    }
+}
+
+async fn cmd_conduit_check(parsed: ConduitCheckArgs) -> Result<i32, CliError> {
+    let args_bytes_read = fs::read(&parsed.args_file).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            CliError::runtime(format!(
+                "args file not found: {}",
+                parsed.args_file.display()
+            ))
+        } else {
+            CliError::runtime(format!(
+                "cannot read args file {}: {e}",
+                parsed.args_file.display()
+            ))
+        }
+    })?;
+    let args_sha256 = sha256_hex(&args_bytes_read);
+    let args_bytes = args_bytes_read.len() as u64;
+
+    let session = load_required_session(&parsed.session_file)?;
+    ensure_session_fresh(&session)?;
+    let endpoint = resolve_endpoint(parsed.endpoint.clone(), Some(&session));
+
+    let seed_bytes = hex::decode(&session.signing_seed).map_err(|_| {
+        CliError::runtime(format!(
+            "session file {} has an invalid signing seed; run `gm handshake` again",
+            parsed.session_file.display()
+        ))
+    })?;
+    let seed = ml_dsa::Seed::try_from(seed_bytes.as_slice()).map_err(|_| {
+        CliError::runtime(format!(
+            "session file {} has a signing seed that is not 32 bytes; run `gm handshake` again",
+            parsed.session_file.display()
+        ))
+    })?;
+    let signing_key = SigningKey::<MlDsa65>::from_seed(&seed);
+
+    let mut metadata = BTreeMap::new();
+    metadata.insert("args_bytes".to_string(), args_bytes.to_string());
+    metadata.insert("args_sha256".to_string(), args_sha256.clone());
+    metadata.insert("kind".to_string(), "conduit".to_string());
+    metadata.insert("tenant".to_string(), parsed.tenant.clone());
+    metadata.insert("tool".to_string(), parsed.tool.clone());
+    if let Some(provider) = parsed.provider.as_ref() {
+        metadata.insert("provider".to_string(), provider.clone());
+    }
+
+    let context = format!("conduit:{}", parsed.tenant);
+    let payload = build_payload("TOOL_CALL", &context, &parsed.tool, &metadata);
+    let sealed = SealedEnvelope::new(
+        payload.clone(),
+        b"guardian_mesh.ActionDescriptor".to_vec(),
+        &signing_key,
+    );
+    let envelope = proto_from_sealed(&sealed);
+
+    let session_key = hex::decode(&session.session_key).map_err(|_| {
+        CliError::runtime(format!(
+            "session file {} has an invalid session key; run `gm handshake` again",
+            parsed.session_file.display()
+        ))
+    })?;
+    let mut mac = HmacSha256::new_from_slice(&session_key)
+        .map_err(|e| CliError::runtime(format!("failed to initialise HMAC: {e}")))?;
+    mac.update(&payload);
+    let hmac_tag = mac.finalize().into_bytes().to_vec();
+
+    let request = EvaluateRequest {
+        firewalled: Some(FirewalledRequest {
+            envelope: Some(envelope),
+            source_enclave: "gm-cli".to_string(),
+            handshake_session: session.session_id.clone(),
+            hmac_tag,
+        }),
+        action: Some(ActionDescriptor {
+            action_type: "TOOL_CALL".to_string(),
+            context: context.clone(),
+            target: parsed.tool.clone(),
+            metadata: metadata.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        }),
+    };
+
+    let mut client = connect(&endpoint).await?;
+    let response = client
+        .evaluate(Request::new(request))
+        .await
+        .map_err(|e| CliError::runtime(format!("evaluate RPC failed: {e}")))?
+        .into_inner();
+
+    let proof_envelope = response.proof_envelope.as_ref().ok_or_else(|| {
+        CliError::runtime("evaluate response did not include a proof envelope")
+    })?;
+    let proof_path = parsed
+        .proof_out
+        .clone()
+        .unwrap_or_else(|| default_conduit_proof_path(&parsed.session_file));
+    save_proof(&proof_path, proof_envelope)?;
+
+    let proof = match response.proof.as_ref() {
+        Some(proof) => json!({
+            "action_id": proof.action_id.clone(),
+            "verdict": proof.verdict.clone(),
+            "timestamp": proof.timestamp,
+            "policy_version": proof.policy_version,
+            "issuing_node": proof.issuing_node.clone(),
+        }),
+        None => Value::Null,
+    };
+    let receipt_path = parsed
+        .receipt_out
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("gm-conduit-receipt.json"));
+    let receipt = ConduitReceipt {
+        receipt_version: 1,
+        kind: "conduit".to_string(),
+        tenant: parsed.tenant.clone(),
+        tool: parsed.tool.clone(),
+        provider: parsed.provider.clone(),
+        args_sha256: args_sha256.clone(),
+        args_bytes,
+        verdict: response.verdict.clone(),
+        reason: response.reason.clone(),
+        simulation: false,
+        proof: proof.clone(),
+        proof_file: proof_path.display().to_string(),
+    };
+    write_json(&receipt_path, &receipt, false)?;
+
+    let mut out = serde_json::to_value(&receipt).map_err(|e| {
+        CliError::runtime(format!("failed to serialize conduit receipt: {e}"))
+    })?;
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert(
+            "receipt_file".to_string(),
+            Value::String(receipt_path.display().to_string()),
+        );
+    }
+    print_json(&out);
+    Ok(conduit_check_exit(&response.verdict))
+}
+
+async fn cmd_conduit_verify(parsed: ConduitVerifyArgs) -> Result<i32, CliError> {
+    let bytes = fs::read(&parsed.receipt_file).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            CliError::runtime(format!(
+                "receipt file not found: {}",
+                parsed.receipt_file.display()
+            ))
+        } else {
+            CliError::runtime(format!(
+                "cannot read receipt file {}: {e}",
+                parsed.receipt_file.display()
+            ))
+        }
+    })?;
+    let receipt_value: Value = serde_json::from_slice(&bytes).map_err(|e| {
+        CliError::runtime(format!(
+            "invalid receipt file {}: {e}",
+            parsed.receipt_file.display()
+        ))
+    })?;
+    let args_sha256 = receipt_value
+        .get("args_sha256")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            CliError::runtime(format!(
+                "receipt file {} missing args_sha256 field",
+                parsed.receipt_file.display()
+            ))
+        })?
+        .to_string();
+    let receipt_proof_file = receipt_value
+        .get("proof_file")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            CliError::runtime(format!(
+                "receipt file {} missing proof_file field",
+                parsed.receipt_file.display()
+            ))
+        })?
+        .to_string();
+    let verdict = receipt_value
+        .get("verdict")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let proof_path = parsed
+        .proof_file
+        .unwrap_or_else(|| PathBuf::from(receipt_proof_file));
+    let proof_file = load_proof(&proof_path)?;
+    let envelope = proto_from_proof_file(&proof_file)?;
+
+    let endpoint = resolve_endpoint(parsed.endpoint, None);
+    let mut client = connect(&endpoint).await?;
+    let response = client
+        .verify_proof(Request::new(VerifyProofRequest {
+            proof_envelope: Some(envelope),
+        }))
+        .await
+        .map_err(|e| CliError::runtime(format!("verify proof RPC failed: {e}")))?
+        .into_inner();
+
+    let args_hash_matches: Value = if let Some(path) = parsed.args_file.as_ref() {
+        let abytes = fs::read(path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                CliError::runtime(format!("args file not found: {}", path.display()))
+            } else {
+                CliError::runtime(format!("cannot read args file {}: {e}", path.display()))
+            }
+        })?;
+        let recomputed = sha256_hex(&abytes);
+        Value::Bool(recomputed == args_sha256)
+    } else {
+        Value::Null
+    };
+
+    let out = json!({
+        "valid": response.valid,
+        "reason": response.reason.clone(),
+        "verdict": verdict,
+        "args_hash_matches": args_hash_matches,
+        "args_sha256": args_sha256,
+    });
+    print_json(&out);
+    let hash_bad = matches!(args_hash_matches, Value::Bool(false));
+    Ok(if response.valid && !hash_bad { 0 } else { 1 })
+}
+
+fn conduit_help() -> String {
+    r#"gm conduit: Conduit tool-call touchpoint (WO-37 / v0.30.0)
+
+USAGE:
+  gm conduit <action> [options]
+
+ACTIONS:
+  check    Check a Conduit tool call before dispatch and write a receipt
+  verify   Re-check a saved conduit proof and receipt args hash
+
+Exit 0 is the only outcome under which the caller may dispatch the tool call;
+exit 1 and exit 2 both mean do not dispatch.
+
+Run `gm conduit check --help` or `gm conduit verify --help` for details."#
+        .to_string()
+}
+
+fn conduit_check_help() -> String {
+    r#"gm conduit check: evaluate a Conduit tool call before dispatch
+
+USAGE:
+  gm conduit check --tool <name> --tenant <id> --args-file <path>
+                   [--provider <name>] [--session-file <path>]
+                   [--proof-out <path>] [--receipt-out <path>]
+                   [--endpoint <url>]
+
+Reads the args file, computes its SHA-256 itself, and calls a real Evaluate
+(never Simulate) for action_type TOOL_CALL with context "conduit:<tenant>",
+the tool as target, and metadata carrying kind="conduit", tenant, tool,
+args_sha256, args_bytes and provider when given. The raw args are never
+printed and never enter the receipt - only their hash does. Saves the sealed
+proof and a receipt pairing the proof with the args hash, tenant and tool.
+This command does not dispatch anything itself.
+
+Defaults: --proof-out gm-conduit-proof.json beside the session file,
+--receipt-out gm-conduit-receipt.json in the current directory.
+
+EXIT CODES:
+  0  verdict ALLOW: the receipt was written and the caller may dispatch the
+     tool call; this is the only outcome under which it may do so.
+  1  a verdict response arrived and verdict is not ALLOW (BLOCK/THROTTLE/
+     ESCALATE): the receipt is still written naming the verdict; do not dispatch.
+  2  usage, session, transport or RPC error (including a pre-proof block
+     delivered as a permission-denied RPC error): nothing is written; do not
+     dispatch.
+
+OPTIONS:
+  --tool <name>        Tool to be dispatched (required)
+  --tenant <id>        Tenant id for the conduit context (required)
+  --args-file <p>      Args file to be hashed (required; raw args never printed)
+  --provider <name>    Optional provider name, recorded in metadata and receipt
+  --session-file <p>   Session file path (default $HOME/.guardian-mesh/gm-session.json)
+  --proof-out <p>      Proof file path (default gm-conduit-proof.json beside session)
+  --receipt-out <p>    Receipt file path (default gm-conduit-receipt.json)
+  --endpoint <url>     Daemon gRPC endpoint (default from session file, then
+                       http://127.0.0.1:50051; GM_ENDPOINT when the flag is absent)
+  --help               Show this help"#
+        .to_string()
+}
+
+fn conduit_verify_help() -> String {
+    r#"gm conduit verify: verify a conduit proof and receipt args hash
+
+USAGE:
+  gm conduit verify [--receipt-file <path>] [--proof-file <path>]
+                    [--args-file <path>] [--endpoint <url>]
+
+Loads the receipt and proof, calls VerifyProof, and optionally recomputes
+the SHA-256 of --args-file and compares it to the receipt. This checks the
+proof with the daemon and the receipt's args-hash pairing by recomputation;
+it does not require a session. The raw args are never printed.
+
+EXIT CODES:
+  0  proof valid and args_hash_matches is not false.
+  1  proof invalid or args hash mismatch.
+  2  usage, transport, missing/malformed receipt or proof.
+
+OPTIONS:
+  --receipt-file <p>   Receipt file (default gm-conduit-receipt.json)
+  --proof-file <p>     Proof file (default: receipt's proof_file)
+  --args-file <p>      Args file to hash-compare against the receipt
+  --endpoint <url>     Daemon gRPC endpoint (default http://127.0.0.1:50051;
+                       GM_ENDPOINT when the flag is absent)
+  --help               Show this help"#
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2505,6 +3005,124 @@ mod tests {
         let c = sha256_hex(b"sane");
         assert_eq!(a, b);
         assert_ne!(a, c);
+    }
+
+    fn conduit_check_args() -> Vec<String> {
+        [
+            "--tool",
+            "shell",
+            "--tenant",
+            "acme-example",
+            "--args-file",
+            "args.json",
+        ]
+        .iter()
+        .map(|v| v.to_string())
+        .collect()
+    }
+
+    #[test]
+    fn conduit_check_requires_tool_tenant_and_args_file() {
+        for flag in ["--tool", "--tenant", "--args-file"] {
+            let args = conduit_check_args();
+            let mut filtered = Vec::new();
+            let mut i = 0;
+            while i < args.len() {
+                if args[i] == flag {
+                    i += 2;
+                    continue;
+                }
+                filtered.push(args[i].clone());
+                i += 1;
+            }
+            let err = parse_conduit_check_args(&filtered, None).unwrap_err();
+            assert_eq!(err.code(), 2, "missing {flag} should exit 2");
+            assert!(matches!(&err, CliError::Usage(_)));
+            assert!(
+                err.message().contains(flag),
+                "error should name {flag}: {}",
+                err.message()
+            );
+        }
+    }
+
+    #[test]
+    fn conduit_check_rejects_unknown_flag_and_applies_defaults() {
+        let mut args = conduit_check_args();
+        args.push("--nope".to_string());
+        let err = parse_conduit_check_args(&args, None).unwrap_err();
+        assert_eq!(err.code(), 2);
+        assert!(matches!(&err, CliError::Usage(_)));
+        assert!(err.message().contains("--nope"));
+
+        let parsed = parse_conduit_check_args(&conduit_check_args(), None).unwrap();
+        assert_eq!(parsed.tool, "shell");
+        assert_eq!(parsed.tenant, "acme-example");
+        assert_eq!(parsed.args_file, PathBuf::from("args.json"));
+        assert_eq!(parsed.provider, None);
+        assert_eq!(parsed.proof_out, None);
+        assert_eq!(parsed.receipt_out, None);
+
+        let mut with_provider = conduit_check_args();
+        with_provider.extend(["--provider".to_string(), "example-provider".to_string()]);
+        let parsed = parse_conduit_check_args(&with_provider, None).unwrap();
+        assert_eq!(parsed.provider.as_deref(), Some("example-provider"));
+
+        let verify = parse_conduit_verify_args(&[], None).unwrap();
+        assert_eq!(
+            verify.receipt_file,
+            PathBuf::from("gm-conduit-receipt.json")
+        );
+        assert_eq!(verify.proof_file, None);
+        assert_eq!(verify.args_file, None);
+    }
+
+    #[test]
+    fn conduit_action_rejects_unknown() {
+        let err = parse_conduit_action(&["frobnicate".to_string()], None).unwrap_err();
+        assert_eq!(err.code(), 2);
+        assert!(err.message().contains("check"));
+        assert!(err.message().contains("verify"));
+    }
+
+    #[test]
+    fn conduit_check_exit_mapping() {
+        assert_eq!(conduit_check_exit("ALLOW"), 0);
+        assert_eq!(conduit_check_exit("BLOCK"), 1);
+        assert_eq!(conduit_check_exit("THROTTLE"), 1);
+        assert_eq!(conduit_check_exit("ESCALATE"), 1);
+        assert_eq!(conduit_check_exit("WHATEVER"), 1);
+    }
+
+    #[test]
+    fn conduit_receipt_round_trip_preserves_fields() {
+        let receipt = ConduitReceipt {
+            receipt_version: 1,
+            kind: "conduit".to_string(),
+            tenant: "acme-example".to_string(),
+            tool: "shell".to_string(),
+            provider: Some("example-provider".to_string()),
+            args_sha256: sha256_hex(b"hello"),
+            args_bytes: 5,
+            verdict: "ALLOW".to_string(),
+            reason: "ok".to_string(),
+            simulation: false,
+            proof: json!({"action_id":"TOOL_CALL","verdict":"ALLOW","timestamp":1,"policy_version":1,"issuing_node":"n"}),
+            proof_file: "gm-conduit-proof.json".to_string(),
+        };
+        let path = unique_temp_file("conduit-receipt");
+        write_json(&path, &receipt, false).unwrap();
+        let bytes = fs::read(&path).unwrap();
+        let loaded: ConduitReceipt = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(loaded, receipt);
+
+        let absent_provider = ConduitReceipt {
+            provider: None,
+            ..receipt
+        };
+        let value = serde_json::to_value(&absent_provider).unwrap();
+        assert_eq!(value["provider"], Value::Null);
+        let _ = fs::remove_file(&path);
     }
 
 }
