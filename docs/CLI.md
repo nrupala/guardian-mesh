@@ -502,6 +502,118 @@ presented artifact and compares it to the receipt. The receipt certifies that
 binding, not the truth of its other fields, and is not a warranty of quality or
 safety.
 
+## `gm conduit`
+
+Conduit tool-call touchpoint (WO-37, v0.30.0). Checks a Conduit tool call before
+dispatch and writes a sealed-proof receipt; verifies the proof and the receipt's
+args hash. `check` needs a handshake session and calls a real `Evaluate` (never
+`Simulate`); `verify` needs no session. This command does not dispatch anything.
+
+### `gm conduit check`
+
+```bash
+gm conduit check --tool <name> --tenant <id> --args-file <path> \
+  [--provider <name>] [--session-file <path>] \
+  [--proof-out <path>] [--receipt-out <path>] [--endpoint <url>]
+```
+
+Required: `--tool`, `--tenant`, `--args-file`. Optional: `--provider`,
+`--session-file` (default `$HOME/.guardian-mesh/gm-session.json`), `--proof-out`
+(default `gm-conduit-proof.json` beside the session file), `--receipt-out`
+(default `gm-conduit-receipt.json` in the current directory), `--endpoint`.
+
+```bash
+gm conduit check --tool shell --tenant acme-example --args-file ./args.json
+```
+
+The CLI reads the args file and computes its SHA-256 and byte length itself; the
+operator never types a hash. The raw args are never printed and never enter the
+receipt. It calls a real `Evaluate` with `action_type` `TOOL_CALL`, `context`
+`conduit:<tenant>`, `target` `<tool>`, and metadata `kind` = `conduit`, `tenant`,
+`tool`, `args_sha256` (hex string), `args_bytes` (decimal string) and
+`provider` when given.
+
+On a verdict response the sealed proof is saved and a receipt (not private) is
+written pairing the proof with the args hash, tenant and tool. The printed JSON
+is the receipt with an added `receipt_file` field:
+
+```json
+{
+  "receipt_version": 1,
+  "kind": "conduit",
+  "tenant": "acme-example",
+  "tool": "shell",
+  "provider": null,
+  "args_sha256": "...",
+  "args_bytes": 1234,
+  "verdict": "ALLOW",
+  "reason": "...",
+  "simulation": false,
+  "proof": {
+    "action_id": "TOOL_CALL",
+    "verdict": "ALLOW",
+    "timestamp": 1790000000,
+    "policy_version": 1,
+    "issuing_node": "node-..."
+  },
+  "proof_file": ".../gm-conduit-proof.json",
+  "receipt_file": "gm-conduit-receipt.json"
+}
+```
+
+**Exit codes:** `0` iff the verdict is `ALLOW` (the caller may dispatch the tool
+call). `1` iff a verdict response arrived and the verdict is not `ALLOW`
+(`BLOCK`, `THROTTLE`, `ESCALATE`) - the receipt is still written naming the
+verdict; do not dispatch. `2` on usage, session, transport or RPC error,
+including a pre-proof block delivered as a gRPC `permission_denied` error -
+nothing is written (no proof, no receipt, existing files at those paths are not
+overwritten); do not dispatch. **Exit 0 is the only outcome under which the
+caller may dispatch the tool call; exit 1 and exit 2 both mean do not dispatch.**
+
+### `gm conduit verify`
+
+```bash
+gm conduit verify [--receipt-file <path>] [--proof-file <path>] \
+  [--args-file <path>] [--endpoint <url>]
+```
+
+Reads the receipt (default `gm-conduit-receipt.json`) and proof (default: the
+receipt's `proof_file`, or `--proof-file`), calls `VerifyProof`, and, when
+`--args-file` is given, recomputes its SHA-256 and compares it to the receipt's
+`args_sha256` (`args_hash_matches`: `true`/`false`, or `null` when no file is
+given). Needs no session.
+
+```bash
+gm conduit verify --args-file ./args.json
+```
+
+```json
+{
+  "valid": true,
+  "reason": "ML-DSA-65 signature verified",
+  "verdict": "ALLOW",
+  "args_hash_matches": true,
+  "args_sha256": "..."
+}
+```
+
+**Exit codes:** `0` iff `valid` is true and `args_hash_matches` is not `false`.
+`1` iff the daemon reports the proof invalid or the args hash mismatches. `2` on
+usage, transport, or missing/malformed receipt or proof.
+
+### Honesty notes
+
+`check` is a real `Evaluate` only; simulation is never a conduit check. A call
+blocked before proof sealing arrives as an RPC error, so `check` exits 2 and
+writes no receipt. The daemon's proof binds the action type, verdict, timestamp
+and policy version; the pairing of the proof to the args hash is asserted by the
+receipt (presenter-declaration class, GMSI-182) and checked by recomputation -
+`verify --args-file` recomputes the hash of the presented args and compares it to
+the receipt, so swapped args fail verification. Raw args never enter the receipt
+or any log. This wires the check around a Conduit call: it does not dispatch the
+call, does not prove the tool's output, and does not by itself route Conduit's
+live service traffic (Conduit-side follow-on work).
+
 ## Session file
 
 The default session file is `$HOME/.guardian-mesh/gm-session.json`.
