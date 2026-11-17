@@ -1087,5 +1087,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-16T23:24:11-06:00",
     "message": "Merge pull request #125 from nrupala/wright/pack-refresh-2026-11-16"
+  },
+  {
+    "release": 126,
+    "tag": "release/v126",
+    "previous_tag": "release/v125",
+    "sha": "3a17e78f73d2b0ed3dfc535d4e13046e7d553a8d",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-16T23:56:19-06:00",
+    "message": "Merge pull request #126 from nrupala/wright/wo37t3-gm-conduit"
   }
 ]
