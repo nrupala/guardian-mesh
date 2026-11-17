@@ -2040,6 +2040,25 @@ behaviour-proven here.
   only: none becomes a gate MUST until behaviour-proven
   here.
 
+- **GMSI-191 — Tool-call descriptor-binding proofs
+  (hash-only).** (WO-37 T3 gate, 2026-11-16.) Extends
+  GMSI-182 from content to tool calls: an AuditProof
+  binds action_id (the action type), verdict, timestamp,
+  policy_version and issuing_node — not the evaluated
+  call's tenant, target, or arguments hash. A conduit
+  receipt's proof<->(tenant, tool, args hash) pairing is
+  therefore receipt-asserted (presenter-declaration
+  class) and checked by recomputation. GM should be able
+  to seal the action's target + a hash of its descriptor
+  inside the proof itself, so tool-call receipts are
+  daemon-sealed end to end — with the hard constraint,
+  new in this input, that the descriptor is bound by
+  hash only: raw tool-call arguments must never be
+  required in a proof, receipt, or log to bind a call
+  (arguments may carry customer data). Probe candidate
+  only: it becomes a gate MUST once behaviour-proven
+  here.
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
@@ -4335,3 +4354,124 @@ end-to-end), recorded in Part B above.
 Guardian Mesh Spec Inputs filed by this run: GMSI-182
 (WO-37 T2 gate — content-binding proofs), recorded
 in Part B above.
+
+- 2026-11-16 — **WO-37 touchpoint T3 (Conduit)
+  WIRED as v0.30.0** (PR #126, merge
+  3a17e78f; pack refreshed first by PR #125:
+  GMSI-183..190 intake from the per-atom gate
+  WS2 extensions 3–10, renumbered +6 on intake
+  because the source's GMSI-177…184 collided
+  with this pack's 177…182). The shipped gm CLI
+  gains `conduit check` / `conduit verify`:
+  check reads the tool-call args file and
+  computes its SHA-256 itself, calls a REAL
+  Evaluate (never Simulate) for action type
+  TOOL_CALL with context "conduit:<tenant>", the
+  tool as target and the hash in the action
+  metadata, saves the sealed proof and writes a
+  receipt pairing proof, args hash, tenant and
+  tool; exit 0 iff ALLOW, exit 1 on a non-ALLOW
+  verdict (receipt still written, naming the
+  verdict), exit 2 on usage / session / transport
+  / RPC refusal including a pre-proof
+  permission_denied, with nothing written. Raw
+  args are never printed and never enter the
+  receipt — hash only. Verify re-checks the
+  proof via VerifyProof and, with --args-file,
+  recomputes the args hash against the receipt.
+  No daemon, proto, policy or dependency change
+  (TOOL_CALL was already a default rule).
+  specs/TOUCHPOINTS.md marks T3 WIRED (GM-side
+  check + protocol) with the explicit honesty
+  section: Conduit's live service traffic is NOT
+  routed by this release — Conduit-side dispatch
+  integration is follow-on work in Conduit's own
+  repo, named not wired. docs/CONDUIT_TOUCHPOINT.md
+  (new) states the operator protocol; docs/CLI.md
+  documents the subcommand. Verified independently
+  by Wright (fresh checkout; lane tree ==
+  pushed tree): cargo test 320/320 on the lane
+  tree and on the Wright-stamped head (315
+  baseline + exactly the lane's 5 new conduit
+  test functions); WebUI build + lint +
+  check:releases green (32 versions). Wright
+  behaviour proof (own harness, locally built
+  daemons, own keys): 18/18 legs — ALLOW with
+  the receipt args hash == Wright's own SHA-256;
+  raw-args marker absent from receipt, proof and
+  stdout; proof VALID via gm verify and
+  gm conduit verify; the audit trail carries the
+  TOOL_CALL/ALLOW entry; tampered args and
+  tampered proof fail verify; usage errors name
+  the flag; dead endpoint writes nothing; an
+  escalated TOOL_CALL returns ESCALATE; a
+  persisted bundle denying TOOL_CALL returns
+  BLOCK with a BLOCK receipt. Gate verdict PASS
+  WITH FINDINGS (scanner PASS; cargo audit clean,
+  174 deps): F1 = standing GMSI-143 lag outside
+  this WO; F2 (Low, lane reporting inaccuracy,
+  no code defect) = the lane claimed 6 new tests,
+  the tree carries 5 test functions plus a helper;
+  F3 (Low, cosmetic, FIXED in the Wright stamp) =
+  the CLI.md intro's v0.30.0 sentence. Register
+  review: no score changes; RR-05 (20 Critical) +
+  RR-21 (15 High) CONSCIOUSLY RE-ACCEPTED for
+  this cycle, treatments unchanged; SG-1 review:
+  no status changes (no new RPC or network
+  surface). Judgment differential in scoped form
+  (identical args under ALLOW / ESCALATE / BLOCK
+  through the shipped CLI). Deployed: daemon
+  sha256 2e593831..., backup .bak-v0290, both
+  services active; box E2E 15/16 (sole miss = the
+  standing stale Health-fields harness check,
+  22nd occurrence; certification proceeded on
+  direct production proof per standing practice).
+  Direct production proof: Health SERVING,
+  0.30.0 @ 3a17e78f, binary sha == built ==
+  installed, degraded=false, fingerprint == pin
+  dd2cf1a3.... Self-certification via the shipped
+  gm certificate issue: cert-20261117-000060
+  ACTIVE (PASS WITH FINDINGS; evidence = the
+  WO-37 T3 gate verdict, sha256 04e3764e...),
+  superseding cert-20261116-000059 (read back
+  SUPERSEDED); the ceremony ran clean in a single
+  pass. T3 first exercise: this release's own
+  Conduit-shaped tool call checked through the
+  shipped gm conduit check against production —
+  ALLOW, receipt args hash 8764c6c5... == Wright's
+  own SHA-256 of the args file; gm conduit verify
+  valid with args_hash_matches=true; Wright's
+  wire client independently VerifyProof'd the
+  conduit proof VALID. One proof nuance recorded:
+  the cert's sealed pf_outcomes are the
+  at-issuance snapshot; live counters read one
+  higher on the action-driven families because
+  the conduit exercise ran between issuance and
+  the wire proof. Attestation: statement against
+  the merged clone (cross-build Cargo.lock
+  c352cfc4...), signed on the box with the
+  production key (signer asserted == pin before
+  install); installed /opt/guardian-mesh/
+  guardian-meshd-0.30.0.attestation.json,
+  gm-attest verify VALID, package fingerprint
+  b19d7d42.... gm 0.30.0 installed on the box at
+  /usr/local/bin/gm. Pages parity: merged build
+  asset == GitHub Pages asset (index-FvIt62cV.js);
+  public unauthenticated 302. NOT RUN:
+  authenticated panel click-through (GMSI-134);
+  Kali/Arch for this delta (no daemon network
+  surface changed); universal assurance checks
+  (the repo carries no assurance: gate block).
+  v0.30.0 is a RELEASE CANDIDATE (one-week
+  soak; graduates 2026-11-23). **WO-37 stays
+  OPEN — T3 is wired (GM-side); the next
+  touchpoint is T4 (fleet repos) in map order.**
+  WO-33 (P2, NIST AI RMF profile) and WO-27
+  (P2, mediation conformance) follow in pack
+  order; WO-17 stays open for the cluster
+  chaos + CM-8 extensions (WO-27); WO-16
+  stays open for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-191
+(WO-37 T3 gate — tool-call descriptor-binding proofs,
+hash-only), recorded in Part B above.
