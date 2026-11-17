@@ -13,6 +13,21 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "0.30.0",
+    date: "2026-11-16",
+    summary: "WO-37 (T3): Conduit touchpoint wiring - the gm CLI gains gm conduit check / verify (a real Evaluate verdict for a TOOL_CALL action before dispatch, with the CLI-computed SHA-256 of the exact args file in the action metadata, plus a sealed proof and a receipt pairing the proof to the args hash, tenant and tool), specs/TOUCHPOINTS.md marks T3 WIRED (GM-side check + protocol; Conduit-service internal routing explicitly not wired), and docs/CONDUIT_TOUCHPOINT.md states the operator protocol. This release's own Conduit-shaped check against production is the first exercise through the shipped gm conduit path.",
+    highlights: [
+      "gm conduit check: reads the args file and computes its SHA-256 itself (the operator never types a claimed hash; raw args are never printed and never enter the receipt - hash only), calls a real Evaluate (never Simulate) for action_type TOOL_CALL with context conduit:<tenant>, saves the sealed proof and writes the receipt; exit 0 iff ALLOW, exit 1 on a non-ALLOW verdict (receipt still written, naming the verdict), exit 2 on usage/session/transport/RPC refusal including pre-proof permission_denied - with nothing written",
+      "gm conduit verify: loads the receipt and proof, calls VerifyProof, and with --args-file recomputes the args SHA-256 against the receipt - swapped args fail verification (exit 1); no session needed",
+      "No daemon, proto, policy or dependency changes: TOOL_CALL was already a default policy rule (allow, priority 100); operators can deny or escalate it via a governed bundle or GUARDIAN_MESH_POLICY_ESCALATE_ACTIONS (both behaviour-proven this run: ESCALATE and BLOCK legs)",
+      "specs/TOUCHPOINTS.md: T3 WIRED (v0.30.0) with the wired/not-wired section; docs/CONDUIT_TOUCHPOINT.md (new): handshake, check, dispatch only on exit 0, verify, cite the receipt and proof in the call record - fail-closed at every step",
+      "HONESTY BOUNDARY: the CLI does not dispatch anything and does not route Conduit's live service traffic (Conduit-side follow-on work, named not wired); the daemon's proof binds action type, verdict, timestamp and policy version - the proof-to-args-hash pairing is asserted by the receipt (presenter-declaration class, as with certificates) and checked by recomputation; sealing the descriptor hash inside the proof itself (hash-only) is filed as GMSI-191"
+    ],
+    gateVerdict: "PASS WITH FINDINGS - Release Gate 2026-11-16 (guardian-mesh-wo37t3-2026-11-16): scanner PASS (0 must-gate failures, 0 secrets, 0 known vulns); cargo audit clean (174 deps). F1 = standing GMSI-143 spec-release lag outside this WO; F2 (Low, lane reporting inaccuracy, no code defect) the lane claimed 6 new tests, the tree carries 5 test functions plus a helper - verified total +5; F3 (Low, cosmetic, FIXED in the Wright stamp) the CLI intro's v0.30.0 sentence. Register review: no score changes; RR-05 (20 Critical) + RR-21 (15 High) consciously re-accepted for this cycle, treatments unchanged",
+    tests: "Wright, independent, fresh checkout of the WO-37 T3 branch (lane tree == pushed tree): cargo test 320/320 (189 lib + 93 bin + 11 gm-mcp + 27 gm; baseline 315 + exactly the 5 new conduit tests); WebUI ci+build+lint clean, check:releases green (32 versions). Wright behaviour proof on locally built daemons (own keys): 18/18 legs - check ALLOW with receipt args hash == Wright's SHA-256, proof VALID via gm verify and gm conduit verify, raw-args marker absent from receipt/proof/stdout, audit trail carries the TOOL_CALL/ALLOW entry, tampered args and tampered proof fail verify, usage errors name the flag, dead endpoint writes nothing, escalated TOOL_CALL returns ESCALATE, a denying bundle returns BLOCK",
+    status: "Current release"
+  },
+  {
     version: "0.29.0",
     date: "2026-11-15",
     summary: "WO-37 (T2): publishing-pipeline touchpoint wiring - the gm CLI gains gm publish check / verify (a real Evaluate verdict for a PUBLISH action before posting, with the CLI-computed content SHA-256 in the action metadata, plus a sealed proof and a receipt pairing the proof to the content hash, destination and channel), the daemon's default policy gains the PUBLISH rule, specs/TOUCHPOINTS.md marks T2 WIRED, and docs/PUBLISHING_TOUCHPOINT.md states the operator protocol. This release's own public release-log publish is the first checked through the shipped gm publish path.",
@@ -25,7 +40,7 @@ export const RELEASES: Release[] = [
     ],
     gateVerdict: "PASS WITH FINDINGS - Release Gate 2026-11-15 (guardian-mesh-wo37t2-2026-11-15): scanner PASS (0 must-gate failures, 0 secrets, 0 known vulns); cargo audit clean (174 deps). F1 = standing GMSI-143 spec-release lag outside this WO; F2 (Low, FIXED by Wright carry) the genesis rule-count test asserted 11 default rules, updated to 12 for PUBLISH; F3 (Low, cosmetic, FIXED in the stamp) BOM and em-dash drift in the lane's docs. Register review: no score changes; RR-05 (20 Critical) + RR-21 (15 High) consciously re-accepted for this cycle, treatments unchanged",
     tests: "Wright, independent, fresh checkout of the WO-37 T2 branch (lane tree == pushed tree; Wright carry for the genesis-count test): cargo test 315/315 (189 lib + 93 bin + 11 gm-mcp + 22 gm; baseline 308 + exactly the 7 new tests); WebUI ci+build+lint clean, check:releases green (31 versions). Wright behaviour proof on locally built daemons (own keys): 17/17 legs - check ALLOW with receipt hash == Wright's SHA-256, proof VALID via gm verify and gm publish verify, audit trail carries the PUBLISH/ALLOW entry, tampered content and tampered proof fail verify, usage errors name the flag, dead endpoint writes nothing, escalated PUBLISH returns ESCALATE, a denying bundle returns BLOCK",
-    status: "Current release"
+    status: "Release candidate"
   },
   {
     version: "0.28.0",

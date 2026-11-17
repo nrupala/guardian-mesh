@@ -11,7 +11,9 @@ scan that names insecure settings and contacts no daemon. v0.28.0 adds
 `gm certificate` (WO-37, T1): issue, inspect, verify and revoke
 release-evidence certificates through the daemon's certificate RPCs. v0.29.0 adds
 `gm publish` (WO-37, T2): check a publish action before posting and verify its
-receipt through real Evaluate and VerifyProof.
+receipt through real Evaluate and VerifyProof. v0.30.0 adds
+`gm conduit` (WO-37, T3): check a Conduit tool call before dispatch and verify
+its receipt through real Evaluate and VerifyProof.
 
 ## What the CLI is
 
