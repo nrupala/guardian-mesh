@@ -1972,6 +1972,74 @@ behaviour-proven here.
   daemon-sealed end to end. Probe candidate only: it
   becomes a gate MUST once behaviour-proven here.
 
+- **GMSI-183…190 — Per-atom verdict certification,
+  Batches 15–22 cohorts.** (Per-atom gate run WS2
+  extensions 3–10, 2026-11-15/16; packs:
+  release-gate-runs/atoms-per-atom-gate-2026-11-15/gmsi.md
+  + its batch addenda.) NUMBERING: the source filed these
+  cohorts as "GMSI-177…184"; GMSI-177…182 are already used
+  in this pack for different inputs (documentation-surface
+  divergence, kill-switch invariance, fence replay, refund
+  invariant, webhook replay, content-binding proofs —
+  above), so the cohorts are renumbered on intake here,
+  +6, and this record carries both numbers: source
+  177→**183** Batch 15 (honest-seo-audit-intent-map,
+  javascript-review-and-build, json-schema-design-check,
+  knowledge-graph-design, local-first-sync-design,
+  local-llm-serving-setup,
+  local-voice-stack-engineering-pack); source 178→**184**
+  Batch 16 (localization-readiness-review,
+  long-form-authoring-pipeline,
+  mcp-server-design-and-review,
+  meaning-first-translation-with-tone-note,
+  meeting-decisions-and-actions-extract,
+  ml-project-framing-review, multiplatform-core-design);
+  source 179→**185** Batch 17 (native-mobile-build-plan,
+  negotiation-preparation-pack,
+  observability-and-runbook-design,
+  offline-first-pwa-engineering-pack,
+  personal-web-presence-audit,
+  poc-design-kill-criteria-verdict); source 180→**186**
+  Batch 18 (prd-with-testable-acceptance-criteria,
+  pricing-unit-economics-pack,
+  process-waste-review-coaching,
+  product-metrics-event-taxonomy-pack,
+  production-python-engineering-pack,
+  production-python-engineering-pack-expert,
+  production-rust-engineering-pack); source 181→**187**
+  Batch 19 (production-rust-engineering-pack-expert,
+  quant-math-derivation-sanity-check,
+  release-pack-changelog-seal-rollback,
+  semantic-html-review,
+  service-isolation-hardening-review,
+  single-living-trip-itinerary); source 182→**188**
+  Batch 20 (sourced-podcast-episode-production,
+  sourced-visual-reference-search,
+  sql-schema-query-engineering-pack,
+  statistical-study-design-report,
+  strict-typescript-engineering-pack,
+  structured-decision-making); source 183→**189**
+  Batch 21 (tech-stack-decision-memo,
+  technical-documentation-pack,
+  testing-strategy-regression-pack,
+  uat-scenario-sign-off-pack,
+  ux-flow-component-spec-pack); source 184→**190**
+  Batch 22 (vendor-evaluation-three-way-match-pack,
+  verified-place-shortlist, voice-note-narration-audio,
+  zero-knowledge-system-design-pack,
+  zero-trust-architecture-design-pack). Same terms as
+  GMSI-157…169/175/176: GM must be able to certify each
+  atom's gate verdict (evaluation input = atom id, verdict,
+  sealed corpus hash per GMSI-174; ALLOW only when the
+  verdict's evidence recomputes; tampered proof NOT VALID;
+  certificate lifecycle per GMSI-1). With GMSI-190 filed,
+  every deployed atom carries a per-atom verdict and a
+  filed certification input (the source's continuous
+  157…184 == this pack's 157…176 + 183…190, with
+  177…182 held by the inputs above). Probe candidates
+  only: none becomes a gate MUST until behaviour-proven
+  here.
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
