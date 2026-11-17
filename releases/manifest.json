@@ -1096,5 +1096,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-16T23:56:19-06:00",
     "message": "Merge pull request #126 from nrupala/wright/wo37t3-gm-conduit"
+  },
+  {
+    "release": 127,
+    "tag": "release/v127",
+    "previous_tag": "release/v126",
+    "sha": "99c1f3a27c4d18e4578a0f91f67dd8771a7cd1e5",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-17T00:13:14-06:00",
+    "message": "Merge pull request #127 from nrupala/wright/wo37t3-ledger"
   }
 ]
