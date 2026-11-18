@@ -1123,5 +1123,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-18T00:13:35-06:00",
     "message": "Merge pull request #129 from nrupala/wright/wo37t4-ledger"
+  },
+  {
+    "release": 130,
+    "tag": "release/v130",
+    "previous_tag": "release/v129",
+    "sha": "4d44caeda53096d90266b51cc1b3f1432f9fb054",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-18T11:23:57-06:00",
+    "message": "Merge pull request #130 from nrupala/codetopo-profile-2026-11-18"
   }
 ]
