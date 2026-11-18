@@ -3,7 +3,7 @@
 
 # Guardian Mesh — Touchpoint Coverage Register (WO-37)
 
-**Work order:** WO-37 (T1 wired v0.28.0; T2 wired v0.29.0; T3 wired v0.30.0).
+**Work order:** WO-37 (T1 wired v0.28.0; T2 wired v0.29.0; T3 wired v0.30.0; T4 wired v0.31.0).
 **Owner's directive:** 2026-10-16 — Guardian Mesh connected at every touchpoint.
 
 The map of record is the goal file `touchpoint-wiring-map.md`, which names eight
@@ -25,7 +25,7 @@ only its issuer can check.
 | T1 Release gate | The gate's verdict and evidence pack; the proof is the sealed certificate issued after the action | `gm certificate issue` / `status` / `verify` / `revoke` over the certificate RPCs (IssueCertificate, CertificateStatus, RevokeCertificate, VerifyProof), against the production daemon | WIRED (v0.28.0) |
 | T2 Publishing pipeline | Public content in the owner's name (AIMLDS blog/papers pipeline) | `gm publish check` before posting (real Evaluate, action_type PUBLISH) + the sealed proof and receipt after it; `gm publish verify` re-checks proof and content hash | WIRED (v0.29.0) |
 | T3 Conduit | Conduit fleet traffic and its verdicts | `gm conduit check` before dispatch (real Evaluate, action_type TOOL_CALL, per-tenant context) + the sealed proof and receipt after it; `gm conduit verify` re-checks proof and args hash | WIRED (v0.30.0) |
-| T4 Fleet repos | Per-repository release evidence and certificates | Per-repo coverage statements are WO-21's remainder, not this WO | PARTIAL (certificates exist per WO-6; per-repo coverage statements are WO-21's remainder, not this WO) |
+| T4 Fleet repos | Per-repository release evidence and certificates | `gm repo check` before a repo merge/release (real Evaluate, action_type REPO_RELEASE, per-repo context) + the sealed proof and receipt after it; `gm repo verify` re-checks proof and evidence hash | WIRED (v0.31.0) |
 | T5 Nightly lane | Nightly run verdicts and the proofs after each action | Process live and gated | PARTIAL (process live and gated; proof formalization is the remaining build) |
 | T6 oc-bridge | Internal bridge actions and their verdicts | Internal; rides after T3 | NAMED, NOT WIRED (internal, rides after T3) |
 | T7 MyMilo loop | Internal loop actions and their verdicts | Internal | NAMED, NOT WIRED (internal) |
@@ -65,6 +65,25 @@ swapped args fail verification. A call blocked before proof sealing returns no
 proof and the CLI writes no receipt: exit 2, nothing dispatched. Simulation is
 never a conduit check.
 
+### T4 Fleet repos - what is wired, and what this does not add
+
+The verdict before the action is a real Evaluate of a REPO_RELEASE action whose
+metadata carries the CLI-computed SHA-256 of the exact evidence file, the repo
+and the exact commit; the daemon seals the verdict into its hash-chained audit
+trail and returns a sealed proof; the receipt pairs that proof with the evidence
+hash, repo and commit. This does NOT install GitHub webhooks, required status
+checks, or CI integration in fleet repos, and does NOT certify the fleet's
+repositories - rolling this check into each repo's own CI/release path is
+follow-on work repo by repo, named here as NOT WIRED. Per-repo coverage
+statements in certificates remain WO-21's remainder, not this WO. The daemon's
+proof binds action type, verdict, timestamp and policy version; the pairing of
+the proof to this evidence hash and commit is asserted by the receipt
+(presenter-declaration class, GMSI-182) and checked by recomputation -
+`gm repo verify --evidence-file` recomputes the hash of the evidence presented
+and compares it to the receipt, so swapped evidence fails verification. A release
+blocked before proof sealing returns no proof and the CLI writes no receipt:
+exit 2, nothing merged or released. Simulation is never a repo check.
+
 ## Rules
 
 - Coverage is the metric: each touchpoint is wired, named-unwired, or
@@ -74,6 +93,10 @@ never a conduit check.
   per run, in map order.
 
 ## Change log
+
+### v0.31.0
+
+- T4 wired. `gm repo check` records a real Evaluate verdict for action_type REPO_RELEASE (with the CLI-computed evidence SHA-256 in metadata, alongside the repo and commit) and, on a verdict response, saves the sealed proof and a receipt pairing it to the evidence hash, repo and commit; `gm repo verify` re-checks the proof and the evidence hash by recomputation. GitHub-side integration (webhooks, required status checks, CI) and WO-21 per-repo coverage statements are explicitly not wired (follow-on work in each repo, named here as NOT WIRED). Evidence: this release's own repo check receipt cited in the release record (CHANGELOG [0.31.0]).
 
 ### v0.30.0
 

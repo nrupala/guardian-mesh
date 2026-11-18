@@ -523,7 +523,7 @@ dependencies = [
 
 [[package]]
 name = "guardian-meshd"
-version = "0.30.0"
+version = "0.31.0"
 dependencies = [
  "anyhow",
  "blake3",

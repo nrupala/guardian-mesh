@@ -13,6 +13,8 @@ release-evidence certificates through the daemon's certificate RPCs. v0.29.0 add
 `gm publish` (WO-37, T2): check a publish action before posting and verify its
 receipt through real Evaluate and VerifyProof. v0.30.0 adds
 `gm conduit` (WO-37, T3): check a Conduit tool call before dispatch and verify
+its receipt through real Evaluate and VerifyProof. v0.31.0 adds
+`gm repo` (WO-37, T4): check a fleet-repo release before merge/release and verify
 its receipt through real Evaluate and VerifyProof.
 
 ## What the CLI is
@@ -615,6 +617,121 @@ the receipt, so swapped args fail verification. Raw args never enter the receipt
 or any log. This wires the check around a Conduit call: it does not dispatch the
 call, does not prove the tool's output, and does not by itself route Conduit's
 live service traffic (Conduit-side follow-on work).
+
+## `gm repo`
+
+Fleet-repo touchpoint (WO-37, v0.31.0). Checks a fleet-repo release - a
+merge/release of the named repo at the named commit - before it proceeds and
+writes a sealed-proof receipt; verifies the proof and the receipt's evidence
+hash. `check` needs a handshake session and calls a real `Evaluate` (never
+`Simulate`); `verify` needs no session. This command does not merge, push or
+release anything.
+
+### `gm repo check`
+
+```bash
+gm repo check --repo <owner/name> --commit <sha> --evidence-file <path> \
+  [--branch <name>] [--session-file <path>] \
+  [--proof-out <path>] [--receipt-out <path>] [--endpoint <url>]
+```
+
+Required: `--repo`, `--commit`, `--evidence-file`. Optional: `--branch`,
+`--session-file` (default `$HOME/.guardian-mesh/gm-session.json`), `--proof-out`
+(default `gm-repo-proof.json` beside the session file), `--receipt-out`
+(default `gm-repo-receipt.json` in the current directory), `--endpoint`.
+
+```bash
+gm repo check --repo example-owner/example-repo --commit 0000000000000000000000000000000000000000 --evidence-file ./evidence.json
+```
+
+The CLI reads the evidence file and computes its SHA-256 and byte length itself;
+the operator never types a hash. It calls a real `Evaluate` with `action_type`
+`REPO_RELEASE`, `context` `repo:<repo>`, `target` `<repo>`, and metadata `kind` =
+`repo`, `repo`, `commit`, `evidence_sha256` (hex string), `evidence_bytes`
+(decimal string) and `branch` when given.
+
+On a verdict response the sealed proof is saved and a receipt (not private) is
+written pairing the proof with the evidence hash, repo and commit. The printed
+JSON is the receipt with an added `receipt_file` field:
+
+```json
+{
+  "receipt_version": 1,
+  "kind": "repo",
+  "repo": "example-owner/example-repo",
+  "commit": "0000000000000000000000000000000000000000",
+  "branch": null,
+  "evidence_sha256": "...",
+  "evidence_bytes": 1234,
+  "verdict": "ALLOW",
+  "reason": "...",
+  "simulation": false,
+  "proof": {
+    "action_id": "REPO_RELEASE",
+    "verdict": "ALLOW",
+    "timestamp": 1790000000,
+    "policy_version": 1,
+    "issuing_node": "node-..."
+  },
+  "proof_file": ".../gm-repo-proof.json",
+  "receipt_file": "gm-repo-receipt.json"
+}
+```
+
+**Exit codes:** `0` iff the verdict is `ALLOW` (the caller may proceed with the
+merge/release). `1` iff a verdict response arrived and the verdict is not
+`ALLOW` (`BLOCK`, `THROTTLE`, `ESCALATE`) - the receipt is still written naming
+the verdict; do not proceed. `2` on usage, session, transport or RPC error,
+including a pre-proof block delivered as a gRPC `permission_denied` error -
+nothing is written (no proof, no receipt, existing files at those paths are not
+overwritten); do not proceed. **Exit 0 is the only outcome under which the
+caller may proceed with the merge/release; exit 1 and exit 2 both mean do not
+proceed.**
+
+### `gm repo verify`
+
+```bash
+gm repo verify [--receipt-file <path>] [--proof-file <path>] \
+  [--evidence-file <path>] [--endpoint <url>]
+```
+
+Reads the receipt (default `gm-repo-receipt.json`) and proof (default: the
+receipt's `proof_file`, or `--proof-file`), calls `VerifyProof`, and, when
+`--evidence-file` is given, recomputes its SHA-256 and compares it to the
+receipt's `evidence_sha256` (`evidence_hash_matches`: `true`/`false`, or `null`
+when no file is given). Needs no session.
+
+```bash
+gm repo verify --evidence-file ./evidence.json
+```
+
+```json
+{
+  "valid": true,
+  "reason": "ML-DSA-65 signature verified",
+  "verdict": "ALLOW",
+  "evidence_hash_matches": true,
+  "evidence_sha256": "..."
+}
+```
+
+**Exit codes:** `0` iff `valid` is true and `evidence_hash_matches` is not
+`false`. `1` iff the daemon reports the proof invalid or the evidence hash
+mismatches. `2` on usage, transport, or missing/malformed receipt or proof.
+
+### Honesty notes
+
+`check` is a real `Evaluate` only; simulation is never a repo check. A release
+blocked before proof sealing arrives as an RPC error, so `check` exits 2 and
+writes no receipt. The daemon's proof binds the action type, verdict, timestamp
+and policy version; the pairing of the proof to the evidence hash, repo and
+commit is asserted by the receipt (presenter-declaration class, GMSI-182) and
+checked by recomputation - `verify --evidence-file` recomputes the hash of the
+presented evidence and compares it to the receipt, so swapped evidence fails
+verification. This wires the check around a repo release: it does not merge,
+push or release anything, does not prove the code in the commit is good, and
+does not by itself integrate Guardian Mesh into any repo's CI (follow-on work in
+each repo).
 
 ## Session file
 
