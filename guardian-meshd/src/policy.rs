@@ -192,6 +192,7 @@ impl PolicyEngine {
             ("GENERATE", true, 100),
             ("MODEL_LOAD", true, 50),
             ("PUBLISH", true, 50),
+            ("REPO_RELEASE", true, 50),
         ];
 
         let mut rules = Vec::new();
@@ -380,6 +381,12 @@ mod tests {
     fn defaults_allow_publish() {
         let engine = PolicyEngine::new();
         assert!(engine.decide("PUBLISH"));
+    }
+
+    #[test]
+    fn defaults_allow_repo_release() {
+        let engine = PolicyEngine::new();
+        assert!(engine.decide("REPO_RELEASE"));
     }
 
     #[test]
