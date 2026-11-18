@@ -2059,6 +2059,23 @@ behaviour-proven here.
   only: it becomes a gate MUST once behaviour-proven
   here.
 
+- **GMSI-192 — Repo-release descriptor-binding proofs.**
+  (WO-37 T4 gate, 2026-11-17.) Extends GMSI-182
+  (content) and GMSI-191 (tool-call descriptors) to
+  fleet-repo releases: a repo proof currently binds
+  only action type, verdict, timestamp and policy
+  version; the pairing of the proof to the repo, the
+  exact commit, and the evidence hash is asserted by
+  the CLI receipt (presenter-declaration class) and
+  checked by recomputation of the evidence hash only —
+  the commit string itself is not recomputable from
+  anything in the proof. Guardian Mesh should be able
+  to issue proofs that seal the repo + commit +
+  evidence hash inside the proof itself, so a receipt
+  cannot be re-paired to a different commit of the
+  same repo after the fact. Probe candidate only: it
+  becomes a gate MUST once behaviour-proven here.
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
@@ -4475,3 +4492,129 @@ in Part B above.
 Guardian Mesh Spec Inputs filed by this run: GMSI-191
 (WO-37 T3 gate — tool-call descriptor-binding proofs,
 hash-only), recorded in Part B above.
+
+- 2026-11-17 — **WO-37 touchpoint T4 (fleet repos)
+  WIRED as v0.31.0** (PR #128, merge
+  6223f274; no pack refresh was needed this run —
+  the only new gate filing, the legal-surface
+  item-1 L5 pack, states no Guardian Mesh Spec
+  Inputs arise from it). The shipped gm CLI
+  gains `repo check` / `repo verify`: check reads
+  the evidence file and computes its SHA-256
+  itself, calls a REAL Evaluate (never Simulate)
+  for action type REPO_RELEASE with context
+  "repo:<repo>", the repo as target and metadata
+  carrying kind/repo/commit/evidence hash+bytes
+  (and branch when given), saves the sealed proof
+  and writes a receipt pairing proof, evidence
+  hash, repo and exact commit; exit 0 iff ALLOW,
+  exit 1 on a non-ALLOW verdict (receipt still
+  written, naming the verdict), exit 2 on usage /
+  session / transport / RPC refusal including a
+  pre-proof permission_denied, with nothing
+  written. Verify re-checks the proof via
+  VerifyProof and, with --evidence-file,
+  recomputes the evidence hash against the
+  receipt. policy.rs gains REPO_RELEASE as a
+  default rule (allow, priority 50) and the
+  daemon genesis rule-count assertion moves
+  12 → 13 in the same change. specs/TOUCHPOINTS.md
+  marks T4 WIRED (GM-side check + protocol) with
+  the explicit honesty section: this release does
+  NOT merge, push or release anything, does NOT
+  install GitHub webhooks, required status checks
+  or CI integration in fleet repos, and does NOT
+  certify the fleet's repositories — rollout into
+  each repo's own CI/release path is follow-on
+  work, named not wired; per-repo coverage
+  statements in certificates remain WO-21's
+  remainder. docs/REPO_TOUCHPOINT.md (new) states
+  the operator protocol; docs/CLI.md documents
+  the subcommand. Verified independently by
+  Wright (fresh checkout; lane tree == pushed
+  tree): cargo test 326/326 on the lane tree and
+  on the Wright-stamped head (320 baseline +
+  exactly the 6 new tests: 1 policy + 5 gm);
+  WebUI build + lint + check:releases green
+  (33 versions on the stamped tree). Wright
+  behaviour proof (own harness, locally built
+  daemons, own keys): 17/17 legs — ALLOW with
+  the receipt evidence hash == Wright's own
+  SHA-256; the receipt binds repo/commit/branch/
+  evidence bytes and the proof's action_id is
+  REPO_RELEASE; proof VALID via gm verify and
+  gm repo verify; the audit trail carries the
+  REPO_RELEASE/ALLOW entry; tampered evidence
+  and tampered proof fail verify; usage errors
+  name the flag; dead endpoint writes nothing;
+  an escalated REPO_RELEASE returns ESCALATE; a
+  persisted bundle denying REPO_RELEASE returns
+  BLOCK with a BLOCK receipt. Gate verdict PASS
+  WITH FINDINGS (scanner PASS; cargo audit clean,
+  174 deps): F1 = standing GMSI-143 lag outside
+  this WO; F2 (Low, lane reporting inaccuracy,
+  no code defect) = the lane claimed 325 tests
+  with lib at 189, the verified total is 326
+  with lib at 190; F3 (Low, lane environment,
+  no code defect) = the lane's first Windows
+  cargo run failed the pre-existing PGP-fixture
+  test through core.autocrlf CRLF conversion,
+  reproduced on the unmodified baseline, fixtures
+  restored from the index, no tracked change.
+  Register review: no score changes; RR-05
+  (20 Critical) + RR-21 (15 High) CONSCIOUSLY
+  RE-ACCEPTED for this cycle, treatments
+  unchanged; SG-1 review: no status changes (no
+  new RPC or network surface). Judgment
+  differential in scoped form (identical evidence
+  under ALLOW / ESCALATE / BLOCK through the
+  shipped CLI). Deployed: daemon sha256
+  3cb5dab8..., backup .bak-v0300, both services
+  active; box E2E 15/16 (sole miss = the standing
+  stale Health-fields harness check, 23rd
+  occurrence; certification proceeded on direct
+  production proof per standing practice).
+  Direct production proof: Health SERVING,
+  0.31.0 @ 6223f274, binary sha == built ==
+  installed, degraded=false, fingerprint == pin
+  dd2cf1a3.... Self-certification via the shipped
+  gm certificate issue: cert-20261118-000061
+  ACTIVE (PASS WITH FINDINGS; evidence = the
+  WO-37 T4 gate verdict, sha256 246e0b8b...),
+  superseding cert-20261117-000060. T4 first
+  exercise: this release's own repo check through
+  the shipped gm repo check against production —
+  repo nrupala/guardian-mesh, commit 6223f274
+  (this release's merge commit), branch main,
+  evidence = the gate verdict — ALLOW; gm repo
+  verify valid with evidence_hash_matches=true;
+  Wright's wire client independently VerifyProof'd
+  the repo proof VALID. Attestation: statement
+  against the merged clone (cross-build Cargo.lock
+  9e8641f0...; git_commit recorded as the merge
+  sha), signed on the box with the production key
+  (signer asserted == pin before install);
+  installed /opt/guardian-mesh/
+  guardian-meshd-0.31.0.attestation.json,
+  gm-attest verify VALID, package fingerprint
+  aa9dac8a.... gm 0.31.0 installed on the box at
+  /usr/local/bin/gm. Pages parity: merged build
+  asset == GitHub Pages asset (index-BMQRLntz.js);
+  public unauthenticated 302. NOT RUN:
+  authenticated panel click-through (GMSI-134);
+  Kali/Arch for this delta (no daemon network
+  surface changed); universal assurance checks
+  (the repo carries no assurance: gate block).
+  v0.31.0 is a RELEASE CANDIDATE (one-week
+  soak; graduates 2026-11-24). **WO-37 stays
+  OPEN — T4 is wired (GM-side); the next
+  touchpoint is T5 (nightly lane) in map order.**
+  WO-33 (P2, NIST AI RMF profile) and WO-27
+  (P2, mediation conformance) follow in pack
+  order; WO-17 stays open for the cluster
+  chaos + CM-8 extensions (WO-27); WO-16
+  stays open for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-192
+(WO-37 T4 gate — repo-release descriptor-binding
+proofs), recorded in Part B above.
