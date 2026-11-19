@@ -1132,5 +1132,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-18T11:23:57-06:00",
     "message": "Merge pull request #130 from nrupala/codetopo-profile-2026-11-18"
+  },
+  {
+    "release": 131,
+    "tag": "release/v131",
+    "previous_tag": "release/v130",
+    "sha": "e4952c133a8a9161b9c3625684e28f426fc66bf2",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-18T23:59:08-06:00",
+    "message": "Merge pull request #131 from nrupala/wright/wo37t5-gm-nightly"
   }
 ]
