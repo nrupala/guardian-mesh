@@ -2076,6 +2076,26 @@ behaviour-proven here.
   same repo after the fact. Probe candidate only: it
   becomes a gate MUST once behaviour-proven here.
 
+- **GMSI-193 — Nightly-build descriptor-binding proofs.**
+  (WO-37 T5 gate, 2026-11-18.) Extends GMSI-182
+  (content), GMSI-191 (tool-call descriptors) and
+  GMSI-192 (repo-release descriptors) to nightly
+  build-lane actions: a nightly proof currently binds
+  only action type, verdict, timestamp and policy
+  version; the pairing of the proof to the work
+  order, the run identifier, and the evidence hash
+  is asserted by the CLI receipt (presenter-
+  declaration class) and checked by recomputation
+  of the evidence hash only — the work-order and
+  run strings themselves are not recomputable from
+  anything in the proof. Guardian Mesh should be
+  able to issue proofs that seal the work order +
+  run + evidence hash inside the proof itself, so
+  a receipt cannot be re-paired to a different run
+  of the same work order after the fact. Probe
+  candidate only: it becomes a gate MUST once
+  behaviour-proven here.
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
@@ -4617,4 +4637,102 @@ hash-only), recorded in Part B above.
 
 Guardian Mesh Spec Inputs filed by this run: GMSI-192
 (WO-37 T4 gate — repo-release descriptor-binding
+proofs), recorded in Part B above.
+
+- 2026-11-18 — **WO-37 touchpoint T5 (nightly
+  lane) WIRED as v0.32.0** (PR #131, merge
+  e4952c13; no pack refresh was needed — the only
+  main advance since the T4 ledger was PR #130's
+  Codetopo profile docs pack, and no Nov-18 gate
+  filing carried new Guardian Mesh Spec Inputs).
+  The gm CLI gains `gm nightly check` / `verify`
+  over a real Evaluate for action type
+  NIGHTLY_BUILD (new default policy rule, allow,
+  priority 50; daemon genesis rule-count assertion
+  13 → 14 in the same change): the CLI computes
+  the evidence SHA-256 itself, context
+  `nightly:<work-order>`, the work order as
+  target, metadata carrying kind/work_order/
+  evidence hash+bytes (and run when given), exit
+  0 iff ALLOW, receipt + sealed proof per check;
+  specs/TOUCHPOINTS.md marks T5 WIRED (GM-side
+  check + operator protocol; mechanical cron/CI
+  invocation and intermediate-step evaluation
+  explicitly NOT WIRED); docs/NIGHTLY_TOUCHPOINT.md
+  states the operator protocol (check before the
+  build dispatch and before merge, proceed only
+  on exit 0, verify after, cite receipt + proof).
+  Built on the laptop lane (OpenCode 1.19.5,
+  fresh clone at main 4d44caed; lane commit tree
+  3eb48287 carried by Wright via bundle + git-data
+  API after the lane could not push — pushed tree
+  == lane tree). The lane's first session ended
+  early on an auto-rejected external-directory
+  permission (temp worktree); a second in-clone
+  session finished and committed (gate finding
+  F4). Wright verified independently: cargo
+  332/332 (baseline 326 + exactly the 6 new
+  tests: 1 policy + 5 gm; the lane's 331/lib-190
+  count was a miscount, F2), WebUI clean,
+  check:releases 34 versions on the stamped tree;
+  Wright behaviour proof 17/17 legs on locally
+  built daemons (ALLOW with receipt hash ==
+  Wright's own SHA-256; proof VALID via gm verify
+  and gm nightly verify; audit carries
+  NIGHTLY_BUILD/ALLOW; tampered evidence and
+  tampered proof fail; usage exit 2 naming the
+  flag; dead endpoint exit 2 with nothing
+  written; ESCALATE exit 1 with receipt; denying
+  bundle fails closed with no ALLOW receipt).
+  Gate: PASS WITH FINDINGS
+  (guardian-mesh-wo37t5-2026-11-18; scanner PASS,
+  cargo audit clean; F1 standing GMSI-143 lag;
+  F2 lane count; F3 CRLF PGP-fixture class; F4
+  lane session). Ship: cross-built aarch64
+  (daemon d372677b...), gm-deploy --binary
+  --webui (backup .bak-v0310; box E2E 15/16, sole
+  miss the standing stale Health-fields harness
+  check, 24th occurrence); production proof
+  Health SERVING 0.32.0 @ e4952c13, binary sha ==
+  built == installed, fingerprint == pin
+  dd2cf1a3...; self-certification via shipped
+  gm certificate issue: cert-20261119-000062
+  ACTIVE (PASS WITH FINDINGS; evidence = the
+  WO-37 T5 gate verdict, sha256 b6e6bca2...),
+  superseding cert-20261118-000061. T5 first
+  exercise: this release's own nightly check
+  through the shipped gm nightly check against
+  production — work order WO-37, run
+  2026-11-18-nightly, evidence = the gate
+  verdict — ALLOW; gm nightly verify valid with
+  evidence_hash_matches=true; Wright's wire
+  client independently VerifyProof'd the nightly
+  proof VALID. Attestation: statement against
+  the merged clone (cross-build Cargo.lock
+  7362dbd2...; git_commit recorded as the merge
+  sha), signed on the box with the production
+  key (signer asserted == pin before install);
+  installed /opt/guardian-mesh/
+  guardian-meshd-0.32.0.attestation.json,
+  gm-attest verify VALID, package fingerprint
+  7d4ab132.... gm 0.32.0 installed on the box at
+  /usr/local/bin/gm. Pages parity: merged build
+  asset == GitHub Pages asset (index-PorQ-f5Z.js);
+  public unauthenticated 302. NOT RUN:
+  authenticated panel click-through (GMSI-134);
+  Kali/Arch for this delta (no daemon network
+  surface changed); universal assurance checks
+  (the repo carries no assurance: gate block).
+  v0.32.0 is a RELEASE CANDIDATE (one-week
+  soak; graduates 2026-11-25). **WO-37 stays
+  OPEN — T5 is wired (GM-side); the next
+  touchpoint is T6 (oc-bridge) in map order.**
+  WO-33 (P2, NIST AI RMF profile) and WO-27
+  (P2, mediation conformance) follow in pack
+  order; WO-17 stays open for the cluster
+  chaos + CM-8 extensions (WO-27); WO-16
+  stays open for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-193
+(WO-37 T5 gate — nightly-build descriptor-binding
 proofs), recorded in Part B above.
