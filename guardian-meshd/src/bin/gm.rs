@@ -120,6 +120,7 @@ async fn run(args: Vec<String>) -> Result<i32, CliError> {
         "publish" => cmd_publish(rest, pre_endpoint).await,
         "conduit" => cmd_conduit(rest, pre_endpoint).await,
         "repo" => cmd_repo(rest, pre_endpoint).await,
+        "nightly" => cmd_nightly(rest, pre_endpoint).await,
         other => Err(CliError::usage(format!("unknown subcommand: {other}"))),
     }
 }
@@ -1379,6 +1380,7 @@ SUBCOMMANDS:
   publish     Check a publish action before posting and verify its receipt
   conduit     Check a Conduit tool call before dispatch and verify its receipt
   repo        Check a fleet-repo release before merge/release and verify its receipt
+  nightly     Check a nightly build-lane action before it proceeds and verify its receipt
 
 GLOBAL OPTIONS:
   --endpoint <url>   Daemon gRPC endpoint (default http://127.0.0.1:50051;
@@ -3078,6 +3080,495 @@ OPTIONS:
   --evidence-file <p>  Evidence file to hash-compare against the receipt
   --endpoint <url>     Daemon gRPC endpoint (default http://127.0.0.1:50051;
                        GM_ENDPOINT when the flag is absent)
+   --help               Show this help"#
+        .to_string()
+}
+
+#[derive(Debug)]
+enum NightlyAction {
+    Check(NightlyCheckArgs),
+    Verify(NightlyVerifyArgs),
+}
+
+#[derive(Debug, Clone)]
+struct NightlyCheckArgs {
+    work_order: String,
+    run: Option<String>,
+    evidence_file: PathBuf,
+    session_file: PathBuf,
+    proof_out: Option<PathBuf>,
+    receipt_out: Option<PathBuf>,
+    endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct NightlyVerifyArgs {
+    receipt_file: PathBuf,
+    proof_file: Option<PathBuf>,
+    evidence_file: Option<PathBuf>,
+    endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct NightlyReceipt {
+    receipt_version: u32,
+    kind: String,
+    work_order: String,
+    run: Option<String>,
+    evidence_sha256: String,
+    evidence_bytes: u64,
+    verdict: String,
+    reason: String,
+    simulation: bool,
+    proof: Value,
+    proof_file: String,
+}
+
+fn default_nightly_proof_path(session_file: &Path) -> PathBuf {
+    match session_file.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent.join("gm-nightly-proof.json"),
+        _ => PathBuf::from("gm-nightly-proof.json"),
+    }
+}
+
+fn nightly_check_exit(verdict: &str) -> i32 {
+    match verdict {
+        "ALLOW" => 0,
+        _ => 1,
+    }
+}
+
+fn parse_nightly_action(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<NightlyAction, CliError> {
+    let action = match args.first() {
+        Some(action) => action.as_str(),
+        None => {
+            return Err(CliError::usage(
+                "nightly requires an action: check or verify",
+            ))
+        }
+    };
+    let rest = &args[1..];
+    match action {
+        "check" => Ok(NightlyAction::Check(parse_nightly_check_args(
+            rest,
+            pre_endpoint,
+        )?)),
+        "verify" => Ok(NightlyAction::Verify(parse_nightly_verify_args(
+            rest,
+            pre_endpoint,
+        )?)),
+        "--help" | "-h" => Err(CliError::help(nightly_help())),
+        other => Err(CliError::usage(format!(
+            "unknown nightly action: {other} (expected check or verify)"
+        ))),
+    }
+}
+
+fn parse_nightly_check_args(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<NightlyCheckArgs, CliError> {
+    let mut work_order = None;
+    let mut run = None;
+    let mut evidence_file = None;
+    let mut session_file = default_session_path();
+    let mut proof_out = None;
+    let mut receipt_out = None;
+    let mut endpoint = pre_endpoint;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--work-order" => work_order = Some(next_value(args, &mut i, "--work-order")?),
+            "--run" => run = Some(next_value(args, &mut i, "--run")?),
+            "--evidence-file" => {
+                evidence_file = Some(PathBuf::from(next_value(args, &mut i, "--evidence-file")?))
+            }
+            "--session-file" => {
+                session_file = PathBuf::from(next_value(args, &mut i, "--session-file")?)
+            }
+            "--proof-out" => {
+                proof_out = Some(PathBuf::from(next_value(args, &mut i, "--proof-out")?))
+            }
+            "--receipt-out" => {
+                receipt_out = Some(PathBuf::from(next_value(args, &mut i, "--receipt-out")?))
+            }
+            "--endpoint" => endpoint = Some(next_value(args, &mut i, "--endpoint")?),
+            "--help" | "-h" => return Err(CliError::help(nightly_check_help())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(NightlyCheckArgs {
+        work_order: work_order.ok_or_else(|| CliError::usage("--work-order is required"))?,
+        run,
+        evidence_file: evidence_file
+            .ok_or_else(|| CliError::usage("--evidence-file is required"))?,
+        session_file,
+        proof_out,
+        receipt_out,
+        endpoint,
+    })
+}
+
+fn parse_nightly_verify_args(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<NightlyVerifyArgs, CliError> {
+    let mut receipt_file = PathBuf::from("gm-nightly-receipt.json");
+    let mut proof_file = None;
+    let mut evidence_file = None;
+    let mut endpoint = pre_endpoint;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--receipt-file" => {
+                receipt_file = PathBuf::from(next_value(args, &mut i, "--receipt-file")?)
+            }
+            "--proof-file" => {
+                proof_file = Some(PathBuf::from(next_value(args, &mut i, "--proof-file")?))
+            }
+            "--evidence-file" => {
+                evidence_file = Some(PathBuf::from(next_value(args, &mut i, "--evidence-file")?))
+            }
+            "--endpoint" => endpoint = Some(next_value(args, &mut i, "--endpoint")?),
+            "--help" | "-h" => return Err(CliError::help(nightly_verify_help())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(NightlyVerifyArgs {
+        receipt_file,
+        proof_file,
+        evidence_file,
+        endpoint,
+    })
+}
+
+async fn cmd_nightly(args: &[String], pre_endpoint: Option<String>) -> Result<i32, CliError> {
+    let action = match parse_nightly_action(args, pre_endpoint) {
+        Ok(action) => action,
+        Err(CliError::Usage(message)) => {
+            return Err(CliError::usage(format!("{message}\n\n{}", nightly_help())))
+        }
+        Err(error) => return Err(error),
+    };
+    match action {
+        NightlyAction::Check(parsed) => cmd_nightly_check(parsed).await,
+        NightlyAction::Verify(parsed) => cmd_nightly_verify(parsed).await,
+    }
+}
+
+async fn cmd_nightly_check(parsed: NightlyCheckArgs) -> Result<i32, CliError> {
+    let evidence_bytes_read = fs::read(&parsed.evidence_file).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            CliError::runtime(format!(
+                "evidence file not found: {}",
+                parsed.evidence_file.display()
+            ))
+        } else {
+            CliError::runtime(format!(
+                "cannot read evidence file {}: {e}",
+                parsed.evidence_file.display()
+            ))
+        }
+    })?;
+    let evidence_sha256 = sha256_hex(&evidence_bytes_read);
+    let evidence_bytes = evidence_bytes_read.len() as u64;
+
+    let session = load_required_session(&parsed.session_file)?;
+    ensure_session_fresh(&session)?;
+    let endpoint = resolve_endpoint(parsed.endpoint.clone(), Some(&session));
+
+    let seed_bytes = hex::decode(&session.signing_seed).map_err(|_| {
+        CliError::runtime(format!(
+            "session file {} has an invalid signing seed; run `gm handshake` again",
+            parsed.session_file.display()
+        ))
+    })?;
+    let seed = ml_dsa::Seed::try_from(seed_bytes.as_slice()).map_err(|_| {
+        CliError::runtime(format!(
+            "session file {} has a signing seed that is not 32 bytes; run `gm handshake` again",
+            parsed.session_file.display()
+        ))
+    })?;
+    let signing_key = SigningKey::<MlDsa65>::from_seed(&seed);
+
+    let mut metadata = BTreeMap::new();
+    metadata.insert("evidence_bytes".to_string(), evidence_bytes.to_string());
+    metadata.insert("evidence_sha256".to_string(), evidence_sha256.clone());
+    metadata.insert("kind".to_string(), "nightly".to_string());
+    metadata.insert("work_order".to_string(), parsed.work_order.clone());
+    if let Some(run) = parsed.run.as_ref() {
+        metadata.insert("run".to_string(), run.clone());
+    }
+
+    let context = format!("nightly:{}", parsed.work_order);
+    let payload = build_payload("NIGHTLY_BUILD", &context, &parsed.work_order, &metadata);
+    let sealed = SealedEnvelope::new(
+        payload.clone(),
+        b"guardian_mesh.ActionDescriptor".to_vec(),
+        &signing_key,
+    );
+    let envelope = proto_from_sealed(&sealed);
+
+    let session_key = hex::decode(&session.session_key).map_err(|_| {
+        CliError::runtime(format!(
+            "session file {} has an invalid session key; run `gm handshake` again",
+            parsed.session_file.display()
+        ))
+    })?;
+    let mut mac = HmacSha256::new_from_slice(&session_key)
+        .map_err(|e| CliError::runtime(format!("failed to initialise HMAC: {e}")))?;
+    mac.update(&payload);
+    let hmac_tag = mac.finalize().into_bytes().to_vec();
+
+    let request = EvaluateRequest {
+        firewalled: Some(FirewalledRequest {
+            envelope: Some(envelope),
+            source_enclave: "gm-cli".to_string(),
+            handshake_session: session.session_id.clone(),
+            hmac_tag,
+        }),
+        action: Some(ActionDescriptor {
+            action_type: "NIGHTLY_BUILD".to_string(),
+            context: context.clone(),
+            target: parsed.work_order.clone(),
+            metadata: metadata.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        }),
+    };
+
+    let mut client = connect(&endpoint).await?;
+    let response = client
+        .evaluate(Request::new(request))
+        .await
+        .map_err(|e| CliError::runtime(format!("evaluate RPC failed: {e}")))?
+        .into_inner();
+
+    let proof_envelope = response.proof_envelope.as_ref().ok_or_else(|| {
+        CliError::runtime("evaluate response did not include a proof envelope")
+    })?;
+    let proof_path = parsed
+        .proof_out
+        .clone()
+        .unwrap_or_else(|| default_nightly_proof_path(&parsed.session_file));
+    save_proof(&proof_path, proof_envelope)?;
+
+    let proof = match response.proof.as_ref() {
+        Some(proof) => json!({
+            "action_id": proof.action_id.clone(),
+            "verdict": proof.verdict.clone(),
+            "timestamp": proof.timestamp,
+            "policy_version": proof.policy_version,
+            "issuing_node": proof.issuing_node.clone(),
+        }),
+        None => Value::Null,
+    };
+    let receipt_path = parsed
+        .receipt_out
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("gm-nightly-receipt.json"));
+    let receipt = NightlyReceipt {
+        receipt_version: 1,
+        kind: "nightly".to_string(),
+        work_order: parsed.work_order.clone(),
+        run: parsed.run.clone(),
+        evidence_sha256: evidence_sha256.clone(),
+        evidence_bytes,
+        verdict: response.verdict.clone(),
+        reason: response.reason.clone(),
+        simulation: false,
+        proof: proof.clone(),
+        proof_file: proof_path.display().to_string(),
+    };
+    write_json(&receipt_path, &receipt, false)?;
+
+    let mut out = serde_json::to_value(&receipt).map_err(|e| {
+        CliError::runtime(format!("failed to serialize nightly receipt: {e}"))
+    })?;
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert(
+            "receipt_file".to_string(),
+            Value::String(receipt_path.display().to_string()),
+        );
+    }
+    print_json(&out);
+    Ok(nightly_check_exit(&response.verdict))
+}
+
+async fn cmd_nightly_verify(parsed: NightlyVerifyArgs) -> Result<i32, CliError> {
+    let bytes = fs::read(&parsed.receipt_file).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            CliError::runtime(format!(
+                "receipt file not found: {}",
+                parsed.receipt_file.display()
+            ))
+        } else {
+            CliError::runtime(format!(
+                "cannot read receipt file {}: {e}",
+                parsed.receipt_file.display()
+            ))
+        }
+    })?;
+    let receipt_value: Value = serde_json::from_slice(&bytes).map_err(|e| {
+        CliError::runtime(format!(
+            "invalid receipt file {}: {e}",
+            parsed.receipt_file.display()
+        ))
+    })?;
+    let evidence_sha256 = receipt_value
+        .get("evidence_sha256")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            CliError::runtime(format!(
+                "receipt file {} missing evidence_sha256 field",
+                parsed.receipt_file.display()
+            ))
+        })?
+        .to_string();
+    let receipt_proof_file = receipt_value
+        .get("proof_file")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            CliError::runtime(format!(
+                "receipt file {} missing proof_file field",
+                parsed.receipt_file.display()
+            ))
+        })?
+        .to_string();
+    let verdict = receipt_value
+        .get("verdict")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let proof_path = parsed
+        .proof_file
+        .unwrap_or_else(|| PathBuf::from(receipt_proof_file));
+    let proof_file = load_proof(&proof_path)?;
+    let envelope = proto_from_proof_file(&proof_file)?;
+
+    let endpoint = resolve_endpoint(parsed.endpoint, None);
+    let mut client = connect(&endpoint).await?;
+    let response = client
+        .verify_proof(Request::new(VerifyProofRequest {
+            proof_envelope: Some(envelope),
+        }))
+        .await
+        .map_err(|e| CliError::runtime(format!("verify proof RPC failed: {e}")))?
+        .into_inner();
+
+    let evidence_hash_matches: Value = if let Some(path) = parsed.evidence_file.as_ref() {
+        let ebytes = fs::read(path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                CliError::runtime(format!("evidence file not found: {}", path.display()))
+            } else {
+                CliError::runtime(format!("cannot read evidence file {}: {e}", path.display()))
+            }
+        })?;
+        let recomputed = sha256_hex(&ebytes);
+        Value::Bool(recomputed == evidence_sha256)
+    } else {
+        Value::Null
+    };
+
+    let out = json!({
+        "valid": response.valid,
+        "reason": response.reason.clone(),
+        "verdict": verdict,
+        "evidence_hash_matches": evidence_hash_matches,
+        "evidence_sha256": evidence_sha256,
+    });
+    print_json(&out);
+    let hash_bad = matches!(evidence_hash_matches, Value::Bool(false));
+    Ok(if response.valid && !hash_bad { 0 } else { 1 })
+}
+
+fn nightly_help() -> String {
+    r#"gm nightly: nightly build-lane touchpoint (WO-37 / v0.32.0)
+
+USAGE:
+  gm nightly <action> [options]
+
+ACTIONS:
+  check    Check a nightly build-lane action before it proceeds and write a receipt
+  verify   Re-check a saved nightly proof and receipt evidence hash
+
+Exit 0 is the only outcome under which the caller may proceed with the
+build dispatch or merge; exit 1 and exit 2 both mean do not proceed.
+
+Run `gm nightly check --help` or `gm nightly verify --help` for details."#
+        .to_string()
+}
+
+fn nightly_check_help() -> String {
+    r#"gm nightly check: evaluate a nightly build-lane action before it proceeds
+
+USAGE:
+  gm nightly check --work-order <id> --evidence-file <path> [--run <run-id>]
+                   [--session-file <path>] [--proof-out <path>]
+                   [--receipt-out <path>] [--endpoint <url>]
+
+Reads the evidence file, computes its SHA-256 itself, and calls a real
+Evaluate (never Simulate) for action_type NIGHTLY_BUILD with context
+"nightly:<work-order>", the work order as target, and metadata carrying
+kind="nightly", work_order, evidence_sha256, evidence_bytes and run when given.
+This checks a build dispatch or a merge step in the nightly program before it
+proceeds. Saves the sealed proof and a receipt pairing the proof with the
+evidence hash, work order and run. This command does not dispatch the build or
+perform the merge itself. Simulation is never a nightly check.
+
+Defaults: --proof-out gm-nightly-proof.json beside the session file,
+--receipt-out gm-nightly-receipt.json in the current directory.
+
+EXIT CODES:
+  0  verdict ALLOW: the receipt was written and the caller may proceed with
+     the build dispatch or merge; this is the only outcome under which it may
+     do so.
+  1  a verdict response arrived and verdict is not ALLOW (BLOCK/THROTTLE/
+     ESCALATE): the receipt is still written naming the verdict; do not proceed.
+  2  usage, session, transport or RPC error (including a pre-proof block
+     delivered as a permission-denied RPC error): nothing is written; do not
+     proceed.
+
+OPTIONS:
+  --work-order <id>    Work order being gated (required)
+  --run <run-id>       Optional nightly run id, recorded in metadata and receipt
+  --evidence-file <p>  Evidence file to be hashed (required)
+  --session-file <p>   Session file path (default $HOME/.guardian-mesh/gm-session.json)
+  --proof-out <p>      Proof file path (default gm-nightly-proof.json beside session)
+  --receipt-out <p>    Receipt file path (default gm-nightly-receipt.json)
+  --endpoint <url>     Daemon gRPC endpoint (default from session file, then
+                       http://127.0.0.1:50051; GM_ENDPOINT when the flag is absent)
+  --help               Show this help"#
+        .to_string()
+}
+
+fn nightly_verify_help() -> String {
+    r#"gm nightly verify: verify a nightly proof and receipt evidence hash
+
+USAGE:
+  gm nightly verify [--receipt-file <path>] [--proof-file <path>]
+                    [--evidence-file <path>] [--endpoint <url>]
+
+Loads the receipt and proof, calls VerifyProof, and optionally recomputes
+the SHA-256 of --evidence-file and compares it to the receipt. This checks
+the proof with the daemon and the receipt's evidence-hash pairing by
+recomputation; it does not require a session.
+
+EXIT CODES:
+  0  proof valid and evidence_hash_matches is not false.
+  1  proof invalid or evidence hash mismatch.
+  2  usage, transport, missing/malformed receipt or proof.
+
+OPTIONS:
+  --receipt-file <p>   Receipt file (default gm-nightly-receipt.json)
+  --proof-file <p>     Proof file (default: receipt's proof_file)
+  --evidence-file <p>  Evidence file to hash-compare against the receipt
+  --endpoint <url>     Daemon gRPC endpoint (default http://127.0.0.1:50051;
+                       GM_ENDPOINT when the flag is absent)
   --help               Show this help"#
         .to_string()
 }
@@ -3741,6 +4232,122 @@ mod tests {
         };
         let value = serde_json::to_value(&absent_branch).unwrap();
         assert_eq!(value["branch"], Value::Null);
+        let _ = fs::remove_file(&path);
+    }
+
+    fn nightly_check_args() -> Vec<String> {
+        [
+            "--work-order",
+            "WO-37-T5",
+            "--evidence-file",
+            "evidence.json",
+        ]
+        .iter()
+        .map(|v| v.to_string())
+        .collect()
+    }
+
+    #[test]
+    fn nightly_check_requires_work_order_and_evidence_file() {
+        for flag in ["--work-order", "--evidence-file"] {
+            let args = nightly_check_args();
+            let mut filtered = Vec::new();
+            let mut i = 0;
+            while i < args.len() {
+                if args[i] == flag {
+                    i += 2;
+                    continue;
+                }
+                filtered.push(args[i].clone());
+                i += 1;
+            }
+            let err = parse_nightly_check_args(&filtered, None).unwrap_err();
+            assert_eq!(err.code(), 2, "missing {flag} should exit 2");
+            assert!(matches!(&err, CliError::Usage(_)));
+            assert!(
+                err.message().contains(flag),
+                "error should name {flag}: {}",
+                err.message()
+            );
+        }
+    }
+
+    #[test]
+    fn nightly_check_rejects_unknown_flag_and_applies_defaults() {
+        let mut args = nightly_check_args();
+        args.push("--nope".to_string());
+        let err = parse_nightly_check_args(&args, None).unwrap_err();
+        assert_eq!(err.code(), 2);
+        assert!(matches!(&err, CliError::Usage(_)));
+        assert!(err.message().contains("--nope"));
+
+        let parsed = parse_nightly_check_args(&nightly_check_args(), None).unwrap();
+        assert_eq!(parsed.work_order, "WO-37-T5");
+        assert_eq!(parsed.evidence_file, PathBuf::from("evidence.json"));
+        assert_eq!(parsed.run, None);
+        assert_eq!(parsed.proof_out, None);
+        assert_eq!(parsed.receipt_out, None);
+
+        let mut with_run = nightly_check_args();
+        with_run.extend(["--run".to_string(), "nightly-1".to_string()]);
+        let parsed = parse_nightly_check_args(&with_run, None).unwrap();
+        assert_eq!(parsed.run.as_deref(), Some("nightly-1"));
+
+        let verify = parse_nightly_verify_args(&[], None).unwrap();
+        assert_eq!(
+            verify.receipt_file,
+            PathBuf::from("gm-nightly-receipt.json")
+        );
+        assert_eq!(verify.proof_file, None);
+        assert_eq!(verify.evidence_file, None);
+    }
+
+    #[test]
+    fn nightly_action_rejects_unknown() {
+        let err = parse_nightly_action(&["frobnicate".to_string()], None).unwrap_err();
+        assert_eq!(err.code(), 2);
+        assert!(err.message().contains("check"));
+        assert!(err.message().contains("verify"));
+    }
+
+    #[test]
+    fn nightly_check_exit_mapping() {
+        assert_eq!(nightly_check_exit("ALLOW"), 0);
+        assert_eq!(nightly_check_exit("BLOCK"), 1);
+        assert_eq!(nightly_check_exit("THROTTLE"), 1);
+        assert_eq!(nightly_check_exit("ESCALATE"), 1);
+        assert_eq!(nightly_check_exit("WHATEVER"), 1);
+    }
+
+    #[test]
+    fn nightly_receipt_round_trip_preserves_fields() {
+        let receipt = NightlyReceipt {
+            receipt_version: 1,
+            kind: "nightly".to_string(),
+            work_order: "WO-37-T5".to_string(),
+            run: Some("nightly-1".to_string()),
+            evidence_sha256: sha256_hex(b"hello"),
+            evidence_bytes: 5,
+            verdict: "ALLOW".to_string(),
+            reason: "ok".to_string(),
+            simulation: false,
+            proof: json!({"action_id":"NIGHTLY_BUILD","verdict":"ALLOW","timestamp":1,"policy_version":1,"issuing_node":"n"}),
+            proof_file: "gm-nightly-proof.json".to_string(),
+        };
+        let path = unique_temp_file("nightly-receipt");
+        write_json(&path, &receipt, false).unwrap();
+        let bytes = fs::read(&path).unwrap();
+        let loaded: NightlyReceipt = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(loaded, receipt);
+
+        let absent_run = NightlyReceipt {
+            run: None,
+            ..receipt
+        };
+        let value = serde_json::to_value(&absent_run).unwrap();
+        assert_eq!(value["run"], Value::Null);
+        let reparsed: NightlyReceipt = serde_json::from_value(value).unwrap();
+        assert_eq!(reparsed.run, None);
         let _ = fs::remove_file(&path);
     }
 

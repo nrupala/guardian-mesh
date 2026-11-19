@@ -15,7 +15,9 @@ receipt through real Evaluate and VerifyProof. v0.30.0 adds
 `gm conduit` (WO-37, T3): check a Conduit tool call before dispatch and verify
 its receipt through real Evaluate and VerifyProof. v0.31.0 adds
 `gm repo` (WO-37, T4): check a fleet-repo release before merge/release and verify
-its receipt through real Evaluate and VerifyProof.
+its receipt through real Evaluate and VerifyProof. v0.32.0 adds
+`gm nightly` (WO-37, T5): check a nightly build-lane action before it proceeds
+and verify its receipt through real Evaluate and VerifyProof.
 
 ## What the CLI is
 
@@ -732,6 +734,121 @@ verification. This wires the check around a repo release: it does not merge,
 push or release anything, does not prove the code in the commit is good, and
 does not by itself integrate Guardian Mesh into any repo's CI (follow-on work in
 each repo).
+
+## `gm nightly`
+
+Nightly build-lane touchpoint (WO-37, v0.32.0). Checks a build dispatch or a
+merge step in the nightly program before it proceeds and writes a sealed-proof
+receipt; verifies the proof and the receipt's evidence hash. `check` needs a
+handshake session and calls a real `Evaluate` (never `Simulate`); `verify` needs
+no session. This command does not dispatch builds, perform merges, or call the
+nightly scheduler.
+
+### `gm nightly check`
+
+```bash
+gm nightly check --work-order <id> --evidence-file <path> [--run <run-id>] \
+  [--session-file <path>] [--proof-out <path>] \
+  [--receipt-out <path>] [--endpoint <url>]
+```
+
+Required: `--work-order`, `--evidence-file`. Optional: `--run`, `--session-file`
+(default `$HOME/.guardian-mesh/gm-session.json`), `--proof-out` (default
+`gm-nightly-proof.json` beside the session file), `--receipt-out` (default
+`gm-nightly-receipt.json` in the current directory), `--endpoint`.
+
+```bash
+gm nightly check --work-order <work-order-id> --evidence-file ./run-plan.json --run <run-id>
+```
+
+The CLI reads the evidence file and computes its SHA-256 and byte length itself;
+the operator never types a hash. It calls a real `Evaluate` with `action_type`
+`NIGHTLY_BUILD`, `context` `nightly:<work-order>`, `target` `<work-order>`, and
+metadata `kind` = `nightly`, `work_order`, `evidence_sha256` (hex string),
+`evidence_bytes` (decimal string) and `run` when given.
+
+On a verdict response the sealed proof is saved and a receipt (not private) is
+written pairing the proof with the evidence hash, work order and run. The printed
+JSON is the receipt with an added `receipt_file` field:
+
+```json
+{
+  "receipt_version": 1,
+  "kind": "nightly",
+  "work_order": "<work-order-id>",
+  "run": "<run-id>",
+  "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "evidence_bytes": 0,
+  "verdict": "ALLOW",
+  "reason": "...",
+  "simulation": false,
+  "proof": {
+    "action_id": "NIGHTLY_BUILD",
+    "verdict": "ALLOW",
+    "timestamp": 1790000000,
+    "policy_version": 1,
+    "issuing_node": "node-..."
+  },
+  "proof_file": ".../gm-nightly-proof.json",
+  "receipt_file": "gm-nightly-receipt.json"
+}
+```
+
+`run` is `null` in the receipt when `--run` is absent.
+
+**Exit codes:** `0` iff the verdict is `ALLOW` (the caller may proceed with that
+build dispatch or merge). `1` iff a verdict response arrived and the verdict is
+not `ALLOW` (`BLOCK`, `THROTTLE`, `ESCALATE`) - the receipt is still written naming
+the verdict; do not proceed. `2` on usage, session, transport or RPC error,
+including a pre-proof block delivered as a gRPC `permission_denied` error -
+nothing is written (no proof, no receipt, existing files at those paths are not
+overwritten); do not proceed. **Exit 0 is the only outcome under which the caller
+may proceed with the action; exit 1 and exit 2 both mean do not proceed.**
+
+### `gm nightly verify`
+
+```bash
+gm nightly verify [--receipt-file <path>] [--proof-file <path>] \
+  [--evidence-file <path>] [--endpoint <url>]
+```
+
+Reads the receipt (default `gm-nightly-receipt.json`) and proof (default: the
+receipt's `proof_file`, or `--proof-file`), calls `VerifyProof`, and, when
+`--evidence-file` is given, recomputes its SHA-256 and compares it to the
+receipt's `evidence_sha256` (`evidence_hash_matches`: `true`/`false`, or `null`
+when no file is given). Needs no session.
+
+```bash
+gm nightly verify --evidence-file ./run-plan.json
+```
+
+```json
+{
+  "valid": true,
+  "reason": "ML-DSA-65 signature verified",
+  "verdict": "ALLOW",
+  "evidence_hash_matches": true,
+  "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+}
+```
+
+**Exit codes:** `0` iff `valid` is true and `evidence_hash_matches` is not
+`false`. `1` iff the daemon reports the proof invalid or the evidence hash
+mismatches. `2` on usage, transport, or missing/malformed receipt or proof.
+
+### Honesty notes
+
+`check` is a real `Evaluate` only; simulation is never a nightly check. An action
+blocked before proof sealing arrives as an RPC error, so `check` exits 2 and
+writes no receipt. The daemon's proof binds the action type, verdict, timestamp
+and policy version; the pairing of the proof to the work order, run and evidence
+hash is receipt-asserted (presenter-declaration class, GMSI-182) and checked by
+recomputation - `verify --evidence-file` recomputes the hash of the presented
+evidence and compares it to the receipt, so swapped evidence fails verification.
+This wires the operator-run check before a build dispatch or a merge: it does
+not dispatch builds or merge anything, does not evaluate intermediate lane steps
+(one check per build/merge action), and does not wire cron/CI to call the check
+(follow-on work). See [Nightly Touchpoint](NIGHTLY_TOUCHPOINT.md).
 
 ## Session file
 

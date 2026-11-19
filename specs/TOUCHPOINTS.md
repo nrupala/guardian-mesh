@@ -3,7 +3,7 @@
 
 # Guardian Mesh — Touchpoint Coverage Register (WO-37)
 
-**Work order:** WO-37 (T1 wired v0.28.0; T2 wired v0.29.0; T3 wired v0.30.0; T4 wired v0.31.0).
+**Work order:** WO-37 (T1 wired v0.28.0; T2 wired v0.29.0; T3 wired v0.30.0; T4 wired v0.31.0; T5 wired v0.32.0).
 **Owner's directive:** 2026-10-16 — Guardian Mesh connected at every touchpoint.
 
 The map of record is the goal file `touchpoint-wiring-map.md`, which names eight
@@ -26,7 +26,7 @@ only its issuer can check.
 | T2 Publishing pipeline | Public content in the owner's name (AIMLDS blog/papers pipeline) | `gm publish check` before posting (real Evaluate, action_type PUBLISH) + the sealed proof and receipt after it; `gm publish verify` re-checks proof and content hash | WIRED (v0.29.0) |
 | T3 Conduit | Conduit fleet traffic and its verdicts | `gm conduit check` before dispatch (real Evaluate, action_type TOOL_CALL, per-tenant context) + the sealed proof and receipt after it; `gm conduit verify` re-checks proof and args hash | WIRED (v0.30.0) |
 | T4 Fleet repos | Per-repository release evidence and certificates | `gm repo check` before a repo merge/release (real Evaluate, action_type REPO_RELEASE, per-repo context) + the sealed proof and receipt after it; `gm repo verify` re-checks proof and evidence hash | WIRED (v0.31.0) |
-| T5 Nightly lane | Nightly run verdicts and the proofs after each action | Process live and gated | PARTIAL (process live and gated; proof formalization is the remaining build) |
+| T5 Nightly lane | Nightly build-lane verdicts and the proofs after each action | `gm nightly check` before a build/merge action (real Evaluate, action_type NIGHTLY_BUILD, per-work-order context) + sealed proof and receipt after it; `gm nightly verify` re-checks proof and evidence hash | WIRED (v0.32.0) |
 | T6 oc-bridge | Internal bridge actions and their verdicts | Internal; rides after T3 | NAMED, NOT WIRED (internal, rides after T3) |
 | T7 MyMilo loop | Internal loop actions and their verdicts | Internal | NAMED, NOT WIRED (internal) |
 | T8 GM's own surfaces | Guardian Mesh's own panel and release-record surfaces | Panel live; release log is WO-9 | PARTIAL (panel live; release log WO-9) |
@@ -84,6 +84,26 @@ and compares it to the receipt, so swapped evidence fails verification. A releas
 blocked before proof sealing returns no proof and the CLI writes no receipt:
 exit 2, nothing merged or released. Simulation is never a repo check.
 
+### T5 Nightly lane - what is wired, and what this does not add
+
+The verdict before the action is a real Evaluate of a NIGHTLY_BUILD action whose
+metadata carries the CLI-computed SHA-256 of the exact evidence file, the work
+order and the run when given; the daemon seals the verdict into its hash-chained
+audit trail and returns a sealed proof; the receipt pairs that proof with the
+evidence hash, work order and run. This wires the GM-side check + protocol the
+nightly operator runs before a build dispatch and before a merge. It does NOT
+automate the scheduler/cron invocation itself - mechanically wiring the cron/CI
+to call `gm nightly check` is follow-on work; the operator runs the check per
+protocol. It does NOT evaluate the lane's intermediate steps: one check per
+build/merge action, not per command. The daemon's proof binds action type,
+verdict, timestamp and policy version; the pairing of the proof to the
+work-order/run/evidence hash is receipt-asserted (presenter-declaration class,
+GMSI-182) and checked by recomputation - `gm nightly verify --evidence-file`
+recomputes the hash of the evidence presented and compares it to the receipt, so
+swapped evidence fails verification. An action blocked before proof sealing
+returns no proof and the CLI writes no receipt: exit 2, nothing dispatched or
+merged. Simulation is never a nightly check.
+
 ## Rules
 
 - Coverage is the metric: each touchpoint is wired, named-unwired, or
@@ -93,6 +113,10 @@ exit 2, nothing merged or released. Simulation is never a repo check.
   per run, in map order.
 
 ## Change log
+
+### v0.32.0
+
+- T5 wired. `gm nightly check` records a real Evaluate verdict for action_type NIGHTLY_BUILD (with the CLI-computed evidence SHA-256 in metadata, alongside the work order and optional run) and, on a verdict response, saves the sealed proof and a receipt pairing it to the evidence hash, work order and run; `gm nightly verify` re-checks the proof and the evidence hash by recomputation. This wires the operator-run check before a build dispatch or merge only: cron/CI scheduling of the check, and evaluation of intermediate lane steps, are explicitly not wired (follow-on work, named here as NOT WIRED).
 
 ### v0.31.0
 

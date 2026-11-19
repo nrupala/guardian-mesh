@@ -193,6 +193,7 @@ impl PolicyEngine {
             ("MODEL_LOAD", true, 50),
             ("PUBLISH", true, 50),
             ("REPO_RELEASE", true, 50),
+            ("NIGHTLY_BUILD", true, 50),
         ];
 
         let mut rules = Vec::new();
@@ -387,6 +388,12 @@ mod tests {
     fn defaults_allow_repo_release() {
         let engine = PolicyEngine::new();
         assert!(engine.decide("REPO_RELEASE"));
+    }
+
+    #[test]
+    fn defaults_allow_nightly_build() {
+        let engine = PolicyEngine::new();
+        assert!(engine.decide("NIGHTLY_BUILD"));
     }
 
     #[test]
