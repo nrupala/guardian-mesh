@@ -3,7 +3,7 @@
 
 # Guardian Mesh — Touchpoint Coverage Register (WO-37)
 
-**Work order:** WO-37 (T1 wired v0.28.0; T2 wired v0.29.0; T3 wired v0.30.0; T4 wired v0.31.0; T5 wired v0.32.0).
+**Work order:** WO-37 (T1 wired v0.28.0; T2 wired v0.29.0; T3 wired v0.30.0; T4 wired v0.31.0; T5 wired v0.32.0; T6 wired v0.33.0).
 **Owner's directive:** 2026-10-16 — Guardian Mesh connected at every touchpoint.
 
 The map of record is the goal file `touchpoint-wiring-map.md`, which names eight
@@ -27,7 +27,7 @@ only its issuer can check.
 | T3 Conduit | Conduit fleet traffic and its verdicts | `gm conduit check` before dispatch (real Evaluate, action_type TOOL_CALL, per-tenant context) + the sealed proof and receipt after it; `gm conduit verify` re-checks proof and args hash | WIRED (v0.30.0) |
 | T4 Fleet repos | Per-repository release evidence and certificates | `gm repo check` before a repo merge/release (real Evaluate, action_type REPO_RELEASE, per-repo context) + the sealed proof and receipt after it; `gm repo verify` re-checks proof and evidence hash | WIRED (v0.31.0) |
 | T5 Nightly lane | Nightly build-lane verdicts and the proofs after each action | `gm nightly check` before a build/merge action (real Evaluate, action_type NIGHTLY_BUILD, per-work-order context) + sealed proof and receipt after it; `gm nightly verify` re-checks proof and evidence hash | WIRED (v0.32.0) |
-| T6 oc-bridge | Internal bridge actions and their verdicts | Internal; rides after T3 | NAMED, NOT WIRED (internal, rides after T3) |
+| T6 oc-bridge | Internal bridge actions and their verdicts | `gm bridge check` before a bridge action executes (real Evaluate, action_type BRIDGE_ACTION, per-seat context) + sealed proof and receipt after it; `gm bridge verify` re-checks proof and action hash | WIRED (v0.33.0) |
 | T7 MyMilo loop | Internal loop actions and their verdicts | Internal | NAMED, NOT WIRED (internal) |
 | T8 GM's own surfaces | Guardian Mesh's own panel and release-record surfaces | Panel live; release log is WO-9 | PARTIAL (panel live; release log WO-9) |
 
@@ -104,6 +104,27 @@ swapped evidence fails verification. An action blocked before proof sealing
 returns no proof and the CLI writes no receipt: exit 2, nothing dispatched or
 merged. Simulation is never a nightly check.
 
+### T6 oc-bridge - what is wired, and what this does not add
+
+The verdict before the action is a real Evaluate of a BRIDGE_ACTION action whose
+metadata carries the CLI-computed SHA-256 of the exact bridge action file, the
+seat, the action bytes and the action id when given; the daemon seals the verdict
+into its hash-chained audit trail and returns a sealed proof; the receipt pairs
+that proof with the action hash, seat and action id. This wires the GM-side check
++ protocol an operator (or a bridge-side caller) runs before the bridge executes
+an action - a letter, task or mailbox action carried for a seat. It does NOT
+integrate the oc-bridge service itself: mechanically wiring the bridge's dispatch
+path to call `gm bridge check` is follow-on work in the bridge's own deploy,
+named here as NOT WIRED. It does NOT evaluate individual tool calls inside a
+checked bridge action: one check per bridge action, not per tool call. The
+daemon's proof binds action type, verdict, timestamp and policy version; the
+pairing of the proof to the seat, action id and action hash is receipt-asserted
+(presenter-declaration class, GMSI-182) and checked by recomputation -
+`gm bridge verify --action-file` recomputes the hash of the action file presented
+and compares it to the receipt, so a swapped action fails verification. An action
+blocked before proof sealing returns no proof and the CLI writes no receipt:
+exit 2, nothing executed. Simulation is never a bridge check.
+
 ## Rules
 
 - Coverage is the metric: each touchpoint is wired, named-unwired, or
@@ -113,6 +134,10 @@ merged. Simulation is never a nightly check.
   per run, in map order.
 
 ## Change log
+
+### v0.33.0
+
+- T6 wired. `gm bridge check` records a real Evaluate verdict for action_type BRIDGE_ACTION (with the CLI-computed action SHA-256 in metadata, alongside the seat, action bytes and optional action id) and, on a verdict response, saves the sealed proof and a receipt pairing it to the action hash, seat and action id; `gm bridge verify` re-checks the proof and the action hash by recomputation. This wires the operator-run check before a bridge action executes only: integrating the oc-bridge service's dispatch path, and evaluating individual tool calls inside a checked bridge action, are explicitly not wired (follow-on work, named here as NOT WIRED).
 
 ### v0.32.0
 

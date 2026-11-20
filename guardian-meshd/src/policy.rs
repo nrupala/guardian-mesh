@@ -194,6 +194,7 @@ impl PolicyEngine {
             ("PUBLISH", true, 50),
             ("REPO_RELEASE", true, 50),
             ("NIGHTLY_BUILD", true, 50),
+            ("BRIDGE_ACTION", true, 50),
         ];
 
         let mut rules = Vec::new();
@@ -394,6 +395,12 @@ mod tests {
     fn defaults_allow_nightly_build() {
         let engine = PolicyEngine::new();
         assert!(engine.decide("NIGHTLY_BUILD"));
+    }
+
+    #[test]
+    fn defaults_allow_bridge_action() {
+        let engine = PolicyEngine::new();
+        assert!(engine.decide("BRIDGE_ACTION"));
     }
 
     #[test]
