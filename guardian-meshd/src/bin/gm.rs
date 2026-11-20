@@ -121,6 +121,7 @@ async fn run(args: Vec<String>) -> Result<i32, CliError> {
         "conduit" => cmd_conduit(rest, pre_endpoint).await,
         "repo" => cmd_repo(rest, pre_endpoint).await,
         "nightly" => cmd_nightly(rest, pre_endpoint).await,
+        "bridge" => cmd_bridge(rest, pre_endpoint).await,
         other => Err(CliError::usage(format!("unknown subcommand: {other}"))),
     }
 }
@@ -1381,6 +1382,7 @@ SUBCOMMANDS:
   conduit     Check a Conduit tool call before dispatch and verify its receipt
   repo        Check a fleet-repo release before merge/release and verify its receipt
   nightly     Check a nightly build-lane action before it proceeds and verify its receipt
+  bridge      Check an oc-bridge action before it executes and verify its receipt
 
 GLOBAL OPTIONS:
   --endpoint <url>   Daemon gRPC endpoint (default http://127.0.0.1:50051;
@@ -3573,6 +3575,494 @@ OPTIONS:
         .to_string()
 }
 
+#[derive(Debug)]
+enum BridgeAction {
+    Check(BridgeCheckArgs),
+    Verify(BridgeVerifyArgs),
+}
+
+#[derive(Debug, Clone)]
+struct BridgeCheckArgs {
+    seat: String,
+    action_id: Option<String>,
+    action_file: PathBuf,
+    session_file: PathBuf,
+    proof_out: Option<PathBuf>,
+    receipt_out: Option<PathBuf>,
+    endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct BridgeVerifyArgs {
+    receipt_file: PathBuf,
+    proof_file: Option<PathBuf>,
+    action_file: Option<PathBuf>,
+    endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct BridgeReceipt {
+    receipt_version: u32,
+    kind: String,
+    seat: String,
+    action_id: Option<String>,
+    action_sha256: String,
+    action_bytes: u64,
+    verdict: String,
+    reason: String,
+    simulation: bool,
+    proof: Value,
+    proof_file: String,
+}
+
+fn default_bridge_proof_path(session_file: &Path) -> PathBuf {
+    match session_file.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent.join("gm-bridge-proof.json"),
+        _ => PathBuf::from("gm-bridge-proof.json"),
+    }
+}
+
+fn bridge_check_exit(verdict: &str) -> i32 {
+    match verdict {
+        "ALLOW" => 0,
+        _ => 1,
+    }
+}
+
+fn parse_bridge_action(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<BridgeAction, CliError> {
+    let action = match args.first() {
+        Some(action) => action.as_str(),
+        None => {
+            return Err(CliError::usage(
+                "bridge requires an action: check or verify",
+            ))
+        }
+    };
+    let rest = &args[1..];
+    match action {
+        "check" => Ok(BridgeAction::Check(parse_bridge_check_args(
+            rest,
+            pre_endpoint,
+        )?)),
+        "verify" => Ok(BridgeAction::Verify(parse_bridge_verify_args(
+            rest,
+            pre_endpoint,
+        )?)),
+        "--help" | "-h" => Err(CliError::help(bridge_help())),
+        other => Err(CliError::usage(format!(
+            "unknown bridge action: {other} (expected check or verify)"
+        ))),
+    }
+}
+
+fn parse_bridge_check_args(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<BridgeCheckArgs, CliError> {
+    let mut seat = None;
+    let mut action_id = None;
+    let mut action_file = None;
+    let mut session_file = default_session_path();
+    let mut proof_out = None;
+    let mut receipt_out = None;
+    let mut endpoint = pre_endpoint;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--seat" => seat = Some(next_value(args, &mut i, "--seat")?),
+            "--action-id" => action_id = Some(next_value(args, &mut i, "--action-id")?),
+            "--action-file" => {
+                action_file = Some(PathBuf::from(next_value(args, &mut i, "--action-file")?))
+            }
+            "--session-file" => {
+                session_file = PathBuf::from(next_value(args, &mut i, "--session-file")?)
+            }
+            "--proof-out" => {
+                proof_out = Some(PathBuf::from(next_value(args, &mut i, "--proof-out")?))
+            }
+            "--receipt-out" => {
+                receipt_out = Some(PathBuf::from(next_value(args, &mut i, "--receipt-out")?))
+            }
+            "--endpoint" => endpoint = Some(next_value(args, &mut i, "--endpoint")?),
+            "--help" | "-h" => return Err(CliError::help(bridge_check_help())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(BridgeCheckArgs {
+        seat: seat.ok_or_else(|| CliError::usage("--seat is required"))?,
+        action_id,
+        action_file: action_file.ok_or_else(|| CliError::usage("--action-file is required"))?,
+        session_file,
+        proof_out,
+        receipt_out,
+        endpoint,
+    })
+}
+
+fn parse_bridge_verify_args(
+    args: &[String],
+    pre_endpoint: Option<String>,
+) -> Result<BridgeVerifyArgs, CliError> {
+    let mut receipt_file = PathBuf::from("gm-bridge-receipt.json");
+    let mut proof_file = None;
+    let mut action_file = None;
+    let mut endpoint = pre_endpoint;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--receipt-file" => {
+                receipt_file = PathBuf::from(next_value(args, &mut i, "--receipt-file")?)
+            }
+            "--proof-file" => {
+                proof_file = Some(PathBuf::from(next_value(args, &mut i, "--proof-file")?))
+            }
+            "--action-file" => {
+                action_file = Some(PathBuf::from(next_value(args, &mut i, "--action-file")?))
+            }
+            "--endpoint" => endpoint = Some(next_value(args, &mut i, "--endpoint")?),
+            "--help" | "-h" => return Err(CliError::help(bridge_verify_help())),
+            other => return Err(CliError::usage(format!("unknown argument: {other}"))),
+        }
+        i += 1;
+    }
+    Ok(BridgeVerifyArgs {
+        receipt_file,
+        proof_file,
+        action_file,
+        endpoint,
+    })
+}
+
+async fn cmd_bridge(args: &[String], pre_endpoint: Option<String>) -> Result<i32, CliError> {
+    let action = match parse_bridge_action(args, pre_endpoint) {
+        Ok(action) => action,
+        Err(CliError::Usage(message)) => {
+            return Err(CliError::usage(format!("{message}\n\n{}", bridge_help())))
+        }
+        Err(error) => return Err(error),
+    };
+    match action {
+        BridgeAction::Check(parsed) => cmd_bridge_check(parsed).await,
+        BridgeAction::Verify(parsed) => cmd_bridge_verify(parsed).await,
+    }
+}
+
+async fn cmd_bridge_check(parsed: BridgeCheckArgs) -> Result<i32, CliError> {
+    let action_bytes_read = fs::read(&parsed.action_file).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            CliError::runtime(format!(
+                "action file not found: {}",
+                parsed.action_file.display()
+            ))
+        } else {
+            CliError::runtime(format!(
+                "cannot read action file {}: {e}",
+                parsed.action_file.display()
+            ))
+        }
+    })?;
+    let action_sha256 = sha256_hex(&action_bytes_read);
+    let action_bytes = action_bytes_read.len() as u64;
+
+    let session = load_required_session(&parsed.session_file)?;
+    ensure_session_fresh(&session)?;
+    let endpoint = resolve_endpoint(parsed.endpoint.clone(), Some(&session));
+
+    let seed_bytes = hex::decode(&session.signing_seed).map_err(|_| {
+        CliError::runtime(format!(
+            "session file {} has an invalid signing seed; run `gm handshake` again",
+            parsed.session_file.display()
+        ))
+    })?;
+    let seed = ml_dsa::Seed::try_from(seed_bytes.as_slice()).map_err(|_| {
+        CliError::runtime(format!(
+            "session file {} has a signing seed that is not 32 bytes; run `gm handshake` again",
+            parsed.session_file.display()
+        ))
+    })?;
+    let signing_key = SigningKey::<MlDsa65>::from_seed(&seed);
+
+    let mut metadata = BTreeMap::new();
+    metadata.insert("action_bytes".to_string(), action_bytes.to_string());
+    metadata.insert("action_sha256".to_string(), action_sha256.clone());
+    if let Some(action_id) = parsed.action_id.as_ref() {
+        metadata.insert("action_id".to_string(), action_id.clone());
+    }
+    metadata.insert("kind".to_string(), "bridge".to_string());
+    metadata.insert("seat".to_string(), parsed.seat.clone());
+
+    let context = format!("bridge:{}", parsed.seat);
+    let payload = build_payload("BRIDGE_ACTION", &context, &parsed.seat, &metadata);
+    let sealed = SealedEnvelope::new(
+        payload.clone(),
+        b"guardian_mesh.ActionDescriptor".to_vec(),
+        &signing_key,
+    );
+    let envelope = proto_from_sealed(&sealed);
+
+    let session_key = hex::decode(&session.session_key).map_err(|_| {
+        CliError::runtime(format!(
+            "session file {} has an invalid session key; run `gm handshake` again",
+            parsed.session_file.display()
+        ))
+    })?;
+    let mut mac = HmacSha256::new_from_slice(&session_key)
+        .map_err(|e| CliError::runtime(format!("failed to initialise HMAC: {e}")))?;
+    mac.update(&payload);
+    let hmac_tag = mac.finalize().into_bytes().to_vec();
+
+    let request = EvaluateRequest {
+        firewalled: Some(FirewalledRequest {
+            envelope: Some(envelope),
+            source_enclave: "gm-cli".to_string(),
+            handshake_session: session.session_id.clone(),
+            hmac_tag,
+        }),
+        action: Some(ActionDescriptor {
+            action_type: "BRIDGE_ACTION".to_string(),
+            context: context.clone(),
+            target: parsed.seat.clone(),
+            metadata: metadata.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        }),
+    };
+
+    let mut client = connect(&endpoint).await?;
+    let response = client
+        .evaluate(Request::new(request))
+        .await
+        .map_err(|e| CliError::runtime(format!("evaluate RPC failed: {e}")))?
+        .into_inner();
+
+    let proof_envelope = response.proof_envelope.as_ref().ok_or_else(|| {
+        CliError::runtime("evaluate response did not include a proof envelope")
+    })?;
+    let proof_path = parsed
+        .proof_out
+        .clone()
+        .unwrap_or_else(|| default_bridge_proof_path(&parsed.session_file));
+    save_proof(&proof_path, proof_envelope)?;
+
+    let proof = match response.proof.as_ref() {
+        Some(proof) => json!({
+            "action_id": proof.action_id.clone(),
+            "verdict": proof.verdict.clone(),
+            "timestamp": proof.timestamp,
+            "policy_version": proof.policy_version,
+            "issuing_node": proof.issuing_node.clone(),
+        }),
+        None => Value::Null,
+    };
+    let receipt_path = parsed
+        .receipt_out
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("gm-bridge-receipt.json"));
+    let receipt = BridgeReceipt {
+        receipt_version: 1,
+        kind: "bridge".to_string(),
+        seat: parsed.seat.clone(),
+        action_id: parsed.action_id.clone(),
+        action_sha256: action_sha256.clone(),
+        action_bytes,
+        verdict: response.verdict.clone(),
+        reason: response.reason.clone(),
+        simulation: false,
+        proof: proof.clone(),
+        proof_file: proof_path.display().to_string(),
+    };
+    write_json(&receipt_path, &receipt, false)?;
+
+    let mut out = serde_json::to_value(&receipt).map_err(|e| {
+        CliError::runtime(format!("failed to serialize bridge receipt: {e}"))
+    })?;
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert(
+            "receipt_file".to_string(),
+            Value::String(receipt_path.display().to_string()),
+        );
+    }
+    print_json(&out);
+    Ok(bridge_check_exit(&response.verdict))
+}
+
+async fn cmd_bridge_verify(parsed: BridgeVerifyArgs) -> Result<i32, CliError> {
+    let bytes = fs::read(&parsed.receipt_file).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            CliError::runtime(format!(
+                "receipt file not found: {}",
+                parsed.receipt_file.display()
+            ))
+        } else {
+            CliError::runtime(format!(
+                "cannot read receipt file {}: {e}",
+                parsed.receipt_file.display()
+            ))
+        }
+    })?;
+    let receipt_value: Value = serde_json::from_slice(&bytes).map_err(|e| {
+        CliError::runtime(format!(
+            "invalid receipt file {}: {e}",
+            parsed.receipt_file.display()
+        ))
+    })?;
+    let action_sha256 = receipt_value
+        .get("action_sha256")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            CliError::runtime(format!(
+                "receipt file {} missing action_sha256 field",
+                parsed.receipt_file.display()
+            ))
+        })?
+        .to_string();
+    let receipt_proof_file = receipt_value
+        .get("proof_file")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            CliError::runtime(format!(
+                "receipt file {} missing proof_file field",
+                parsed.receipt_file.display()
+            ))
+        })?
+        .to_string();
+    let verdict = receipt_value
+        .get("verdict")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let proof_path = parsed
+        .proof_file
+        .unwrap_or_else(|| PathBuf::from(receipt_proof_file));
+    let proof_file = load_proof(&proof_path)?;
+    let envelope = proto_from_proof_file(&proof_file)?;
+
+    let endpoint = resolve_endpoint(parsed.endpoint, None);
+    let mut client = connect(&endpoint).await?;
+    let response = client
+        .verify_proof(Request::new(VerifyProofRequest {
+            proof_envelope: Some(envelope),
+        }))
+        .await
+        .map_err(|e| CliError::runtime(format!("verify proof RPC failed: {e}")))?
+        .into_inner();
+
+    let action_hash_matches: Value = if let Some(path) = parsed.action_file.as_ref() {
+        let abytes = fs::read(path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                CliError::runtime(format!("action file not found: {}", path.display()))
+            } else {
+                CliError::runtime(format!("cannot read action file {}: {e}", path.display()))
+            }
+        })?;
+        let recomputed = sha256_hex(&abytes);
+        Value::Bool(recomputed == action_sha256)
+    } else {
+        Value::Null
+    };
+
+    let out = json!({
+        "valid": response.valid,
+        "reason": response.reason.clone(),
+        "verdict": verdict,
+        "action_hash_matches": action_hash_matches,
+        "action_sha256": action_sha256,
+    });
+    print_json(&out);
+    let hash_bad = matches!(action_hash_matches, Value::Bool(false));
+    Ok(if response.valid && !hash_bad { 0 } else { 1 })
+}
+
+fn bridge_help() -> String {
+    r#"gm bridge: oc-bridge touchpoint (WO-37 / v0.33.0)
+
+USAGE:
+  gm bridge <action> [options]
+
+ACTIONS:
+  check    Check an oc-bridge action before it executes and write a receipt
+  verify   Re-check a saved bridge proof and receipt action hash
+
+Exit 0 is the only outcome under which the caller may let the bridge execute
+the action; exit 1 and exit 2 both mean do not proceed.
+
+Run `gm bridge check --help` or `gm bridge verify --help` for details."#
+        .to_string()
+}
+
+fn bridge_check_help() -> String {
+    r#"gm bridge check: evaluate an oc-bridge action before it executes
+
+USAGE:
+  gm bridge check --seat <seat> --action-file <path> [--action-id <id>]
+                  [--session-file <path>] [--proof-out <path>]
+                  [--receipt-out <path>] [--endpoint <url>]
+
+An oc-bridge action is an internal bridge action carried for a seat - a letter,
+a task or a mailbox action. Reads the action file, computes its SHA-256 itself,
+and calls a real Evaluate (never Simulate) for action_type BRIDGE_ACTION with
+context "bridge:<seat>", the seat as target, and metadata carrying kind="bridge",
+seat, action_sha256, action_bytes and action_id when given. This checks the
+action before the bridge executes it. Saves the sealed proof and a receipt
+pairing the proof with the action hash, seat and action id. This command does not
+execute the action or dispatch it through the bridge itself. Simulation is never
+a bridge check.
+
+Defaults: --proof-out gm-bridge-proof.json beside the session file,
+--receipt-out gm-bridge-receipt.json in the current directory.
+
+EXIT CODES:
+  0  verdict ALLOW: the receipt was written and the caller may let the bridge
+     execute the action; this is the only outcome under which it may do so.
+  1  a verdict response arrived and verdict is not ALLOW (BLOCK/THROTTLE/
+     ESCALATE): the receipt is still written naming the verdict; do not proceed.
+  2  usage, session, transport or RPC error (including a pre-proof block
+     delivered as a permission-denied RPC error): nothing is written; do not
+     proceed.
+
+OPTIONS:
+  --seat <seat>        Seat the action is carried for (required)
+  --action-file <p>    Bridge action file to be hashed (required)
+  --action-id <id>     Optional action id, recorded in metadata and receipt
+  --session-file <p>   Session file path (default $HOME/.guardian-mesh/gm-session.json)
+  --proof-out <p>      Proof file path (default gm-bridge-proof.json beside session)
+  --receipt-out <p>    Receipt file path (default gm-bridge-receipt.json)
+  --endpoint <url>     Daemon gRPC endpoint (default from session file, then
+                       http://127.0.0.1:50051; GM_ENDPOINT when the flag is absent)
+  --help               Show this help"#
+        .to_string()
+}
+
+fn bridge_verify_help() -> String {
+    r#"gm bridge verify: verify a bridge proof and receipt action hash
+
+USAGE:
+  gm bridge verify [--receipt-file <path>] [--proof-file <path>]
+                   [--action-file <path>] [--endpoint <url>]
+
+Loads the receipt and proof, calls VerifyProof, and optionally recomputes the
+SHA-256 of --action-file and compares it to the receipt. This checks the proof
+with the daemon and the receipt's action-hash pairing by recomputation; it does
+not require a session.
+
+EXIT CODES:
+  0  proof valid and action_hash_matches is not false.
+  1  proof invalid or action hash mismatch.
+  2  usage, transport, missing/malformed receipt or proof.
+
+OPTIONS:
+  --receipt-file <p>   Receipt file (default gm-bridge-receipt.json)
+  --proof-file <p>     Proof file (default: receipt's proof_file)
+  --action-file <p>    Bridge action file to hash-compare against the receipt
+  --endpoint <url>     Daemon gRPC endpoint (default http://127.0.0.1:50051;
+                       GM_ENDPOINT when the flag is absent)
+  --help               Show this help"#
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4348,6 +4838,117 @@ mod tests {
         assert_eq!(value["run"], Value::Null);
         let reparsed: NightlyReceipt = serde_json::from_value(value).unwrap();
         assert_eq!(reparsed.run, None);
+        let _ = fs::remove_file(&path);
+    }
+
+    fn bridge_check_args() -> Vec<String> {
+        ["--seat", "seat-a", "--action-file", "action.json"]
+            .iter()
+            .map(|v| v.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn bridge_check_requires_seat_and_action_file() {
+        for flag in ["--seat", "--action-file"] {
+            let args = bridge_check_args();
+            let mut filtered = Vec::new();
+            let mut i = 0;
+            while i < args.len() {
+                if args[i] == flag {
+                    i += 2;
+                    continue;
+                }
+                filtered.push(args[i].clone());
+                i += 1;
+            }
+            let err = parse_bridge_check_args(&filtered, None).unwrap_err();
+            assert_eq!(err.code(), 2, "missing {flag} should exit 2");
+            assert!(matches!(&err, CliError::Usage(_)));
+            assert!(
+                err.message().contains(flag),
+                "error should name {flag}: {}",
+                err.message()
+            );
+        }
+    }
+
+    #[test]
+    fn bridge_check_rejects_unknown_flag_and_applies_defaults() {
+        let mut args = bridge_check_args();
+        args.push("--nope".to_string());
+        let err = parse_bridge_check_args(&args, None).unwrap_err();
+        assert_eq!(err.code(), 2);
+        assert!(matches!(&err, CliError::Usage(_)));
+        assert!(err.message().contains("--nope"));
+
+        let parsed = parse_bridge_check_args(&bridge_check_args(), None).unwrap();
+        assert_eq!(parsed.seat, "seat-a");
+        assert_eq!(parsed.action_file, PathBuf::from("action.json"));
+        assert_eq!(parsed.action_id, None);
+        assert_eq!(parsed.proof_out, None);
+        assert_eq!(parsed.receipt_out, None);
+
+        let mut with_id = bridge_check_args();
+        with_id.extend(["--action-id".to_string(), "act-1".to_string()]);
+        let parsed = parse_bridge_check_args(&with_id, None).unwrap();
+        assert_eq!(parsed.action_id.as_deref(), Some("act-1"));
+
+        let verify = parse_bridge_verify_args(&[], None).unwrap();
+        assert_eq!(
+            verify.receipt_file,
+            PathBuf::from("gm-bridge-receipt.json")
+        );
+        assert_eq!(verify.proof_file, None);
+        assert_eq!(verify.action_file, None);
+    }
+
+    #[test]
+    fn bridge_action_rejects_unknown() {
+        let err = parse_bridge_action(&["frobnicate".to_string()], None).unwrap_err();
+        assert_eq!(err.code(), 2);
+        assert!(err.message().contains("check"));
+        assert!(err.message().contains("verify"));
+    }
+
+    #[test]
+    fn bridge_check_exit_mapping() {
+        assert_eq!(bridge_check_exit("ALLOW"), 0);
+        assert_eq!(bridge_check_exit("BLOCK"), 1);
+        assert_eq!(bridge_check_exit("THROTTLE"), 1);
+        assert_eq!(bridge_check_exit("ESCALATE"), 1);
+        assert_eq!(bridge_check_exit("WHATEVER"), 1);
+    }
+
+    #[test]
+    fn bridge_receipt_round_trip_preserves_fields() {
+        let receipt = BridgeReceipt {
+            receipt_version: 1,
+            kind: "bridge".to_string(),
+            seat: "seat-a".to_string(),
+            action_id: Some("act-1".to_string()),
+            action_sha256: sha256_hex(b"hello"),
+            action_bytes: 5,
+            verdict: "ALLOW".to_string(),
+            reason: "ok".to_string(),
+            simulation: false,
+            proof: json!({"action_id":"BRIDGE_ACTION","verdict":"ALLOW","timestamp":1,"policy_version":1,"issuing_node":"n"}),
+            proof_file: "gm-bridge-proof.json".to_string(),
+        };
+        let path = unique_temp_file("bridge-receipt");
+        write_json(&path, &receipt, false).unwrap();
+        let bytes = fs::read(&path).unwrap();
+        let loaded: BridgeReceipt = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(loaded, receipt);
+
+        let absent_id = BridgeReceipt {
+            action_id: None,
+            ..receipt
+        };
+        let value = serde_json::to_value(&absent_id).unwrap();
+        assert_eq!(value["action_id"], Value::Null);
+        let reparsed: BridgeReceipt = serde_json::from_value(value).unwrap();
+        assert_eq!(reparsed.action_id, None);
         let _ = fs::remove_file(&path);
     }
 
