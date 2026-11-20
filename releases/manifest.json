@@ -1159,5 +1159,14 @@
     "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
     "date": "2026-11-20T00:16:49-06:00",
     "message": "Merge pull request #133 from nrupala/wright/wo37t6-gm-bridge"
+  },
+  {
+    "release": 134,
+    "tag": "release/v134",
+    "previous_tag": "release/v133",
+    "sha": "6092d07009a6c66a3f9d775f5778163927d93540",
+    "author": "Nrupal Akolkar <nrupalakolkar@gmail.com>",
+    "date": "2026-11-20T00:48:02-06:00",
+    "message": "Merge pull request #134 from nrupala/wright/wo37t6-ledger"
   }
 ]
