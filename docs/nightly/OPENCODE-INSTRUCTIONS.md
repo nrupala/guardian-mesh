@@ -2096,6 +2096,23 @@ behaviour-proven here.
   candidate only: it becomes a gate MUST once
   behaviour-proven here.
 
+- **GMSI-194 — Bridge-action descriptor-binding proofs.**
+  (WO-37 T6 gate, 2026-11-19.) Extends GMSI-182 (content),
+  GMSI-191 (tool-call descriptors), GMSI-192 (repo-release
+  descriptors) and GMSI-193 (nightly-build descriptors): a
+  bridge-action proof currently binds only action type, verdict,
+  timestamp and policy version; the pairing of the proof to the
+  seat, the action identifier, and the action-payload hash is
+  asserted by the CLI receipt (presenter-declaration class) and
+  checked by recomputation of the payload hash only — the seat
+  and action-id strings themselves are not recomputable from
+  anything in the proof. Guardian Mesh should be able to issue
+  proofs that seal the seat + action id + payload hash inside
+  the proof itself, so a receipt cannot be re-paired to a
+  different seat's action after the fact. Filed as a probe
+  candidate: it becomes a gate MUST only after it is
+  behaviour-proven here, per the standing rule.
+
 ## Development home and engine routing
 
 Owner direction (2026-10-14, replacing the original routing): **development
@@ -4735,4 +4752,115 @@ proofs), recorded in Part B above.
 
 Guardian Mesh Spec Inputs filed by this run: GMSI-193
 (WO-37 T5 gate — nightly-build descriptor-binding
+proofs), recorded in Part B above.
+
+- 2026-11-19 — **WO-37 touchpoint T6 (oc-bridge)
+  WIRED as v0.33.0** (PR #133, merge 05a4e667;
+  no pack refresh was needed — main was
+  unchanged since the T5 ledger merge, open
+  issues and PRs were zero, and the only new
+  gate pack since 2026-11-18, the
+  declare-certify step-4 pack, carried no
+  Guardian Mesh Spec Inputs). The gm CLI gains
+  `gm bridge check` / `verify` over a real
+  Evaluate for action type BRIDGE_ACTION (new
+  default policy rule, allow, priority 50;
+  daemon genesis rule-count assertion 14 → 15
+  in the same change): the CLI computes the
+  action-file SHA-256 itself, context
+  `bridge:<seat>`, the seat as target, metadata
+  carrying kind/seat/action hash+bytes (and
+  action id when given), exit 0 iff ALLOW,
+  receipt + sealed proof per check;
+  specs/TOUCHPOINTS.md marks T6 WIRED (GM-side
+  check + operator protocol; the oc-bridge
+  service calling the check mechanically, and
+  per-tool-call evaluation inside a checked
+  bridge action, explicitly NOT WIRED);
+  docs/BRIDGE_TOUCHPOINT.md states the operator
+  protocol (check before the bridge dispatches
+  the action, proceed only on exit 0, verify
+  after, cite receipt + proof); docs/CLI.md
+  gains the bridge section. Built on the
+  laptop lane (OpenCode 1.19.5, fresh clone at
+  main 097a8384; lane commit tree 6780637e
+  carried by Wright via bundle + git-data API
+  after the lane could not push — pushed tree
+  == lane tree). Wright verified independently:
+  cargo 338/338 (baseline 332 + exactly the 6
+  new tests: 1 policy + 5 gm; the lane's
+  337/lib-191 count was a miscount, F2), WebUI
+  clean, check:releases 35 versions on the
+  stamped tree; Wright behaviour proof 17/17
+  legs on locally built daemons (ALLOW with
+  receipt action hash == Wright's own SHA-256;
+  proof VALID via gm verify and gm bridge
+  verify; audit carries BRIDGE_ACTION/ALLOW;
+  tampered action file and tampered proof
+  fail; usage exit 2 naming the flag; unknown
+  bridge action exit 2; dead endpoint exit 2
+  with nothing written; ESCALATE exit 1 with
+  receipt; denying bundle fails closed with no
+  ALLOW receipt). Gate: PASS WITH FINDINGS
+  (guardian-mesh-wo37t6-2026-11-19; scanner
+  PASS, cargo audit clean; F1 standing
+  GMSI-143 lag; F2 lane count; F3 CRLF
+  PGP-fixture class). Ship: cross-built
+  aarch64 (daemon e779c3f2...; a second full
+  rebuild reproduced the identical hash),
+  gm-deploy --binary --webui --declare-certify
+  (declaration guardian-mesh-0.33.0-1795156000
+  CLOSED/CERTIFIED after the ceremony; backup
+  .bak-v0320; box E2E 15/16, sole miss the
+  standing stale Health-fields harness check,
+  25th occurrence); production proof Health
+  SERVING 0.33.0 @ 05a4e667, binary sha ==
+  built == installed, fingerprint == pin
+  dd2cf1a3...; self-certification via shipped
+  gm certificate issue: cert-20261120-000063
+  ACTIVE (PASS WITH FINDINGS; evidence = the
+  WO-37 T6 gate verdict, sha256 b453f7c9...),
+  superseding cert-20261119-000062. T6 first
+  exercise: this release's own bridge check
+  through the shipped gm bridge check against
+  production — seat wright, action-id
+  2026-11-19-nightly-t6, action file = the
+  gate verdict — ALLOW; gm bridge verify
+  valid with action_hash_matches=true;
+  Wright's wire client independently
+  VerifyProof'd the bridge proof VALID.
+  Attestation: statement against the merged
+  clone (cross-build Cargo.lock 2af46c14...;
+  git_commit recorded as the merge sha),
+  signed on the box with the production key
+  (signer asserted == pin before install);
+  installed /opt/guardian-mesh/
+  guardian-meshd-0.33.0.attestation.json,
+  gm-attest verify VALID, package fingerprint
+  a431c050.... gm 0.33.0 installed on the box
+  at /usr/local/bin/gm. Pages parity: merged
+  build asset == GitHub Pages asset
+  (index-Bh9YXe9I.js); public unauthenticated
+  302. Run note: Wright's VM was replaced
+  mid-run and the cargo target directories
+  were lost after the deploy; the gm and
+  gm-attest binaries were rebuilt
+  bit-identically before the ceremony. NOT
+  RUN: authenticated panel click-through
+  (GMSI-134); Kali/Arch for this delta (no
+  daemon network surface changed); universal
+  assurance checks (the repo carries no
+  assurance: gate block). v0.33.0 is a RELEASE
+  CANDIDATE (one-week soak; graduates
+  2026-11-26). **WO-37 stays OPEN — T6 is
+  wired (GM-side); the next touchpoint is T7
+  (MyMilo loop) in map order.** WO-33 (P2,
+  NIST AI RMF profile) and WO-27 (P2,
+  mediation conformance) follow in pack
+  order; WO-17 stays open for the cluster
+  chaos + CM-8 extensions (WO-27); WO-16
+  stays open for DC-1/DC-3.
+
+Guardian Mesh Spec Inputs filed by this run: GMSI-194
+(WO-37 T6 gate — bridge-action descriptor-binding
 proofs), recorded in Part B above.
